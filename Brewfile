@@ -21,3 +21,6 @@ cask "jordanbaird-ice"
 
 # --- Repo safety tooling ---
 brew "gitleaks"            # scans commits for leaked secrets (used by the pre-commit hook)
+
+# --- Shell / workflow ---
+brew "fswatch"            # filesystem watcher for shell/cc-image-watch.sh (live image feed)

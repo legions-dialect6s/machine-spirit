@@ -59,8 +59,8 @@
           "actions" : [
             {
               "key" : "t",
-              "type" : "url",
-              "value" : "https://github.com/legions-dialect6s"
+              "type" : "command",
+              "value" : "osascript __HOME__/bin/github-web.applescript"
             }
           ],
           "key" : "i",
@@ -124,6 +124,16 @@
           "key" : "s",
           "type" : "folder",
           "value" : "__HOME__/Documents/screenshots_n_recordings"
+        },
+        {
+          "key" : "i",
+          "type" : "command",
+          "value" : "osascript __HOME__/bin/instagram-web.applescript\nosascript __HOME__/bin/instagram-web.applescript\nosascript __HOME__/bin/instagram-web.applescript\n"
+        },
+        {
+          "key" : "x",
+          "type" : "command",
+          "value" : "osascript __HOME__/bin/x-web.applescript\n"
         }
       ],
       "key" : "s",
