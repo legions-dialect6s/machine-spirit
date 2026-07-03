@@ -1,0 +1,134 @@
+{
+  "actions" : [
+    {
+      "actions" : [
+        {
+          "key" : "o",
+          "type" : "application",
+          "value" : "/Applications/Codex.app"
+        },
+        {
+          "key" : "l",
+          "type" : "application",
+          "value" : "/Applications/Claude.app"
+        }
+      ],
+      "key" : "c",
+      "type" : "group"
+    },
+    {
+      "actions" : [
+        {
+          "key" : "r",
+          "type" : "application",
+          "value" : "/System/Applications/Utilities/Terminal.app"
+        }
+      ],
+      "key" : "t",
+      "type" : "group"
+    },
+    {
+      "actions" : [
+        {
+          "key" : "t",
+          "type" : "application",
+          "value" : "/Applications/iTerm.app"
+        },
+        {
+          "key" : "n",
+          "type" : "command",
+          "value" : "osascript -e 'tell application \"iTerm\" to activate' -e 'tell application \"iTerm\" to create window with default profile'"
+        }
+      ],
+      "key" : "i",
+      "type" : "group"
+    },
+    {
+      "actions" : [
+        {
+          "key" : "p",
+          "type" : "application",
+          "value" : "/Applications/ChatGPT.app"
+        },
+        {
+          "key" : "w",
+          "type" : "command",
+          "value" : "osascript __HOME__/bin/chatgpt-web.applescript"
+        },
+        {
+          "actions" : [
+            {
+              "key" : "t",
+              "type" : "url",
+              "value" : "https://github.com/legions-dialect6s"
+            }
+          ],
+          "key" : "i",
+          "type" : "group"
+        }
+      ],
+      "key" : "g",
+      "type" : "group"
+    },
+    {
+      "actions" : [
+        {
+          "key" : "e",
+          "type" : "application",
+          "value" : "/System/Applications/Messages.app"
+        }
+      ],
+      "key" : "m",
+      "type" : "group"
+    },
+    {
+      "actions" : [
+        {
+          "key" : "h",
+          "type" : "application",
+          "value" : "/Applications/WhatsApp.app"
+        }
+      ],
+      "key" : "w",
+      "type" : "group"
+    },
+    {
+      "actions" : [
+        {
+          "key" : "k",
+          "type" : "command",
+          "value" : "open -a \"Leader Key\" --args --show-settings"
+        }
+      ],
+      "key" : "l",
+      "type" : "group"
+    },
+    {
+      "actions" : [
+        {
+          "key" : "a",
+          "type" : "application",
+          "value" : "/System/Volumes/Preboot/Cryptexes/App/System/Applications/Safari.app"
+        },
+        {
+          "key" : "p",
+          "type" : "application",
+          "value" : "/Applications/Spotify.app"
+        },
+        {
+          "key" : "e",
+          "type" : "application",
+          "value" : "/System/Applications/System Settings.app"
+        },
+        {
+          "key" : "s",
+          "type" : "folder",
+          "value" : "__HOME__/Documents/screenshots_n_recordings"
+        }
+      ],
+      "key" : "s",
+      "type" : "group"
+    }
+  ],
+  "type" : "group"
+}
