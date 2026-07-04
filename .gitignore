@@ -36,3 +36,8 @@ Icon?
 *.swo
 node_modules/
 .venv/
+__pycache__/
+*.pyc
+
+# ---- Compiled artifacts (built by install.sh, never committed) ----
+bin/shield-fx           # busy-pane shield overlay, compiled from assets/tools/shield-fx.swift

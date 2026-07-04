@@ -44,6 +44,24 @@ while IFS= read -r -d '' f; do
   echo "    installed bin/$rel"
 done < <(find "$REPO_ROOT/bin" -type f -print0)
 
+# Busy-pane shield (experimental): symlink the iTerm2 API daemon into AutoLaunch
+# so iTerm runs it on launch. Reversible — delete the symlink to disable.
+SHIELD_SRC="$HOME/bin/pane-shield.py"
+SHIELD_DEST="$HOME/Library/Application Support/iTerm2/Scripts/AutoLaunch/pane-shield.py"
+if [[ -f "$SHIELD_SRC" ]]; then
+  mkdir -p "$(dirname "$SHIELD_DEST")"
+  ln -sf "$SHIELD_SRC" "$SHIELD_DEST"
+  echo "    linked busy-pane shield into iTerm AutoLaunch"
+fi
+# Compile the shield's visual overlay (optional eye-candy; needs swiftc / CLT).
+if command -v swiftc >/dev/null 2>&1 && [[ -f "$REPO_ROOT/assets/tools/shield-fx.swift" ]]; then
+  swiftc -O "$REPO_ROOT/assets/tools/shield-fx.swift" -o "$HOME/bin/shield-fx" 2>/dev/null \
+    && echo "    compiled shield-fx overlay" \
+    || echo "    (skipped) shield-fx failed to compile — shield still works, just no overlay"
+else
+  echo "    (skipped) shield-fx overlay — swiftc not found (shield still works without it)"
+fi
+
 echo "==> 4/5  App configs"
 # Leader Key — restore the real home path from the __HOME__ placeholder
 LK_SRC="$REPO_ROOT/config/leader-key/config.json"
@@ -84,6 +102,11 @@ cat <<'EOF'
      Import  ->  config/iterm2/*.itermcolors, then select it.
   5. Menu bar manager (Ice/Thaw): open it, drag rarely-used
      icons below the divider.
+  6. (Optional) Busy-pane shield: iTerm > Settings > General >
+     Magic > Enable Python API (accept the consent prompt), then
+     Keys > Key Bindings > + : bind Cmd-W to "Invoke Script
+     Function" with  pane_shield(session_id: \(id))
+     See README "Busy-pane shield" for details.
 ============================================================
 EOF
 echo "Done."

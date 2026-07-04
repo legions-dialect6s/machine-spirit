@@ -26,6 +26,13 @@ brew "gitleaks"            # scans commits for leaked secrets (used by the pre-c
 # --- Shell / workflow ---
 brew "fswatch"            # filesystem watcher for shell/cc-image-watch.sh (live image feed)
 
+# --- Busy-pane shield (experimental, bin/pane-shield.py) ---
+# No brew deps: SFX play via macOS-built-in `afplay`; the daemon runs on iTerm2's
+# own bundled Python runtime + `iterm2` module (auto-installed when you enable
+# iTerm's Python API). The optional visual overlay (assets/tools/shield-fx.swift)
+# compiles with `swiftc` from the Xcode Command Line Tools — already present if
+# you've built the splash art. Nothing to `brew install`; noted for discoverability.
+
 # --- Terminal splash (shell/splash) ---
 brew "fastfetch"           # system info panel in the hotkey-window splash
 # Optional, only needed to regenerate splash art (all banners/logos ship pre-rendered):

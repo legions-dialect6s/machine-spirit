@@ -30,6 +30,7 @@ Everything else in this repo follows from that: additive not replacing, portable
 - **Menu bar management** — Ice / Thaw to hide clutter behind a single toggle, with [Stats](https://github.com/exelban/stats) for system monitoring.
 - **macOS tweaks** — snappier window resize and animation via reversible `defaults` writes.
 - **No dead-end dialogs** — a failed keybind (e.g. resizing an app that refuses it) silently does nothing instead of throwing a focus-stealing macOS alert that blocks the launcher. See [Command reliability](#command-reliability--no-focus-stealing-dialogs).
+- **Busy-pane shield** (experimental, v0.1) — closing an iTerm pane that's running a live command (`claude`, `node`, a build…) doesn't die on the first ⌘W. It escalates Halo-style: a shield flare + rising SFX on hits 1–2, then a **shield-break shatter** on hit 3 that finally closes it. Idle panes still close instantly. One-flag kill switch. See [Busy-pane shield](#busy-pane-shield-experimental).
 
 ## Quick start (fresh Mac)
 
@@ -175,6 +176,44 @@ Every summon of the iTerm hotkey window boots a randomized splash, typed to the 
 - Knobs: `HOTKEY_SPLASH_BURST` (typing speed), `HOTKEY_SPLASH_CAPTION`, `HOTKEY_SPLASH_LOGO`, `HOTKEY_SPLASH_ORNAMENTS=0`.
 - Regenerating art: [`shell/splash/tools/`](shell/splash/tools/) has the CoreText text→PNG renderers and the density-based ASCII downsampler; banners came from OFL typefaces (Google Fonts) via `chafa --symbols block --stretch -s 114x10`.
 
+## Busy-pane shield (experimental)
+
+> **v0.1 / feasibility prototype.** Real and working, but a probe as much as a feature — read the honest limits at the bottom.
+
+Closing an iTerm2 pane that's *busy* (running a real foreground process — `claude`, `node`, `python`, `caffeinate`, `ngrok`, …) shouldn't instantly kill it on a fat-fingered ⌘W. An idle shell pane closes instantly as always; a busy one raises a shield you have to overload:
+
+| ⌘W on a busy pane | What happens |
+|---|---|
+| **Hit 1** | `shield-hit` SFX + a cyan **shield flare** (expanding hex energy ring) + a dim-red per-pane flash + badge `◆ SHIELD 1/3 ◆`. Pane stays. |
+| **Hit 2** | louder hit + a brighter **amber "overload"** flare + a stronger flash + `◆ SHIELD 2/3 ◆`. Pane stays. |
+| **Hit 3** | `shield-break` SFX + a full-screen **shatter** (white flash → radial cracks → glass shards bursting outward with gravity), **then the pane closes** and the counter resets. |
+| stop for ~6s | the shield disarms on its own (badge clears). |
+
+### The look
+
+Two visual layers: a **per-pane** background flash + iTerm badge (accurate to the exact pane), and a **full-screen overlay** ([`assets/tools/shield-fx.swift`](assets/tools/shield-fx.swift), compiled to `~/bin/shield-fx`) for the dramatic flare/shatter. The overlay is a transparent, **click-through, non-activating**, top-level window that plays a short Core Animation effect and force-quits itself — it can't steal focus, block input, or linger. The SFX ([`assets/shield-hit.wav`](assets/shield-hit.wav) / [`assets/shield-break.wav`](assets/shield-break.wav)) are **original, synthesized offline** by [`assets/tools/gen-sfx.py`](assets/tools/gen-sfx.py) — zero third-party or game audio.
+
+### Kill switch — and why it's safe by design
+
+The shield **never installs a system-wide `CGEventTap`** — that's the thing that can eat keystrokes globally if its process hangs. Instead, *all* interception is a single iTerm key binding routed to the daemon's RPC ([`bin/pane-shield.py`](bin/pane-shield.py)). So the blast radius is exactly one shortcut in one app.
+
+- **Instant off (no restart):** `~/bin/shield-off.sh` drops a flag file and ⌘W is stock behavior again immediately (busy or not, it just closes). `~/bin/shield-on.sh` re-arms. The daemon keeps running either way.
+- **Full teardown:** delete the AutoLaunch symlink and remove the ⌘W key binding in iTerm → ⌘W is 100% native, nothing left behind.
+- **Crash safety:** if the daemon dies, the *worst case* is ⌘W does nothing **inside iTerm only** until you restart it or remove the binding. It can **never** capture keystrokes system-wide, because there is no global tap. This trade — losing seamless fallback to guarantee no global keystroke capture — is deliberate.
+
+### Setup (three manual steps)
+
+1. **Enable the iTerm Python API:** iTerm → Settings → **General → Magic → “Enable Python API”** (accept the one-time consent prompt; iTerm downloads its managed runtime + `iterm2` module).
+2. **Install:** `install.sh` drops `pane-shield.py` into `~/bin`, symlinks it into iTerm's AutoLaunch dir, and compiles `shield-fx`. Restart iTerm so the daemon loads.
+3. **Rebind ⌘W:** iTerm → Settings → **Keys → Key Bindings → `+`** → shortcut ⌘W → Action *Invoke Script Function* → `pane_shield(session_id: \(id))`. Put it under app-level Key Bindings so it covers every pane; delete it to fully disable.
+
+### Honest limits
+
+- ⚠️ **The full-screen overlay is not pane-precise.** The flare/shatter covers the whole display, not a glow ring hugging the pane. The per-pane flash + badge *are* pane-accurate; the cinematic part is screen-wide. A pane-tracked glow (and a shatter of the pane's *real pixels*, which needs Screen Recording permission) is a future item.
+- ⚠️ **Requires the iTerm Python API enabled** (one-time manual consent) and works **only in iTerm**, not Terminal.app.
+- ⚠️ **Not yet driven end-to-end from CI.** The Python compiles, every iTerm2 API call is validated against the real `iterm2` package, the SFX play, and `shield-fx` runs + self-terminates cleanly — but the physical ⌘W → RPC round-trip needs a live iTerm to confirm. The likeliest spot to need a tweak is the key-binding **Function call** syntax.
+- **Busy detection is coarse** — a `jobName` allow-list of shells; anything else counts as busy.
+
 ## Command reliability — no focus-stealing dialogs
 
 Leader Key surfaces a **modal macOS alert whenever a bound command fails** (a non-zero exit, or an AppleScript error on stderr). That alert often spawns *behind* other windows and **blocks all further Leader Key input until it's dismissed** — e.g. tapping grow/shrink (`⇪ = =` / `⇪ - -`) on an app that refuses to be resized used to freeze the launcher. Every bound command is therefore made failure-proof, by **one consistent rule**:
@@ -204,6 +243,14 @@ machine-spirit/
 ├── Brewfile                # declarative app list
 ├── CLAUDE.md               # handoff: teaches agent sessions this repo's rules
 ├── bin/                    # helpers: web-jump, win-lerp, site-home, center-window, vmware
+│   ├── run-quiet.sh        # wrap a command so a failure never dialogs (exit 0)
+│   ├── pane-shield.py      # experimental iTerm2 API daemon: busy-pane close guard
+│   ├── shield-off.sh       # kill switch: disable the shield instantly
+│   └── shield-on.sh        # re-arm the shield
+├── assets/                 # bundled media (committed, not synced)
+│   ├── shield-hit.wav      # synthesized SFX (shield absorb)
+│   ├── shield-break.wav    # synthesized SFX (overload shatter)
+│   └── tools/              # gen-sfx.py (SFX renderer) + shield-fx.swift (overlay)
 │   └── screenshots/        # screencapture wrappers behind the ⇪ s s tree
 ├── config/
 │   ├── leader-key/         # captured Leader Key config (templated)
@@ -263,6 +310,9 @@ It's feasible because the hard parts are already open source — Leader Key (lea
 - **License check, first.** Before building on or redistributing anything derived from Leader Key or Rectangle, confirm their terms permit derivative works and redistribution. Both appear MIT-family / permissive; verify before shipping.
 - **macOS-first, on purpose.** Cross-platform is out of scope for now, but the engine should avoid gratuitous macOS lock-in where avoiding it is cheap.
 - **Honest scope.** A cross-tool, node-based, multi-input window-and-launcher manager with a visual editor and a migration ecosystem is a substantial project (multi-week-plus, plausibly open-source-with-contributors), not a weekend. A working prototype is close; the polished editor and template ecosystem are the long tail. Ship a prototype (v0.1) first and iterate the editor and templates after — building it early also surfaces engine-integration conflicts before any UI is stacked on top.
+- **Harness-fork / patch-overlay strategy.** Modify open-source dependencies (Leader Key, Rectangle, iTerm) via *layered, interceptable exceptions* — API hooks, key-binding routes, config injection, login-item registration — rather than hard forks. Upstream security and feature updates keep flowing, and any modification can be reverted to the tool's stable behavior. Avoid maintaining full forks except where genuinely unavoidable (e.g. a custom summon-overlay that requires forking Leader Key's overlay). The busy-pane shield is the first live instance: it hooks iTerm purely through its public Python API and unbinds in one click, with iTerm itself untouched.
+- **Dependency-update safety.** Before allowing an update to a *hooked* dependency, run smoke tests against the specific functionality machine-spirit relies on. Gate or pin updates that would break a hook, and **surface the conflict to the user** rather than silently breaking or silently blocking. This is integration testing against our dependencies — the price of the patch-overlay strategy above.
+- **Coordinator, not parent.** When the app exists, it *coordinates* the other tools via their APIs, hooks, and login-item registration — it does **not** become their parent process or own their lifecycles. Leader Key, Rectangle, and iTerm keep running independently; machine-spirit layers behavior on top. This keeps the system antifragile (any component can crash, update, or be removed without taking the others down) and is the architectural form of *additive, not replacing*. The shield's CGEventTap-free design is a concrete down-payment on this.
 
 ### Other maybes
 
