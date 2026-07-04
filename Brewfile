@@ -24,3 +24,8 @@ brew "gitleaks"            # scans commits for leaked secrets (used by the pre-c
 
 # --- Shell / workflow ---
 brew "fswatch"            # filesystem watcher for shell/cc-image-watch.sh (live image feed)
+
+# --- Terminal splash (shell/splash) ---
+brew "fastfetch"           # system info panel in the hotkey-window splash
+# Optional, only needed to regenerate splash art (all banners/logos ship pre-rendered):
+# brew "chafa"             # image -> terminal block art (shell/splash/tools)

@@ -1,0 +1,93 @@
+# machine-spirit — agent handoff
+
+This repo is the owner's **entire macOS environment as code**: launcher,
+keybinds, window/menu-bar behavior, terminal, and the hotkey-window splash.
+If you are an agent session working on any part of the Mac UI, this file is
+your contract. Read it before touching anything.
+
+## Philosophy
+
+1. **The repo is the canonical artifact.** No config change is "done" until it
+   is captured here. Live configs are the source of truth for *content*;
+   the repo is the source of truth for *existence*. `scripts/sync.sh` pulls
+   live → repo; `install.sh` replays repo → fresh Mac, idempotently.
+2. **Portable by construction.** Never hard-code a username or home path in a
+   committed file — sync templating rewrites `$HOME` to `__HOME__` on capture
+   and expands it on install. Anything path-like you add must survive a clone
+   onto a different user account.
+3. **Public repo. Zero secrets. Always.** `.gitignore` blocks secret-bearing
+   files and a gitleaks pre-commit hook scans every commit
+   (`git config core.hooksPath .githooks` must be set). Screenshots go in
+   `docs/` only after redacting username, hostname, and IPs. If a file
+   *might* hold a token, it does not get committed.
+4. **Runtime-light, pre-rendered assets.** Expensive generation happens once,
+   at build time, and the rendered artifact is committed (see
+   `shell/splash/banners/` — TTF → PNG → block art, all offline). Runtime
+   dependencies stay minimal and every one of them is declared in the
+   `Brewfile` with a comment saying what it's for. Generation-only tools are
+   committed under a `tools/` dir next to their assets, and listed in the
+   Brewfile as commented-out optional lines.
+
+## Subsystem map
+
+| Area | Where | Notes |
+|---|---|---|
+| Launcher (Leader Key) | `config/leader-key/` | Caps Lock → F19 via Karabiner; nested vim-style tree |
+| Key remaps | `config/karabiner/` | captured JSON |
+| Terminal | `config/iterm2/` + `shell/` | color scheme, aliases, inline-image tooling |
+| Hotkey splash | `shell/splash/` | see its header comments; heavily conventioned |
+| App helpers | `bin/` | AppleScripts for launch/focus edge cases |
+| OS tweaks | `scripts/macos-defaults.sh` | reversible `defaults` writes only |
+| Deps | `Brewfile` | the ONLY dependency manifest |
+
+## Conventions when adding or changing a subsystem
+
+- Add runtime deps to the `Brewfile` with a one-line comment. Optional or
+  build-only deps go in commented-out.
+- Document the subsystem as a section in `README.md` (feature bullet up top,
+  detail section below, showcase image in `docs/` if visual).
+- Shell behavior is sourced from `shell/aliases.zsh` — never ship a whole
+  `.zshrc` (it collects secrets). Hotkey-window-only behavior gates on
+  `ITERM_PROFILE == "Hotkey Window"` (env var set by iTerm at launch;
+  "Send text at start" runs too late — do not use it for env vars).
+- iTerm profile settings live in the plist, which is NOT captured; anything a
+  subsystem requires from the profile (window size, blinking text, hotkey)
+  must be documented in README → Terminal splash → Wiring, and applied by the
+  user in the Settings UI. Do not edit iTerm's plist while iTerm runs —
+  changes get overwritten on quit. `defaults write` for advanced keys
+  (e.g. `timeBetweenBlinks`) is acceptable.
+- The hotkey window only adopts profile Rows/Columns when the window is
+  recreated (fully close it, then re-summon). Remember this before debugging
+  "my change didn't show".
+
+## Splash-specific invariants (shell/splash/)
+
+- Layout budget: the whole splash must fit the hotkey window (currently
+  39 rows × 125 cols) with the prompt on the last row. Every element is
+  width-guarded; art taller than the budget auto-drops the banner. If you add
+  content, re-verify: no visible line > window columns, total rows ≤ rows−1.
+- The typewriter emits ANSI escape sequences atomically — any new animation
+  must preserve byte-fidelity of the final output (test: captured output of
+  animated == unanimated).
+- fastfetch logo files: `$1`/`$9` are color placeholders; literal `$` must be
+  escaped as `$$`. `$2` is the blink color.
+- Everything randomized must also be silence-safe: sourcing
+  `shell/aliases.zsh` in a normal (non-hotkey) pane must produce ZERO output.
+  This is the first test to run after any change.
+
+## Testing checklist (run before committing shell changes)
+
+```zsh
+# 1. silence in normal panes
+out=$(env -u HOTKEY_PANE ITERM_PROFILE="Default" zsh -c 'source ~/projects/machine-spirit/shell/aliases.zsh' 2>&1); [[ -z $out ]]
+# 2. splash renders in-budget (rows/width) for every logo in logos/
+# 3. no secrets: gitleaks runs via the pre-commit hook
+```
+
+## Commit & sync flow
+
+```bash
+./scripts/sync.sh     # capture live configs first if you changed any
+git add -A && git commit   # hook scans; keep commits per-subsystem
+git push
+```

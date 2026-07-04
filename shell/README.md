@@ -38,7 +38,7 @@ Inline an image in iTerm, else open in the default app. Not named `cat` on purpo
 Add one line to `~/.zshrc` (do NOT commit your ~/.zshrc — it holds secrets):
 
 ```
-source ~/projects/aesthetic-mac-setup/shell/aliases.zsh
+source ~/projects/machine-spirit/shell/aliases.zsh
 ```
 
 ## Getting closer to "automatic"
