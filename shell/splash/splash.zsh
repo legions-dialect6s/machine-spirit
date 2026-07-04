@@ -25,8 +25,8 @@
 #   HOTKEY_SPLASH_LOGO       force a specific logo file
 #   HOTKEY_SPLASH_ORNAMENTS  0 disables the random ornaments beside info lines
 #
-# The skull's eyes, and the caption's +++ marks, use the terminal blink
-# attribute (needs "Blinking text" enabled in iTerm). The 𒐫 separator and
+# The skull's eyes, the caption's +++ marks, and the info-line charms use the
+# terminal blink attribute (needs "Blinking text" enabled in iTerm). The 𒐫 separator and
 # divider rhythms re-randomize every launch; both need a font with cuneiform
 # glyphs, else they show as boxes.
 # NOTE: iTerm only applies profile Rows/Columns when the hotkey window is
@@ -185,15 +185,15 @@ hotkey_splash() {
         '∘₊✧──✧₊∘' '♜ ♞ ♝ ♛' '𓅓 𓆃 𓅓' '☦ ✵ ☦' '⁂ ⁂'
       )
       local -i want=0 orn_r=$(( RANDOM % 10 ))
-      (( orn_r >= 3 )) && want=1
-      (( orn_r >= 7 )) && want=2
-      (( orn_r == 9 )) && want=3
+      (( orn_r >= 1 )) && want=1
+      (( orn_r >= 4 )) && want=2
+      (( orn_r >= 7 )) && want=3
       # fastfetch composes each row as logo + padding + info, so an info row
       # is simply a row containing a "key: value" pair
       local -i li vis cols=${COLUMNS:-125}
       local plainl orn
       for (( li = 1; li <= $#ilines && want > 0; li++ )); do
-        (( RANDOM % 4 )) && continue
+        (( RANDOM % 2 )) && continue
         plainl=${ilines[li]//$'\e'\[[0-9;]#[A-Za-z]/}
         plainl=${plainl%%[[:space:]]#}
         [[ $plainl == *': '* ]] || continue
@@ -253,15 +253,16 @@ hotkey_splash() {
   content=${(pj:\n:)parts}
   _hotkey_splash_type "$content"$'\n'
 
-  # ornament CRT pass: pause a beat, then flash each dim ornament to bright,
-  # jumping by relative cursor moves so it works wherever the splash ran
+  # ornament CRT pass: pause a beat, then flip each dim ornament to a bright
+  # blink (terminal blink attribute, like the skull eyes / caption), jumping
+  # by relative cursor moves so it works wherever the splash ran
   if (( $#orn_txt )); then
     local -i can_tick=0 oi up
     zmodload zsh/zselect 2>/dev/null && can_tick=1
     (( can_tick )) && zselect -t 30
     for (( oi = 1; oi <= $#orn_txt; oi++ )); do
       (( up = orn_up[oi] + qrows + 1 ))
-      print -rn -- $'\e['$up$'A\r\e['$orn_col[oi]$'C\e[1;32m'$orn_txt[oi]$'\e[0m\r\e['$up$'B'
+      print -rn -- $'\e['$up$'A\r\e['$orn_col[oi]$'C\e[1;5;32m'$orn_txt[oi]$'\e[0m\r\e['$up$'B'
       (( can_tick )) && zselect -t 12
     done
   fi
