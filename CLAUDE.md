@@ -5,6 +5,11 @@ keybinds, window/menu-bar behavior, terminal, and the hotkey-window splash.
 If you are an agent session working on any part of the Mac UI, this file is
 your contract. Read it before touching anything.
 
+> **Forward-looking design cache:** [`HANDOFF-NOTES.md`](HANDOFF-NOTES.md) holds
+> the roadmap/design intent for the future machine-spirit *app* (node-graph tool)
+> and the load-bearing notes for finalizing the busy-pane shield. Read it before
+> any work that touches the shield or the app's direction.
+
 ## Philosophy
 
 1. **The repo is the canonical artifact.** No config change is "done" until it
