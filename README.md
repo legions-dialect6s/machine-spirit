@@ -2,7 +2,8 @@
 
 A reproducible, keyboard-driven macOS environment as version-controlled code. Clone it onto any Mac, run one script, and get the same launcher, key remaps, terminal, and window behavior back — including a terminal that greets you properly.
 
-![showcase](docs/showcase_v2.png)
+![terminal splash](docs/splash-showcase.png)
+
 
 The philosophy is simple: the machine's configuration is a **canonical artifact**, not a pile of clicks you'll forget. Every change flows back into the repo, so the current state is always captured, diffable, and redeployable.
 
@@ -102,3 +103,6 @@ machine-spirit/
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+
+![showcase](docs/showcase_v2.png)
