@@ -7,6 +7,18 @@ A reproducible, keyboard-driven macOS environment as version-controlled code. Cl
 
 The philosophy is simple: the machine's configuration is a **canonical artifact**, not a pile of clicks you'll forget. Every change flows back into the repo, so the current state is always captured, diffable, and redeployable.
 
+## Philosophy
+
+Most window setups pick a side. Tiling window managers make the keyboard mandatory — every window snaps to a grid, the mouse is treated as failure. Stock macOS makes the mouse mandatory — free-floating windows, drag everything, keyboard shortcuts are an afterthought. Both are dogmatic in opposite directions.
+
+machine-spirit sits in the middle on purpose. It adds a keyboard layer — a leader-key launcher, spatial window commands, an inline-image feed — on top of macOS rather than replacing its model. Nothing here removes the mouse. Windows still float; you still drag when dragging is the better move. But when launching an app, snapping a window to a quadrant, or jumping to a monitor is faster from the keyboard — and it usually is — that path exists and it's fast.
+
+Being anti-mouse is a pose, not a philosophy. The real win isn't picking one input — it's running both at once. Kick off an action with the mouse or trackpad on one screen or pane while your other hand drives a second from the keyboard: start a drag or a selection here, snap and launch and cycle there, no context-switch between them. That's what makes this a *hybrid* tiling window manager — a keyboard-commanded tiling layer over a desktop you can still just reach out and touch, both hands live at the same time.
+
+The name is the thesis: the machine has a spirit you learn to commune with through the keyboard, but it's still a machine you can just reach out and touch. The goal isn't purity. It's a machine that fits the hand — keyboard where keyboard wins, mouse where mouse wins, and the friction of choosing between them designed away.
+
+Everything else in this repo follows from that: additive not replacing, portable by construction, the repo as the canonical artifact, zero secrets, assets pre-rendered so the runtime stays light.
+
 ## Features
 
 - **Leader-key launcher** ([Leader Key](https://github.com/mikker/LeaderKey)) — one activation key opens a nested, Vim-style shortcut tree. `⇪ c o` → Codex, `⇪ c l` → Claude, `⇪ i t` → iTerm, `⇪ g p` → ChatGPT app, `⇪ g w` → an existing ChatGPT tab in Safari, and so on. No global-shortcut collisions, no chords to memorize. Full listing in [Keybind reference](#keybind-reference).
@@ -56,15 +68,18 @@ The tree follows four rules, by escalating "weight" of the action:
 
 | Keys | Opens | | Keys | Opens |
 |---|---|---|---|---|
-| `⇪ a c` | Activity Monitor | | `⇪ p h` | Photos |
-| `⇪ c l` | Claude | | `⇪ p s` | Photoshop |
-| `⇪ c o` | Codex | | `⇪ s a` | Safari |
+| `⇪ a c` | Activity Monitor | | `⇪ n o` | Notes |
+| `⇪ c l` | Claude | | `⇪ p h` | Photos |
+| `⇪ c o` | Codex | | `⇪ p s` | Photoshop |
+| `⇪ c h r` | Chrome | | `⇪ s a` | Safari |
 | `⇪ d i` | Discord | | `⇪ s e` | System Settings |
-| `⇪ f a` | FaceTime | | `⇪ s p` | Spotify |
+| `⇪ f a c` / `⇪ f t` | FaceTime | | `⇪ s p` | Spotify |
 | `⇪ f i` | Finder | | `⇪ t e` | TextEdit |
 | `⇪ g p` | ChatGPT | | `⇪ t r` | Terminal |
-| `⇪ i t` | iTerm | | `⇪ w h` | WhatsApp |
-| `⇪ m e` | Messages | | `⇪ n o` | Notes |
+| `⇪ i t` | iTerm | | `⇪ v m w` | VMware Fusion |
+| `⇪ m e` | Messages | | `⇪ w h` | WhatsApp |
+
+`⇪ v m w` runs [`bin/vmware.applescript`](bin/vmware.applescript) — activate if running, launch if not. (Cycling between individual VM windows isn't cleanly scriptable; use ⌘\` once focused.)
 
 ### Web — focus-or-cycle-or-open
 
@@ -75,18 +90,23 @@ Every site key runs the same script, [`bin/web-jump.applescript`](bin/web-jump.a
 | `⇪ g i t` | GitHub | spells "git" |
 | `⇪ g o` | Google | |
 | `⇪ g w` | ChatGPT web | matches chatgpt.com + chat.openai.com |
+| `⇪ g r o k` | Grok | spells "grok"; matches grok.com + x.com/i/grok |
 | `⇪ i g` | Instagram | |
-| `⇪ s x` / `⇪ s t` | X / Twitter | matches x.com + twitter.com |
+| `⇪ s x` / `⇪ s t` / `⇪ x .` | X / Twitter | matches x.com + twitter.com (three aliases for the same jump) |
 | `⇪ y` | YouTube | |
-| `⇪ r r` | — | strips the current tab's URL to the site's home page |
+| `⇪ r r` | — | strips the current tab's URL to the site's home page ([`bin/site-home.applescript`](bin/site-home.applescript)) |
 
 ### Folders & terminal
 
 | Keys | Action |
 |---|---|
-| `⇪ f d` | Downloads |
+| `⇪ f a e` | aesthetics folder (~/Desktop/aesthetics) |
+| `⇪ f a p p` | Applications folder |
+| `⇪ f d o c` | Documents |
+| `⇪ f d o w` | Downloads |
 | `⇪ f p` | ~/projects |
 | `⇪ f s s` | screenshots folder |
+| `⇪ f . . . . .` | open Trash in Finder |
 | `⇪ i n` | new iTerm window |
 
 ### Screenshots (`⇪ s s …` — screen, then how)
@@ -118,11 +138,16 @@ Rectangle does the window math; Leader Key drives it through Rectangle's URL sch
 ⇪ a a a   left half                                 ⇪ d d d   right half
 ⇪ z z z   bottom-left     ⇪ x x x   bottom half     ⇪ c c c   bottom-right
 ⇪ v v v   left third      ⇪ b b b   center third    ⇪ n n n   right third
+⇪ 1 1 1   first third     ⇪ 2 2 2   center third    ⇪ 3 3 3   last third
 ⇪ c s s   center          ⇪ m m m   maximize        ⇪ f f f   other display
+⇪ c e n   center (screen) ⇪ a m m m almost-maximize
 ⇪ = =     grow            ⇪ - -     shrink          ⇪ q u i t  ⌘Q frontmost app
 ```
 
 - **Triple letters** for placement so a fat-fingered leader sequence never yeets a window; the two resize keys are **double-taps** because they're pressed repeatedly. (Notes moved to `⇪ n o` when `n` became the right-third group.)
+- **Thirds two ways**: the spatial letters `v`/`b`/`n` (left/center/right) and the numeric row `1`/`2`/`3` (first/center/last) both drive Rectangle's thirds — pick whichever your hand reaches for.
+- **Two centers**: `⇪ c s s` is Rectangle's own center action; `⇪ c e n` runs [`bin/center-window.applescript`](bin/center-window.applescript), which centers the frontmost window on *whichever display it currently sits on* (multi-monitor aware) without resizing it.
+- **`⇪ a m m m`** is Rectangle's almost-maximize (a small inset from full-screen).
 - **Grow/shrink bypass Rectangle**: [`bin/win-lerp.applescript`](bin/win-lerp.applescript) animates the frontmost window ±120 px over 22 smoothstep-eased frames — centered as it scales, clamped at screen edges, with a 300×200 floor so shrink-spam can't crush a window. Rectangle's resizes are instant jumps; this one glides.
 - **`⇪ f f f`** cycles displays (with two monitors, a toggle); Rectangle centers the window on arrival, so no follow-up action is needed.
 - Rectangle's *native* larger/smaller step is bumped to 100 px by [`scripts/macos-defaults.sh`](scripts/macos-defaults.sh) for when it's triggered outside Leader Key.
@@ -167,7 +192,7 @@ machine-spirit/
 ├── install.sh              # bootstrap a fresh Mac
 ├── Brewfile                # declarative app list
 ├── CLAUDE.md               # handoff: teaches agent sessions this repo's rules
-├── bin/                    # helpers: web-jump, win-lerp, site-home, terminal-front
+├── bin/                    # helpers: web-jump, win-lerp, site-home, center-window, vmware
 │   └── screenshots/        # screencapture wrappers behind the ⇪ s s tree
 ├── config/
 │   ├── leader-key/         # captured Leader Key config (templated)
@@ -187,6 +212,52 @@ machine-spirit/
 │   └── macos-defaults.sh   # reversible macOS tweaks
 └── .githooks/pre-commit    # gitleaks secret scan
 ```
+
+## Roadmap
+
+Honest maybes, not promises — roughly near-term first, north star last.
+
+### Near-term
+
+- **One-line installer** — a `curl | bash` bootstrap wrapping the existing [`install.sh`](install.sh), so onboarding is a single paste.
+- **User-initiated updater** — an `update.sh` (git pull → replay `install.sh` → reload configs), maybe with a login-time check that notifies when the repo is ahead. No background auto-apply: config that rewrites itself without asking violates *the machine fits the hand*. Notify, and let you pull.
+- **Send window to a specific monitor** — target a named or numbered display, not just "next display" — a precise version of Rectangle's cycle, and a first step toward driving window actions ourselves.
+
+### Visual customization layer — a clean jailbreak for the macOS look
+
+A curated, safe, **reversible** set of appearance tweaks that push macOS's visual customization further than the stock Settings pane allows — packaged the way the rest of this repo is: documented, toggleable, and captured as code. This is the "jailbreak-of-sorts customization" instinct made concrete, and it's squarely on-theme — additive, reversible, the give-in-the-system rather than a fight against it.
+
+Scope (all opt-in, all undoable):
+
+- **Fonts** — system/UI and monospace font replacement, documented so it survives a clean install.
+- **UI density & appearance** — spacing, accent and highlight colors, dark/light and contrast hacks via `defaults write`.
+- **Menu bar & Dock** — layout, autohide timing, spacing, and clutter control (building on the existing Ice/Thaw setup).
+- **Vetted third-party theming tools** — a short, security-reviewed list, each with a one-line "what it does / how to undo it" note, mirroring the Brewfile discipline.
+
+Everything lands as reversible `defaults` writes (extending [`scripts/macos-defaults.sh`](scripts/macos-defaults.sh)) plus a documented toggle, so "here's how to push macOS's look further, cleanly" stays true to the *additive, reversible, repo-as-canonical-artifact* ethos. No irreversible system-file patching; if a tweak can't be cleanly backed out, it doesn't ship.
+
+### North star — machine-spirit as its own tool (not yet built)
+
+Today this repo is a config layer over Leader Key + Rectangle. The destination is a purpose-built app that replaces both — not a nicer menu, but a **visual node-graph editor for the whole input layer**. You'd wire keybinds on a canvas: a shortcut-key node → group and/or action nodes → command nodes (built-in window and launch actions exposed with parameters, animation options, inline script bodies, or links to external scripts). The nested tree Leader Key shows today is just one rendering of that graph. machine-spirit's current binds ship as the default graph, and every Rectangle window action and Leader Key launch behavior is a freely rewireable node.
+
+It's feasible because the hard parts are already open source — Leader Key (leader / tree / summon) and Rectangle (window actions) are permissively licensed — so this is a node-editor UI plus glue over existing engines, not a window manager built from scratch. It also gets its own summon indicator in place of Leader Key's plain dot (say, an animated green ASCII skull fading in and out), which likely means forking Leader Key's overlay — one more reason the endgame is an owned tool rather than a pile of config.
+
+**Positioning — a competitor that stays open to integration.** machine-spirit is constitutionally an *alternative* to AeroSpace / Rectangle / Leader Key, not a wrapper around them. The graph is the engine; those tools become importable templates rather than locked-in dependencies — an exact AeroSpace clone that imports an existing AeroSpace config for in-place migration, a Rectangle preset, a blank canvas, community templates. AeroSpace integration stays possible (opt-in), but the aim is to make it unnecessary by shipping a node-programmable equivalent that's at least as good — including send-to-specific-monitor and full tiling, both expressed as node graphs.
+
+**"Leader keys," plural.** Keep the term as homage to Leader Key, but drop the singular: support multiple simultaneous leaders (a different leader per graph or context) and treat alternative input devices as first-class trigger sources — foot switches, macro pads, MIDI/HID controllers — bindable alongside the keyboard.
+
+### Foundational design notes (flagged now, to decide before building)
+
+- **Serialization format is the first real decision** — human-readable, diffable, version-controllable, and importable from competitors' configs (AeroSpace, Rectangle). Templates, sharing, and "the repo is the canonical artifact" all rest on it.
+- **License check, first.** Before building on or redistributing anything derived from Leader Key or Rectangle, confirm their terms permit derivative works and redistribution. Both appear MIT-family / permissive; verify before shipping.
+- **macOS-first, on purpose.** Cross-platform is out of scope for now, but the engine should avoid gratuitous macOS lock-in where avoiding it is cheap.
+- **Honest scope.** A cross-tool, node-based, multi-input window-and-launcher manager with a visual editor and a migration ecosystem is a substantial project (multi-week-plus, plausibly open-source-with-contributors), not a weekend. A working prototype is close; the polished editor and template ecosystem are the long tail. Ship a prototype (v0.1) first and iterate the editor and templates after — building it early also surfaces engine-integration conflicts before any UI is stacked on top.
+
+### Other maybes
+
+- Optional **AeroSpace integration** for users who want its exact behavior (opt-in, additive).
+- **Colorimeter-based display-matching** profile.
+- **Per-project Leader Key layers** — one keystroke spins up a project's whole window / app / server context.
 
 ## License
 
