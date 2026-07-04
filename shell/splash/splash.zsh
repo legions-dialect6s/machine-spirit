@@ -25,8 +25,8 @@
 #   HOTKEY_SPLASH_LOGO       force a specific logo file
 #   HOTKEY_SPLASH_ORNAMENTS  0 disables the random ornaments beside info lines
 #
-# The skull's eyes, the caption's +++ marks, and the info-line charms use the
-# terminal blink attribute (needs "Blinking text" enabled in iTerm). The 𒐫 separator and
+# The skull's eyes, and the caption's +++ marks, use the terminal blink
+# attribute (needs "Blinking text" enabled in iTerm). The 𒐫 separator and
 # divider rhythms re-randomize every launch; both need a font with cuneiform
 # glyphs, else they show as boxes.
 # NOTE: iTerm only applies profile Rows/Columns when the hotkey window is
@@ -253,17 +253,20 @@ hotkey_splash() {
   content=${(pj:\n:)parts}
   _hotkey_splash_type "$content"$'\n'
 
-  # ornament CRT pass: pause a beat, then flip each dim ornament to a bright
-  # blink (terminal blink attribute, like the skull eyes / caption), jumping
-  # by relative cursor moves so it works wherever the splash ran
+  # ornament settle pass: pause a beat, then flicker each dim charm in with a
+  # short CRT-style pulse (bright/dim frames) that lands on a static bright —
+  # no persistent blink. Relative cursor moves so it works wherever we ran.
   if (( $#orn_txt )); then
-    local -i can_tick=0 oi up
+    local -i can_tick=0 oi up fr
+    local -a frames=('1;32' '2;32' '1;32' '2;32' '1;32')
     zmodload zsh/zselect 2>/dev/null && can_tick=1
     (( can_tick )) && zselect -t 30
     for (( oi = 1; oi <= $#orn_txt; oi++ )); do
       (( up = orn_up[oi] + qrows + 1 ))
-      print -rn -- $'\e['$up$'A\r\e['$orn_col[oi]$'C\e[1;5;32m'$orn_txt[oi]$'\e[0m\r\e['$up$'B'
-      (( can_tick )) && zselect -t 12
+      for (( fr = 1; fr <= $#frames; fr++ )); do
+        print -rn -- $'\e['$up$'A\r\e['$orn_col[oi]$'C\e['$frames[fr]$'m'$orn_txt[oi]$'\e[0m\r\e['$up$'B'
+        (( can_tick )) && zselect -t 4
+      done
     done
   fi
 }
