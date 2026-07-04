@@ -184,6 +184,17 @@
           ],
           "key" : "s",
           "type" : "group"
+        },
+        {
+          "actions" : [
+            {
+              "key" : "h",
+              "type" : "command",
+              "value" : "~/bin/run-quiet.sh osascript -e 'tell application \"System Events\" to keystroke \" \"' -e 'delay 0.3' -e 'tell application \"System Events\" to keystroke \"4\" using command down'"
+            }
+          ],
+          "key" : "b",
+          "type" : "group"
         }
       ],
       "key" : "c",
@@ -241,7 +252,7 @@
                         {
                           "key" : ".",
                           "type" : "command",
-                          "value" : "osascript -e 'tell application \"Finder\" to open trash' -e 'tell application \"Finder\" to activate'\nosascript -e 'tell application \"Finder\" to open trash' -e 'tell application \"Finder\" to activate'\nosascript -e 'tell application \"Finder\" to open trash' -e 'tell application \"Finder\" to activate'\n"
+                          "value" : "~/bin/run-quiet.sh osascript -e 'tell application \"Finder\" to open trash' -e 'tell application \"Finder\" to activate'"
                         }
                       ],
                       "key" : ".",
@@ -401,7 +412,7 @@
     {
       "key" : "h",
       "type" : "command",
-      "value" : "osascript -e 'tell application \"System Events\" to keystroke \"h\" using command down'"
+      "value" : "~/bin/run-quiet.sh osascript -e 'tell application \"System Events\" to keystroke \"h\" using command down'"
     },
     {
       "actions" : [
@@ -413,7 +424,7 @@
         {
           "key" : "n",
           "type" : "command",
-          "value" : "osascript -e 'tell application \"iTerm\" to activate' -e 'tell application \"iTerm\" to create window with default profile'"
+          "value" : "~/bin/run-quiet.sh osascript -e 'tell application \"iTerm\" to activate' -e 'tell application \"iTerm\" to create window with default profile'"
         },
         {
           "key" : "t",
@@ -430,6 +441,34 @@
           "key" : "k",
           "type" : "command",
           "value" : "open -a \"Leader Key\" --args --show-settings"
+        },
+        {
+          "actions" : [
+            {
+              "actions" : [
+                {
+                  "key" : "s",
+                  "type" : "application",
+                  "value" : "/Applications/Little Snitch.app"
+                }
+              ],
+              "key" : "l",
+              "type" : "group"
+            },
+            {
+              "actions" : [
+                {
+                  "key" : "m",
+                  "type" : "command",
+                  "value" : "open -a \"Little Snitch Network Monitor\""
+                }
+              ],
+              "key" : "n",
+              "type" : "group"
+            }
+          ],
+          "key" : "s",
+          "type" : "group"
         }
       ],
       "key" : "l",
@@ -515,7 +554,7 @@
                 {
                   "key" : "t",
                   "type" : "command",
-                  "value" : "osascript -e 'tell application \"System Events\" to keystroke \"q\" using command down'"
+                  "value" : "~/bin/run-quiet.sh osascript -e 'tell application \"System Events\" to keystroke \"q\" using command down'"
                 }
               ],
               "key" : "i",
@@ -562,29 +601,29 @@
             {
               "key" : "f",
               "type" : "command",
-              "value" : "__HOME__/bin/screenshots/ss-finder.sh"
+              "value" : "~/bin/run-quiet.sh ~/bin/screenshots/ss-finder.sh"
             },
             {
               "key" : "m",
               "type" : "command",
-              "value" : "__HOME__/bin/screenshots/ss-menu.sh"
+              "value" : "~/bin/run-quiet.sh ~/bin/screenshots/ss-menu.sh"
             },
             {
               "actions" : [
                 {
                   "key" : "s",
                   "type" : "command",
-                  "value" : "__HOME__/bin/screenshots/ss-rec-sel.sh"
+                  "value" : "~/bin/run-quiet.sh ~/bin/screenshots/ss-rec-sel.sh"
                 },
                 {
                   "key" : "w",
                   "type" : "command",
-                  "value" : "__HOME__/bin/screenshots/ss-rec-whole.sh"
+                  "value" : "~/bin/run-quiet.sh ~/bin/screenshots/ss-rec-whole.sh"
                 },
                 {
                   "key" : "x",
                   "type" : "command",
-                  "value" : "(ss-rec-stop.sh)"
+                  "value" : "~/bin/run-quiet.sh ~/bin/screenshots/ss-rec-stop.sh"
                 }
               ],
               "key" : "r",
@@ -595,12 +634,12 @@
                 {
                   "key" : "c",
                   "type" : "command",
-                  "value" : "__HOME__/bin/screenshots/ss-sel-copy.sh"
+                  "value" : "~/bin/run-quiet.sh ~/bin/screenshots/ss-sel-copy.sh"
                 },
                 {
                   "key" : "s",
                   "type" : "command",
-                  "value" : "__HOME__/bin/screenshots/ss-sel-save.sh"
+                  "value" : "~/bin/run-quiet.sh ~/bin/screenshots/ss-sel-save.sh"
                 }
               ],
               "key" : "s",
@@ -611,12 +650,12 @@
                 {
                   "key" : "c",
                   "type" : "command",
-                  "value" : "__HOME__/bin/screenshots/ss-whole-copy.sh"
+                  "value" : "~/bin/run-quiet.sh ~/bin/screenshots/ss-whole-copy.sh"
                 },
                 {
                   "key" : "s",
                   "type" : "command",
-                  "value" : "__HOME__/bin/screenshots/ss-whole-save.sh"
+                  "value" : "~/bin/run-quiet.sh ~/bin/screenshots/ss-whole-save.sh"
                 }
               ],
               "key" : "w",
