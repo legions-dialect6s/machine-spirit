@@ -31,15 +31,16 @@ else
   echo "  (skipped) Karabiner config not found at $KARABINER_LIVE"
 fi
 
-# ~/bin scripts — copy any that live in the repo's bin/ back from the live dir
+# ~/bin scripts — copy any that live in the repo's bin/ back from the live
+# dir (recursive, so subdirs like bin/screenshots/ are captured too)
 if [[ -d "$BIN_LIVE" ]]; then
-  for f in "$REPO_ROOT"/bin/*; do
-    name="$(basename "$f")"
-    if [[ -f "$BIN_LIVE/$name" ]]; then
-      cp "$BIN_LIVE/$name" "$REPO_ROOT/bin/$name"
-      echo "  captured bin/$name"
+  while IFS= read -r -d '' f; do
+    rel="${f#"$REPO_ROOT/bin/"}"
+    if [[ -f "$BIN_LIVE/$rel" ]]; then
+      cp "$BIN_LIVE/$rel" "$f"
+      echo "  captured bin/$rel"
     fi
-  done
+  done < <(find "$REPO_ROOT/bin" -type f -print0)
 fi
 
 echo "==> Done. Review changes with:  git -C \"$REPO_ROOT\" diff"

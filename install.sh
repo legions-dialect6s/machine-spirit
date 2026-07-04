@@ -36,10 +36,13 @@ brew bundle --file="$REPO_ROOT/Brewfile"
 
 echo "==> 3/5  ~/bin scripts"
 mkdir -p "$HOME/bin"
-for f in "$REPO_ROOT"/bin/*; do
-  cp "$f" "$HOME/bin/$(basename "$f")"
-  echo "    installed bin/$(basename "$f")"
-done
+while IFS= read -r -d '' f; do
+  rel="${f#"$REPO_ROOT/bin/"}"
+  mkdir -p "$HOME/bin/$(dirname "$rel")"
+  cp "$f" "$HOME/bin/$rel"
+  chmod +x "$HOME/bin/$rel"
+  echo "    installed bin/$rel"
+done < <(find "$REPO_ROOT/bin" -type f -print0)
 
 echo "==> 4/5  App configs"
 # Leader Key — restore the real home path from the __HOME__ placeholder
