@@ -37,7 +37,7 @@ your contract. Read it before touching anything.
 | Key remaps | `config/karabiner/` | captured JSON |
 | Terminal | `config/iterm2/` + `shell/` | color scheme, aliases, inline-image tooling |
 | Hotkey splash | `shell/splash/` | see its header comments; heavily conventioned |
-| App helpers | `bin/` | AppleScripts for launch/focus edge cases |
+| App helpers | `bin/` | web-jump.applescript is THE script for all site tab-jumping (never add per-site scripts); plus win-lerp, site-home, screenshots/ |
 | OS tweaks | `scripts/macos-defaults.sh` | reversible `defaults` writes only |
 | Deps | `Brewfile` | the ONLY dependency manifest |
 

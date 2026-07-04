@@ -11,7 +11,7 @@ The philosophy is simple: the machine's configuration is a **canonical artifact*
 
 - **Leader-key launcher** ([Leader Key](https://github.com/mikker/LeaderKey)) — one activation key opens a nested, Vim-style shortcut tree. `⇪ c o` → Codex, `⇪ c l` → Claude, `⇪ i t` → iTerm, `⇪ g p` → ChatGPT app, `⇪ g w` → an existing ChatGPT tab in Safari, and so on. No global-shortcut collisions, no chords to memorize. Full listing in [Keybind reference](#keybind-reference).
 - **Silent leader key** ([Karabiner-Elements](https://karabiner-elements.pqrs.org/)) — Caps Lock is remapped to `F19`, a phantom key nothing else uses. It no longer capitalizes, the green LED never lights, and it becomes a clean, dedicated trigger.
-- **Smart launch actions** — plain app launches focus-if-running / launch-if-closed automatically; the two that need more (Terminal window revival, ChatGPT tab de-duplication) are small AppleScripts in [`bin/`](bin/).
+- **Smart launch actions** — plain app launches focus-if-running / launch-if-closed automatically; websites get the same treatment from a single parameterized script ([`bin/web-jump.applescript`](bin/web-jump.applescript)): focus the site's tab if open, open it if not, cycle through its tabs on repeat presses. Any site, one config line.
 - **Spatial window grid** ([Rectangle](https://rectangleapp.com/) driven from Leader Key via its URL scheme) — the window keys mirror screen positions: `⇪ q q q` top-left, `⇪ x x x` bottom half, `⇪ b b b` center third, and so on. Grow/shrink is a smooth eased animation from a small AppleScript, not an instant jump. See [Window management](#window-management).
 - **iTerm2** — terminal-first workflow, splits, and a custom color scheme. See [`config/iterm2/`](config/iterm2/).
 - **Hotkey-window splash** ([`shell/splash/`](shell/splash/)) — every summon of the hotkey terminal boots a randomized, typed-out splash: blackletter banners in five scripts, an ASCII skull or dragon, fastfetch, a quote from a 54-deep rotation, and blinking unicode charms. See [Terminal splash](#terminal-splash) below.
@@ -66,17 +66,19 @@ The tree follows four rules, by escalating "weight" of the action:
 | `⇪ i t` | iTerm | | `⇪ w h` | WhatsApp |
 | `⇪ m e` | Messages | | `⇪ n o` | Notes |
 
-### Web (jump to an existing tab instead of opening a duplicate)
+### Web — focus-or-cycle-or-open
 
-| Keys | Goes to | Notes |
+Every site key runs the same script, [`bin/web-jump.applescript`](bin/web-jump.applescript): if no tab for the site exists it opens one; if one exists it focuses it; if you're **already on it, pressing again cycles** through all matching tabs across every window. Adding a site is one Leader Key entry — `osascript ~/bin/web-jump.applescript <domains> [fallback-url]` — no new script.
+
+| Keys | Site | Notes |
 |---|---|---|
 | `⇪ g i t` | GitHub | spells "git" |
-| `⇪ g o` | Google | finds an existing tab or opens one |
-| `⇪ g w` | ChatGPT web | tab de-dupe via [`bin/chatgpt-web.applescript`](bin/) |
+| `⇪ g o` | Google | |
+| `⇪ g w` | ChatGPT web | matches chatgpt.com + chat.openai.com |
 | `⇪ i g` | Instagram | |
-| `⇪ s x` | X | |
-| `⇪ r r` | personal site | |
-| `⇪ y` | YouTube | cycles through YouTube tabs |
+| `⇪ s x` / `⇪ s t` | X / Twitter | matches x.com + twitter.com |
+| `⇪ y` | YouTube | |
+| `⇪ r r` | — | strips the current tab's URL to the site's home page |
 
 ### Folders & terminal
 
@@ -165,7 +167,8 @@ machine-spirit/
 ├── install.sh              # bootstrap a fresh Mac
 ├── Brewfile                # declarative app list
 ├── CLAUDE.md               # handoff: teaches agent sessions this repo's rules
-├── bin/                    # AppleScript helpers (chatgpt-web, terminal-front, win-lerp)
+├── bin/                    # helpers: web-jump, win-lerp, site-home, terminal-front
+│   └── screenshots/        # screencapture wrappers behind the ⇪ s s tree
 ├── config/
 │   ├── leader-key/         # captured Leader Key config (templated)
 │   ├── karabiner/          # captured Karabiner config

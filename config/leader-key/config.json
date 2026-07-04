@@ -181,7 +181,7 @@
             {
               "key" : "x",
               "type" : "command",
-              "value" : "osascript __HOME__/bin/x-web.applescript"
+              "value" : "osascript ~/bin/web-jump.applescript x.com,twitter.com"
             }
           ],
           "key" : "s",
@@ -198,7 +198,7 @@
             {
               "key" : "t",
               "type" : "command",
-              "value" : "osascript __HOME__/bin/github-web.applescript"
+              "value" : "osascript ~/bin/web-jump.applescript github.com"
             }
           ],
           "key" : "i",
@@ -207,7 +207,7 @@
         {
           "key" : "o",
           "type" : "command",
-          "value" : "osascript -e 'tell application \"Safari\"' -e 'activate' -e 'set hit to false' -e 'repeat with w in windows' -e 'repeat with t in tabs of w' -e 'set u to URL of t' -e 'if u is not missing value and u contains \"google.com\" then' -e 'set current tab of w to t' -e 'set index of w to 1' -e 'set hit to true' -e 'exit repeat' -e 'end if' -e 'end repeat' -e 'if hit then exit repeat' -e 'end repeat' -e 'if not hit then tell window 1 to set current tab to (make new tab with properties {URL:\"https://google.com\"})' -e 'end tell'"
+          "value" : "osascript ~/bin/web-jump.applescript google.com"
         },
         {
           "key" : "p",
@@ -217,7 +217,7 @@
         {
           "key" : "w",
           "type" : "command",
-          "value" : "osascript __HOME__/bin/chatgpt-web.applescript"
+          "value" : "osascript ~/bin/web-jump.applescript chatgpt.com,chat.openai.com"
         }
       ],
       "key" : "g",
@@ -233,7 +233,7 @@
         {
           "key" : "g",
           "type" : "command",
-          "value" : "osascript __HOME__/bin/instagram-web.applescript"
+          "value" : "osascript ~/bin/web-jump.applescript instagram.com"
         },
         {
           "key" : "n",
@@ -454,12 +454,12 @@
         {
           "key" : "t",
           "type" : "command",
-          "value" : "osascript __HOME__/bin/instagram-web.applescript\nosascript __HOME__/bin/instagram-web.applescript\nosascript __HOME__/bin/instagram-web.applescript\n"
+          "value" : "osascript ~/bin/web-jump.applescript x.com,twitter.com"
         },
         {
           "key" : "x",
           "type" : "command",
-          "value" : "osascript __HOME__/bin/x-web.applescript\n"
+          "value" : "osascript ~/bin/web-jump.applescript x.com,twitter.com"
         }
       ],
       "key" : "s",
@@ -540,7 +540,7 @@
     {
       "key" : "y",
       "type" : "command",
-      "value" : "osascript ~/bin/youtube-cycle.applescript"
+      "value" : "osascript ~/bin/web-jump.applescript youtube.com"
     },
     {
       "actions" : [
