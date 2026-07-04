@@ -1,0 +1,94 @@
+# One quote per line: the quote text, then a pipe, then the source.
+# Comment lines and lines without a pipe are ignored by splash.zsh.
+#
+# Band lyrics (Bladee, Burzum, Dissection, Satanic Warmaster, ...) are still
+# under copyright, so they can't ship with this repo — paste your own below,
+# one per line, same text|Source format, and they join the rotation.
+
+# — Nick Land —
+Nothing human makes it out of the near-future.|Nick Land, Meltdown
+Garbage time is running out.|Nick Land, Meltdown
+
+# — Mark Fisher —
+It is easier to imagine the end of the world than the end of capitalism.|attr. Jameson/Žižek, via Mark Fisher, Capitalist Realism
+The slow cancellation of the future.|Mark Fisher, Ghosts of My Life (after Berardi)
+
+# — Alex Karp —
+Silicon Valley has lost its way.|Alex Karp, The Technological Republic
+
+# — Peter Thiel —
+Competition is for losers.|Peter Thiel, Zero to One
+We wanted flying cars, instead we got 140 characters.|Peter Thiel, Founders Fund manifesto
+
+# — Oliver Cromwell —
+I beseech you, in the bowels of Christ, think it possible you may be mistaken.|Oliver Cromwell, letter to the Kirk of Scotland, 1650
+Necessity hath no law.|Oliver Cromwell, speech to Parliament, 1654
+Trust in God, my boys, and keep your powder dry.|attributed to Oliver Cromwell
+
+# — John Calvin —
+Man's nature is a perpetual factory of idols.|John Calvin, Institutes of the Christian Religion I.11
+There is not one blade of grass, there is no color in this world, that is not intended to make us rejoice.|attributed to John Calvin
+
+# — Puritan literature —
+The God that holds you over the pit of hell, much as one holds a spider or some loathsome insect over the fire, abhors you.|Jonathan Edwards, Sinners in the Hands of an Angry God (1741)
+What God says is best, is best, though all the men in the world are against it.|John Bunyan, The Pilgrim's Progress
+The name of the slough was Despond.|John Bunyan, The Pilgrim's Progress
+
+# — Quran (Arabic + English) —
+فَإِنَّ مَعَ الْعُسْرِ يُسْرًا — Verily, with hardship comes ease.|Quran 94:5
+أَلَا بِذِكْرِ اللَّهِ تَطْمَئِنُّ الْقُلُوبُ — In the remembrance of God do hearts find rest.|Quran 13:28
+كُلُّ مَنْ عَلَيْهَا فَانٍ — All that is upon the earth shall pass away.|Quran 55:26
+وَخُلِقَ الْإِنسَانُ ضَعِيفًا — And man was created weak.|Quran 4:28
+
+# — Weird Old Testament & Revelation (version labeled) —
+And I looked, and behold a pale horse: and his name that sat on him was Death, and Hell followed with him.|Revelation 6:8 (KJV)
+And the name of the star is called Wormwood.|Revelation 8:11 (KJV)
+As for their rings, they were so high that they were dreadful; and their rings were full of eyes round about them four.|Ezekiel 1:18 (KJV)
+Their appearance and their work was as it were a wheel in the middle of a wheel.|Ezekiel 1:16 (KJV)
+Canst thou draw out leviathan with an hook?|Job 41:1 (KJV)
+Out of his mouth go burning lamps, and sparks of fire leap out.|Job 41:19 (KJV)
+And the sun became black as sackcloth of hair, and the moon became as blood.|Revelation 6:12 (KJV)
+For the living know that they shall die: but the dead know not any thing.|Ecclesiastes 9:5 (KJV)
+And the woman said unto Saul, I saw gods ascending out of the earth.|1 Samuel 28:13 (KJV)
+Vanitie of vanities, sayth the Preacher: vanitie of vanities, all is vanitie.|Ecclesiastes 1:2 (Geneva Bible, 1599)
+The beginning of wisedome is the feare of the Lord.|Proverbs 9:10 (Geneva Bible, 1599)
+
+# — Heraclitus (Greek + English) —
+πάντα ῥεῖ — Everything flows.|Heraclitus
+ἦθος ἀνθρώπῳ δαίμων — Character is destiny.|Heraclitus, fr. 119
+πόλεμος πάντων μὲν πατήρ ἐστι — War is the father of all things.|Heraclitus, fr. 53
+φύσις κρύπτεσθαι φιλεῖ — Nature loves to hide.|Heraclitus, fr. 123
+
+# — Plotinus (Greek + English) —
+οὐ γὰρ ἂν πώποτε εἶδεν ὀφθαλμὸς ἥλιον ἡλιοειδὴς μὴ γεγενημένος — Never did eye see the sun unless it had first become sunlike.|Plotinus, Enneads I.6.9
+φυγὴ μόνου πρὸς μόνον — The flight of the alone to the Alone.|Plotinus, Enneads VI.9.11
+
+# — Planescape: Torment —
+What can change the nature of a man?|Planescape: Torment
+Endure. In enduring, grow strong.|Dak'kon, Planescape: Torment
+
+# — WW2 leaders —
+The only thing we have to fear is fear itself.|Franklin D. Roosevelt, First Inaugural Address, 1933
+Yesterday, December 7, 1941 — a date which will live in infamy.|Franklin D. Roosevelt, 1941
+Never was so much owed by so many to so few.|Winston Churchill, 1940
+
+# — Nietzsche —
+He who has a why to live can bear almost any how.|Friedrich Nietzsche, Twilight of the Idols
+My formula for greatness in a human being is amor fati: to want nothing to be different.|Friedrich Nietzsche, Ecce Homo
+Und wenn du lange in einen Abgrund blickst, blickt der Abgrund auch in dich hinein.|Nietzsche, Jenseits von Gut und Böse (German)
+Gott ist tot! Gott bleibt tot! Und wir haben ihn getötet.|Nietzsche, Die fröhliche Wissenschaft (German)
+Man muss noch Chaos in sich haben, um einen tanzenden Stern gebären zu können.|Nietzsche, Also sprach Zarathustra (German)
+
+# — Kierkegaard —
+Life can only be understood backwards; but it must be lived forwards.|Søren Kierkegaard, Journals
+Anxiety is the dizziness of freedom.|Søren Kierkegaard, The Concept of Anxiety
+
+# — Marcus Aurelius —
+You have power over your mind — not outside events. Realize this, and you will find strength.|Marcus Aurelius, Meditations
+Waste no more time arguing about what a good man should be. Be one.|Marcus Aurelius, Meditations
+The impediment to action advances action. What stands in the way becomes the way.|Marcus Aurelius, Meditations
+The happiness of your life depends upon the quality of your thoughts.|Marcus Aurelius, Meditations
+
+# — Old Norse —
+Deyr fé, deyja frændr, deyr sjalfr it sama; ek veit einn at aldri deyr: dómr um dauðan hvern.|Hávamál 77 (Old Norse)
+Sól tér sortna, sígr fold í mar, hverfa af himni heiðar stjörnur.|Völuspá 57 (Old Norse)

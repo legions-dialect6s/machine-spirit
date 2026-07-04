@@ -1,4 +1,4 @@
-# aliases.zsh — source this from ~/.zshrc:   source ~/path/to/aesthetic-mac-setup/shell/aliases.zsh
+# aliases.zsh — source this from ~/.zshrc:   source ~/path/to/machine-spirit/shell/aliases.zsh
 # (Keep this in the repo; NEVER commit your whole ~/.zshrc — it collects secrets.)
 
 # show <file> — render an image inline in iTerm2, else open in the default app.
@@ -31,3 +31,13 @@ ccshots() {
   echo "\n(newest ${max} of last ${mins}m — more: ccshots <min> <count>)"
 }
 alias ccwatch="$HOME/projects/ccshots/cc-image-watch.sh $HOME/projects"
+# Hotkey-window-only greeting (see splash/splash.zsh). iTerm sets
+# ITERM_PROFILE in the environment at launch, so it's visible here during
+# .zshrc — unlike the profile's "Send text at start", which runs after
+# startup. HOTKEY_PANE is kept as a manual override for testing, and exported
+# so child processes can detect the hotkey window.
+if [[ -n "$HOTKEY_PANE" || "$ITERM_PROFILE" == "Hotkey Window" ]]; then
+  export HOTKEY_PANE=1
+  source "${${(%):-%N}:A:h}/splash/splash.zsh"
+  hotkey_splash
+fi
