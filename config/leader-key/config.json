@@ -3,12 +3,52 @@
     {
       "actions" : [
         {
-          "key" : "=",
-          "type" : "command",
-          "value" : "osascript __HOME__/bin/win-lerp.applescript 120"
+          "actions" : [
+            {
+              "key" : "1",
+              "type" : "command",
+              "value" : "open -g \"rectangle://execute-action?name=first-third\""
+            }
+          ],
+          "key" : "1",
+          "type" : "group"
         }
       ],
-      "key" : "=",
+      "key" : "1",
+      "type" : "group"
+    },
+    {
+      "actions" : [
+        {
+          "actions" : [
+            {
+              "key" : "2",
+              "type" : "command",
+              "value" : "open -g \"rectangle://execute-action?name=center-third\""
+            }
+          ],
+          "key" : "2",
+          "type" : "group"
+        }
+      ],
+      "key" : "2",
+      "type" : "group"
+    },
+    {
+      "actions" : [
+        {
+          "actions" : [
+            {
+              "key" : "3",
+              "type" : "command",
+              "value" : "open -g \"rectangle://execute-action?name=last-third\""
+            }
+          ],
+          "key" : "3",
+          "type" : "group"
+        }
+      ],
+      "key" : "3",
       "type" : "group"
     },
     {
@@ -25,10 +65,16 @@
     {
       "actions" : [
         {
-          "key" : "c",
-          "type" : "application",
-          "value" : "/System/Applications/Utilities/Activity Monitor.app"
-        },
+          "key" : "=",
+          "type" : "command",
+          "value" : "osascript __HOME__/bin/win-lerp.applescript 120"
+        }
+      ],
+      "key" : "=",
+      "type" : "group"
+    },
+    {
+      "actions" : [
         {
           "actions" : [
             {
@@ -38,6 +84,28 @@
             }
           ],
           "key" : "a",
+          "type" : "group"
+        },
+        {
+          "key" : "c",
+          "type" : "application",
+          "value" : "/System/Applications/Utilities/Activity Monitor.app"
+        },
+        {
+          "actions" : [
+            {
+              "actions" : [
+                {
+                  "key" : "m",
+                  "type" : "command",
+                  "value" : "open -g \"rectangle://execute-action?name=almost-maximize\""
+                }
+              ],
+              "key" : "m",
+              "type" : "group"
+            }
+          ],
+          "key" : "m",
           "type" : "group"
         }
       ],
@@ -66,6 +134,17 @@
         {
           "actions" : [
             {
+              "key" : "r",
+              "type" : "application",
+              "value" : "/Applications/Google Chrome.app"
+            }
+          ],
+          "key" : "h",
+          "type" : "group"
+        },
+        {
+          "actions" : [
+            {
               "key" : "c",
               "type" : "command",
               "value" : "open -g \"rectangle://execute-action?name=bottom-right\""
@@ -83,6 +162,17 @@
           "key" : "o",
           "type" : "application",
           "value" : "/Applications/Codex.app"
+        },
+        {
+          "actions" : [
+            {
+              "key" : "n",
+              "type" : "command",
+              "value" : "osascript __HOME__/bin/center-window.applescript"
+            }
+          ],
+          "key" : "e",
+          "type" : "group"
         },
         {
           "actions" : [
@@ -141,14 +231,82 @@
     {
       "actions" : [
         {
-          "key" : "a",
-          "type" : "application",
-          "value" : "/System/Applications/FaceTime.app"
+          "actions" : [
+            {
+              "actions" : [
+                {
+                  "actions" : [
+                    {
+                      "actions" : [
+                        {
+                          "key" : ".",
+                          "type" : "command",
+                          "value" : "osascript -e 'tell application \"Finder\" to open trash' -e 'tell application \"Finder\" to activate'\nosascript -e 'tell application \"Finder\" to open trash' -e 'tell application \"Finder\" to activate'\nosascript -e 'tell application \"Finder\" to open trash' -e 'tell application \"Finder\" to activate'\n"
+                        }
+                      ],
+                      "key" : ".",
+                      "type" : "group"
+                    }
+                  ],
+                  "key" : ".",
+                  "type" : "group"
+                }
+              ],
+              "key" : ".",
+              "type" : "group"
+            }
+          ],
+          "key" : ".",
+          "type" : "group"
         },
         {
+          "actions" : [
+            {
+              "key" : "c",
+              "type" : "application",
+              "value" : "/System/Applications/FaceTime.app"
+            },
+            {
+              "key" : "e",
+              "type" : "folder",
+              "value" : "__HOME__/Desktop/aesthetics "
+            },
+            {
+              "actions" : [
+                {
+                  "key" : "p",
+                  "type" : "folder",
+                  "value" : "/Applications"
+                }
+              ],
+              "key" : "p",
+              "type" : "group"
+            }
+          ],
+          "key" : "a",
+          "type" : "group"
+        },
+        {
+          "actions" : [
+            {
+              "actions" : [
+                {
+                  "key" : "c",
+                  "type" : "folder",
+                  "value" : "__HOME__/Documents"
+                },
+                {
+                  "key" : "w",
+                  "type" : "folder",
+                  "value" : "__HOME__/Downloads"
+                }
+              ],
+              "key" : "o",
+              "type" : "group"
+            }
+          ],
           "key" : "d",
-          "type" : "folder",
-          "value" : "__HOME__/Downloads"
+          "type" : "group"
         },
         {
           "actions" : [
@@ -177,15 +335,15 @@
               "key" : "s",
               "type" : "application",
               "value" : "__HOME__/Documents/screenshots_n_recordings"
-            },
-            {
-              "key" : "x",
-              "type" : "command",
-              "value" : "osascript ~/bin/web-jump.applescript x.com,twitter.com"
             }
           ],
           "key" : "s",
           "type" : "group"
+        },
+        {
+          "key" : "t",
+          "type" : "application",
+          "value" : "/System/Applications/FaceTime.app"
         }
       ],
       "key" : "f",
@@ -202,6 +360,23 @@
             }
           ],
           "key" : "i",
+          "type" : "group"
+        },
+        {
+          "actions" : [
+            {
+              "actions" : [
+                {
+                  "key" : "k",
+                  "type" : "command",
+                  "value" : "osascript ~/bin/web-jump.applescript grok.com,x.com/i/grok"
+                }
+              ],
+              "key" : "o",
+              "type" : "group"
+            }
+          ],
+          "key" : "r",
           "type" : "group"
         },
         {
@@ -493,6 +668,17 @@
           ],
           "key" : "v",
           "type" : "group"
+        },
+        {
+          "actions" : [
+            {
+              "key" : "w",
+              "type" : "command",
+              "value" : "osascript __HOME__/bin/vmware.applescript"
+            }
+          ],
+          "key" : "m",
+          "type" : "group"
         }
       ],
       "key" : "v",
@@ -522,6 +708,11 @@
     },
     {
       "actions" : [
+        {
+          "key" : ".",
+          "type" : "command",
+          "value" : "osascript ~/bin/web-jump.applescript x.com,twitter.com"
+        },
         {
           "actions" : [
             {
