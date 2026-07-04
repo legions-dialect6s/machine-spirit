@@ -72,7 +72,8 @@ cat <<'EOF'
   1. Karabiner-Elements: open it, approve Input Monitoring
      and the driver/system extension when prompted.
   2. System Settings > Privacy & Security > Accessibility:
-     enable  Leader Key  and  iTerm.
+     enable  Leader Key, iTerm, and Rectangle  (Rectangle
+     prompts on first launch; also enable its "Launch on login").
   3. Leader Key: set activation shortcut to F19 (press Caps
      Lock), and turn ON "Launch at login". Restart Leader Key
      so it reloads the restored config.

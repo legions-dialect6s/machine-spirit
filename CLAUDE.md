@@ -33,6 +33,7 @@ your contract. Read it before touching anything.
 | Area | Where | Notes |
 |---|---|---|
 | Launcher (Leader Key) | `config/leader-key/` | Caps Lock → F19 via Karabiner; nested vim-style tree |
+| Window management | `config/leader-key/` + `bin/win-lerp.applescript` | Rectangle via `rectangle://` URL scheme; spatial key grid, animated resize |
 | Key remaps | `config/karabiner/` | captured JSON |
 | Terminal | `config/iterm2/` + `shell/` | color scheme, aliases, inline-image tooling |
 | Hotkey splash | `shell/splash/` | see its header comments; heavily conventioned |

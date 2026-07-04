@@ -5,6 +5,7 @@
 cask "leader-key"          # nested/leader-key launcher (the heart of the setup)
 cask "karabiner-elements"  # remaps Caps Lock -> F19 (silent leader key)
 cask "iterm2"              # terminal
+cask "rectangle"           # window snapping — driven from Leader Key via its rectangle:// URL scheme
 
 # --- Menu bar ---
 cask "stats"               # exelban/Stats — CPU/GPU/mem/network system monitor
