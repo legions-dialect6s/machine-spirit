@@ -30,7 +30,7 @@ Everything else in this repo follows from that: additive not replacing, portable
 - **Menu bar management** — Ice / Thaw to hide clutter behind a single toggle, with [Stats](https://github.com/exelban/stats) for system monitoring.
 - **macOS tweaks** — snappier window resize and animation via reversible `defaults` writes.
 - **No dead-end dialogs** — a failed keybind (e.g. resizing an app that refuses it) silently does nothing instead of throwing a focus-stealing macOS alert that blocks the launcher. See [Command reliability](#command-reliability--no-focus-stealing-dialogs).
-- **Busy-pane shield** (experimental, v0.1) — closing an iTerm pane that's running a live command (`claude`, `node`, a build…) doesn't die on the first ⌘W. It escalates Halo-style: a shield flare + rising SFX on hits 1–2, then a **shield-break shatter** on hit 3 that finally closes it. Idle panes still close instantly. One-flag kill switch. See [Busy-pane shield](#busy-pane-shield-experimental).
+- **Busy-pane shield** (experimental) — closing an iTerm pane that's running a live command (`claude`, `node`, a build…) doesn't die on the first ⌘W. It escalates Halo-style, all drawn inside the pane: eased **damage** washes on hits 1–2, a **shield break** on hit 3, then on hit 4 an ASCII **skull** powers up and the pane **dissolves to black**. Pause and the shield **regenerates**. Idle panes still close instantly. One-flag kill switch; silent for now (real audio TBD). See [Busy-pane shield](#busy-pane-shield-experimental).
 
 ## Quick start (fresh Mac)
 
@@ -189,18 +189,21 @@ Every summon of the iTerm hotkey window boots a randomized splash, typed to the 
 
 > **v0.1 / feasibility prototype.** Real and working, but a probe as much as a feature — read the honest limits at the bottom.
 
-Closing an iTerm2 pane that's *busy* (running a real foreground process — `claude`, `node`, `python`, `caffeinate`, `ngrok`, …) shouldn't instantly kill it on a fat-fingered ⌘W. An idle shell pane closes instantly as always; a busy one raises a shield you have to overload:
+Closing an iTerm2 pane that's *busy* (running a real foreground process — `claude`, `node`, `python`, `caffeinate`, `ngrok`, …) shouldn't instantly kill it on a fat-fingered ⌘W. An idle shell pane closes instantly as always; a busy one raises a shield you have to overload — an escalating **damage → damage → break → death** beat:
 
 | ⌘W on a busy pane | What happens |
 |---|---|
-| **Hit 1** | `shield-hit` SFX + a cyan **shield flare** (expanding hex energy ring) + a dim-red per-pane flash + badge `◆ SHIELD 1/3 ◆`. Pane stays. |
-| **Hit 2** | louder hit + a brighter **amber "overload"** flare + a stronger flash + `◆ SHIELD 2/3 ◆`. Pane stays. |
-| **Hit 3** | `shield-break` SFX + a full-screen **shatter** (white flash → radial cracks → glass shards bursting outward with gravity), **then the pane closes** and the counter resets. |
-| stop for ~6s | the shield disarms on its own (badge clears). |
+| **Hit 1** | a gentle **cyan wash** (smooth eased background pulse, not a strobe) + badge `◆ SHIELD ▓▓░ ◆`. Pane stays. |
+| **Hit 2** | a deeper, longer **amber "strain"** wash + `◆ SHIELD ▓░░ ◆`. Pane stays. |
+| **Hit 3** | the shield **breaks** — a snappy bright-white flash + badge `⚡ SHIELD DOWN ⚡`. Pane **still stays** (the break is the warning, not the kill). |
+| **Hit 4** | **death:** an ASCII **skull + crossbones** powers up in the pane, holds lit, then the skull *and* the whole pane **dissolve to black** together — and it closes. |
+| pause ~5s | the shield **regenerates** to full (Halo-style), badge clears; the next ⌘W starts from hit 1. |
 
-### The look
+### The look — terminal-native
 
-Two visual layers: a **per-pane** background flash + iTerm badge (accurate to the exact pane), and a **full-screen overlay** ([`assets/tools/shield-fx.swift`](assets/tools/shield-fx.swift), compiled to `~/bin/shield-fx`) for the dramatic flare/shatter. The overlay is a transparent, **click-through, non-activating**, top-level window that plays a short Core Animation effect and force-quits itself — it can't steal focus, block input, or linger. The SFX ([`assets/shield-hit.wav`](assets/shield-hit.wav) / [`assets/shield-break.wav`](assets/shield-break.wav)) are **original, synthesized offline** by [`assets/tools/gen-sfx.py`](assets/tools/gen-sfx.py) — zero third-party or game audio.
+All feedback is drawn **inside the pane itself**, so it's pane-accurate by construction and never corrupts a live session: the escalating hits are **smooth eased background washes** (smoothstep blend toward the hit color) plus an iTerm **badge**; only the death frame injects text (the skull + a fade-to-black), and only because the pane is closing anyway. There is no full-screen overlay in the active path — an earlier fullscreen flare/shatter ([`assets/tools/shield-fx.swift`](assets/tools/shield-fx.swift)) is retained but **unwired**, kept as a future "pane-tracked overlay" option (see design notes).
+
+**Sound is intentionally silent right now.** The placeholder synth SFX were dropped (they read corny); the shield ships as a purely visual safety feature. Sound is a clean drop-in — the daemon references swappable filenames and no-ops when they're absent, so dropping real `.wav`s into `assets/` (or wiring them as node parameters later) switches audio back on with zero code change. Target vibe when it lands: minor-key cybergoth.
 
 ### Kill switch — and why it's safe by design
 
@@ -214,13 +217,15 @@ The shield **never installs a system-wide `CGEventTap`** — that's the thing th
 
 1. **Enable the iTerm Python API:** iTerm → Settings → **General → Magic → “Enable Python API”** (accept the one-time consent prompt; iTerm downloads its managed runtime + `iterm2` module).
 2. **Install:** `install.sh` drops `pane-shield.py` into `~/bin`, symlinks it into iTerm's AutoLaunch dir, and compiles `shield-fx`. Restart iTerm so the daemon loads.
-3. **Rebind ⌘W:** iTerm → Settings → **Keys → Key Bindings → `+`** → shortcut ⌘W → Action *Invoke Script Function* → `pane_shield(session_id: \(id))`. Put it under app-level Key Bindings so it covers every pane; delete it to fully disable.
+3. **Rebind ⌘W:** iTerm → Settings → **Keys → Key Bindings → `+`** → shortcut ⌘W → Action *Invoke Script Function* → `pane_shield(session_id: id)` (bare `id` — **not** `\(id)`, which is string-interpolation syntax and errors in this field). Put it under app-level Key Bindings so it covers every pane; delete it to fully disable.
 
 ### Honest limits
 
-- ⚠️ **The full-screen overlay is not pane-precise.** The flare/shatter covers the whole display, not a glow ring hugging the pane. The per-pane flash + badge *are* pane-accurate; the cinematic part is screen-wide. A pane-tracked glow (and a shatter of the pane's *real pixels*, which needs Screen Recording permission) is a future item.
+- ✅ **The ⌘W → RPC round-trip is confirmed working live** (registration + all four beats + the skull death). Mechanically done; it's the *feel* that's still maturing.
+- 🔇 **Silent by design for now** — see the sound note above. The visuals carry it.
+- ⚠️ **Sound + feel are v0.x.** The escalation reads, but the "game-feel" polish (and real audio) is deferred; the natural home for it is tunable node parameters once the shield becomes a graph node.
+- ⚠️ **Death injection assumes the main screen buffer.** A full-screen TUI on the alternate buffer may fight the skull for the fraction of a second before close; plain jobs (`caffeinate`, builds) render clean.
 - ⚠️ **Requires the iTerm Python API enabled** (one-time manual consent) and works **only in iTerm**, not Terminal.app.
-- ⚠️ **Not yet driven end-to-end from CI.** The Python compiles, every iTerm2 API call is validated against the real `iterm2` package, the SFX play, and `shield-fx` runs + self-terminates cleanly — but the physical ⌘W → RPC round-trip needs a live iTerm to confirm. The likeliest spot to need a tweak is the key-binding **Function call** syntax.
 - **Busy detection is coarse** — a `jobName` allow-list of shells; anything else counts as busy.
 
 ## Command reliability — no focus-stealing dialogs
@@ -257,9 +262,8 @@ machine-spirit/
 │   ├── shield-off.sh       # kill switch: disable the shield instantly
 │   └── shield-on.sh        # re-arm the shield
 ├── assets/                 # bundled media (committed, not synced)
-│   ├── shield-hit.wav      # synthesized SFX (shield absorb)
-│   ├── shield-break.wav    # synthesized SFX (overload shatter)
-│   └── tools/              # gen-sfx.py (SFX renderer) + shield-fx.swift (overlay)
+│   │                       # shield sounds are drop-in: absent = silent by design
+│   └── tools/              # shield-fx.swift — unwired overlay, kept for future
 │   └── screenshots/        # screencapture wrappers behind the ⇪ s s tree
 ├── config/
 │   ├── leader-key/         # captured Leader Key config (templated)
