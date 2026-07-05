@@ -105,8 +105,8 @@ cat <<'EOF'
   6. (Optional) Busy-pane shield: iTerm > Settings > General >
      Magic > Enable Python API (accept the consent prompt), then
      Keys > Key Bindings > + : bind Cmd-W to "Invoke Script
-     Function" with  pane_shield(session_id: \(id))
-     See README "Busy-pane shield" for details.
+     Function" with  pane_shield(session_id: id)
+     See README "Busy-pane shield" and MANUAL-WIRING.md for details.
 ============================================================
 EOF
 echo "Done."

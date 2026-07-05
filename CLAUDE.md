@@ -9,6 +9,12 @@ your contract. Read it before touching anything.
 > the roadmap/design intent for the future machine-spirit *app* (node-graph tool)
 > and the load-bearing notes for finalizing the busy-pane shield. Read it before
 > any work that touches the shield or the app's direction.
+>
+> **Manual onboarding surface:** [`MANUAL-WIRING.md`](MANUAL-WIRING.md) is the
+> checklist of click-through-the-UI steps a human still has to do by hand (the
+> consent gates + iTerm plist settings `install.sh` can't script). It doubles as
+> the spec for what the app must later auto-configure or guide — read it before
+> touching installer/onboarding automation.
 
 ## Philosophy
 
@@ -89,6 +95,41 @@ out=$(env -u HOTKEY_PANE ITERM_PROFILE="Default" zsh -c 'source ~/projects/machi
 # 2. splash renders in-budget (rows/width) for every logo in logos/
 # 3. no secrets: gitleaks runs via the pre-commit hook
 ```
+
+## Editing a keybind / config — the flow that actually works
+
+`sync.sh` is **pull-only, live → repo**, and it only touches things that already
+exist: it captures the *live* Leader Key config, and for `bin/` it refreshes
+*only files already tracked in the repo* (it does not discover new scripts in
+`~/bin`). So editing the repo copy of `config/leader-key/config.json` directly is
+a trap — the next `sync.sh` overwrites your edit with the untouched live config.
+
+Correct order when adding/changing a bind:
+
+1. **Edit the LIVE Leader Key config** (`~/Library/Application Support/Leader Key/config.json`)
+   — that's the content source of truth. Don't clobber existing binds; back it up first.
+2. **New script?** Copy it into the repo's `bin/` **once** manually (repo = source
+   of truth for *existence*). It has to be tracked before `sync.sh` will keep it fresh.
+3. **Reload Leader Key** with `~/bin/reload-leaderkey.sh` — it does NOT reliably
+   hot-reload, so an edited bind stays STALE until the app restarts. Any tool or
+   automation that edits the config must call this afterward, or the user will
+   test a change that hasn't taken effect. (This becomes automatic once the
+   node-graph app owns Leader Key — see [`HANDOFF-NOTES.md`](HANDOFF-NOTES.md).)
+4. **Then run `./scripts/sync.sh`** to capture live → repo (it templates `$HOME` → `__HOME__`).
+5. Update `README.md`'s keybind tables in the same commit.
+
+Mirror existing path style in the live config: inline commands use `~/bin/...`
+(tilde survives sync untouched); absolute `/Users/...` paths get templated to
+`__HOME__`. Leader Key's serialization is `"key" : "value"` (spaces around the
+colon) — prefer a surgical string edit over a full re-serialize so the repo diff
+stays minimal.
+
+**Known Leader Key limitation — `l k` (open settings):** menu-bar apps don't
+reliably pop their settings window from `open -a`, so `l k` only works if the
+settings window is already open; from cold you still need a manual ⌘, once
+Leader Key is focused. Do **not** hack around this — it's slated to be fixed
+properly when Leader Key is forked into machine-spirit and we own the
+settings-open behavior. Just documented, not worked around.
 
 ## Commit & sync flow
 

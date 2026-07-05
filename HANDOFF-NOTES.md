@@ -67,6 +67,10 @@ no app can or should silently bypass). Generalize to all integrations:
 detect → auto-apply safe config → guide consent-gated steps → grey-out/nudge if
 absent. **Never silently flip a security consent.** The manual wiring being done
 at dev-time is the spec for what the app will later automate.
+*The concrete, enumerated form of that spec lives in
+[`MANUAL-WIRING.md`](MANUAL-WIRING.md)* — every click-through step, why it can't
+be scripted today, and the per-step automation strategy. Treat it as the
+priority backlog for this item.
 
 **13. Shield must be parameterized/modular.** 🌱
 Expose the shield's behavior as node parameters (hit count, per-hit sounds,
@@ -101,3 +105,10 @@ philosophy. Three cache items directly govern how it should be finalized:
   `visual/brightness`, the **busy-process list**, `flash` vs `pane-tracked
   overlay`, and `on/off`. Today these live as module constants + a disable flag
   in `pane-shield.py`; they are the seed of the node's parameter surface.
+- #16 — Mini keybind changes (DONE): s a = Safari-specific open/focus/cycle; chr = same for Chrome; l l = ⌘L to address bar (universal). Per-browser keys each cycle their own windows.
+#17 — Config staleness: Leader Key doesn't hot-reload; any config edit needs a Leader Key reload (reload-leaderkey.sh). machine-spirit must auto-reload after any config write so users never hit stale config.
+#18 — Automate settings-open: f19 l k only opens Leader Key settings if already open; fix when Leader Key is forked (own the settings-open behavior).
+#19 — Universal browser gestures: window-cycle + address-bar gestures should work across Safari/Chrome/Arc/Brave.
+#20 — Page-field cycling (l l extended, HARD/future): Research concluded the robust path is a browser extension (Safari + Chrome content scripts via native messaging, à la Vimium's gi), NOT keybind/AppleScript/accessibility. Simulated-Tab too crude; Accessibility API browser-brittle (Chrome needs --force-renderer-accessibility, Firefox unsupported); AppleScript-JS needs a fragile per-browser toggle. So field-cycling = a machine-spirit companion browser-extension feature (Phase 3+) with a native-messaging bridge. l l ships now as address-bar-only. Reuse Vimium/SurfingKeys content-script approach as reference.
+#21 — Shield sound (deferred): stdlib synth can't do the target "minor-key cybergoth" vibe (3 passes bounced — needs real samples or proper synth). Shield ships silent-by-design; CONFIG filenames are a drop-in contract — add real cybergoth .wavs at those asset paths (or wire as node params) later, zero code change. Also #13 (parameterize) applies: sounds become node params.
+Also: CC asked whether to commit the ~4 staged commits (Safari/browser cycle, shield redesign, VISION.md, onboarding docs). Yes — commit them per-subsystem as it proposed, but hold the push until I confirm.
