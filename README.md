@@ -73,13 +73,15 @@ The tree follows four rules, by escalating "weight" of the action:
 | `⇪ a c` | Activity Monitor | | `⇪ n o` | Notes |
 | `⇪ c l` | Claude | | `⇪ p h` | Photos |
 | `⇪ c o` | Codex | | `⇪ p s` | Photoshop |
-| `⇪ c h r` | Chrome | | `⇪ s a` | Safari |
+| `⇪ c h r` | Chrome | | `⇪ s a` | cycle frontmost browser's windows |
 | `⇪ d i` | Discord | | `⇪ s e` | System Settings |
 | `⇪ f a c` / `⇪ f t` | FaceTime | | `⇪ s p` | Spotify |
 | `⇪ f i` | Finder | | `⇪ t e` | TextEdit |
 | `⇪ g p` | ChatGPT | | `⇪ t r` | Terminal |
 | `⇪ i t` | iTerm | | `⇪ v m w` | VMware Fusion |
 | `⇪ m e` | Messages | | `⇪ w h` | WhatsApp |
+
+`⇪ s a` runs [`bin/browser-window-cycle.applescript`](bin/browser-window-cycle.applescript) — cycles the windows of **whatever browser is currently frontmost** (Safari, Chrome, Arc, Brave, Firefox): no windows → opens one, one window → leaves it, multiple → **cycles to the next, wrapping around** — the window-level analogue of what `web-jump` does for tabs. If the frontmost app isn't a known browser it does nothing. It rides on macOS's native "move focus to next window" (⌘\`), so it's genuinely browser-agnostic rather than scripted per app (the per-browser AppleScript reorder only actually works in Safari).
 
 `⇪ v m w` runs [`bin/vmware.applescript`](bin/vmware.applescript) — activate if running, launch if not. (Cycling between individual VM windows isn't cleanly scriptable; use ⌘\` once focused.)
 
@@ -127,7 +129,14 @@ Every site key runs the same script, [`bin/web-jump.applescript`](bin/web-jump.a
 |---|---|
 | `⇪ h` | hide frontmost app (⌘H) |
 | `⇪ q u i t` | quit frontmost app (⌘Q) — spelled out on purpose |
-| `⇪ l k` | Leader Key settings |
+| `⇪ l l` | focus the address/search bar (sends ⌘L to the frontmost app) |
+| `⇪ l k` | Leader Key settings (see limitation below) |
+
+`⇪ l l` sends ⌘L to whatever's frontmost, which focuses the address/search bar in **every browser** — Safari, Chrome, Arc, Brave, Firefox all bind ⌘L natively, so the bind is universal by construction (nothing is browser-hardcoded); in a non-browser app it does nothing (routed through `run-quiet.sh`). *Future:* cycling through multiple in-page search/entry fields is planned via the Accessibility API (real field focus, not a simulated Tab) — which fields should count is an open design question. This v1 just hits the primary address bar via ⌘L.
+
+**`⇪ l k` limitation:** it only surfaces Leader Key's settings if the settings window is *already* open — menu-bar apps don't reliably pop their settings from `open -a`, so from a cold state you still need a manual **⌘,** once Leader Key is focused. To be properly fixed when Leader Key is forked into machine-spirit and we own the settings-open behavior directly.
+
+**Reloading after a config edit:** Leader Key does not reliably hot-reload `config.json` — a changed bind stays stale until the app restarts. Run [`bin/reload-leaderkey.sh`](bin/reload-leaderkey.sh) after any edit (by hand or via `sync.sh`) to make it live.
 
 Window placement and resize live in [Window management](#window-management) below. This listing is maintained by hand — after changing bindings, re-run `./scripts/sync.sh` and update the tables in the same commit.
 

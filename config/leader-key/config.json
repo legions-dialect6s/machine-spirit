@@ -443,6 +443,11 @@
           "value" : "open -a \"Leader Key\" --args --show-settings"
         },
         {
+          "key" : "l",
+          "type" : "command",
+          "value" : "~/bin/run-quiet.sh osascript -e 'tell application \"System Events\" to keystroke \"l\" using command down'"
+        },
+        {
           "actions" : [
             {
               "actions" : [
@@ -583,8 +588,8 @@
       "actions" : [
         {
           "key" : "a",
-          "type" : "application",
-          "value" : "/System/Volumes/Preboot/Cryptexes/App/System/Applications/Safari.app"
+          "type" : "command",
+          "value" : "~/bin/run-quiet.sh osascript ~/bin/browser-window-cycle.applescript"
         },
         {
           "key" : "e",
