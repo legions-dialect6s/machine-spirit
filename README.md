@@ -7,6 +7,8 @@ A reproducible, keyboard-driven macOS environment as version-controlled code. Cl
 
 The philosophy is simple: the machine's configuration is a **canonical artifact**, not a pile of clicks you'll forget. Every change flows back into the repo, so the current state is always captured, diffable, and redeployable.
 
+> **Where this is going:** [`VISION.md`](VISION.md) is the shareable vision — the thesis, what it does today, and where it's headed (a visual node-graph editor for your whole input layer). Start there for the *why*.
+
 ## Philosophy
 
 Most window setups pick a side. Tiling window managers make the keyboard mandatory — every window snaps to a grid, the mouse is treated as failure. Stock macOS makes the mouse mandatory — free-floating windows, drag everything, keyboard shortcuts are an afterthought. Both are dogmatic in opposite directions.
