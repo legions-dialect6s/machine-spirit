@@ -9,14 +9,19 @@
 # AppleScript guarded with try/on error so it never dialogs at Leader Key.
 name="msd-$(date +%H%M%S)"
 sess="$HOME/bin/tmux-session.sh"
-/usr/bin/osascript >/dev/null 2>&1 <<OSA
-try
-	tell application "iTerm2"
-		tell current session of current window
-			split horizontally with default profile command "$sess $name"
+/usr/bin/osascript >/dev/null 2>&1 - "$sess" "$name" <<'OSA'
+on run argv
+	set sess to item 1 of argv
+	set sessionName to item 2 of argv
+	set cmd to quoted form of sess & " " & quoted form of sessionName
+	try
+		tell application "iTerm2"
+			tell current session of current window
+				split horizontally with default profile command cmd
+			end tell
 		end tell
-	end tell
-on error
-end try
+	on error
+	end try
+end run
 OSA
 exit 0

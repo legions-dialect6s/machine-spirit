@@ -50,8 +50,7 @@ CONFIG = {
         "zsh", "-zsh", "bash", "-bash", "sh", "-sh", "login",
         "fish", "-fish", "tmux", "screen", "",
     },
-    "burst_hit": 3,        # the hit that BREAKS the shield (no close yet)
-    "death_hit": 4,        # the hit that kills the pane
+    "death_hit": 4,        # the hit that kills the pane (the break is hits[3])
     "regen_secs": 5.0,     # idle this long -> shield recharges to full
     # Per-hit look + sound. Each visual is a smooth EASED background wash: blend
     # the pane toward `bg` by `depth`, easing up over `up` steps then down over
@@ -95,9 +94,10 @@ def _assets_dir():
     here = os.path.dirname(os.path.realpath(__file__))
     for c in (
         os.environ.get("PANE_SHIELD_ASSETS"),
+        os.path.join(here, "..", "assets"),          # repo-relative (portable)
         os.path.expanduser("~/projects/machine-spirit/assets"),
+        os.path.expanduser("~/machine-spirit/assets"),   # README clone path
         os.path.join(here, "assets"),
-        os.path.join(here, "..", "assets"),
     ):
         if c and os.path.isdir(c):
             return c

@@ -29,11 +29,12 @@
 # "fragile" panes + the dock nag are deferred to the app.
 
 REFRESH=1        # poll interval; redraw only fires when something actually changed
+PIDFILE="$HOME/.cache/machine-spirit/sheol.pid"   # single-instance marker
 
 BOLD=$'\e[1m'; DIM=$'\e[2m'; INV=$'\e[7m'; RST=$'\e[0m'
 GRN=$'\e[32m'; RED=$'\e[31m'; YEL=$'\e[33m'; CYN=$'\e[36m'; MAG=$'\e[35m'
 
-cleanup() { printf '\e[?25h\e[?1049l'; }
+cleanup() { printf '\e[?25h\e[?1049l'; rm -f "$PIDFILE"; }
 trap cleanup EXIT
 trap 'cleanup; exit 0' INT TERM        # MUST exit, or pkill can't kill us
 
@@ -54,13 +55,15 @@ load() {
 	names=(); cmds=(); born=(); acts=(); state=(); first_dead=0; total=0
 	have_tmux || return 0
 	local Ln=() Lc=() Lb=() La=() Dn=() Dc=() Db=() Da=()
-	local n a c act cmd
-	while IFS='|' read -r n a c act cmd; do
+	# Unit-separator (\x1f) delimiter — safe vs a session name/command containing
+	# a literal '|', which would otherwise garble the parse/display.
+	local n a c act cmd US=$'\x1f'
+	while IFS="$US" read -r n a c act cmd; do
 		[ -z "$n" ] && continue
 		if [ "$a" != "0" ]; then Ln+=("$n"); Lc+=("${cmd:-?}"); Lb+=("$c"); La+=("$act")
 		else                     Dn+=("$n"); Dc+=("${cmd:-?}"); Db+=("$c"); Da+=("$act"); fi
 	done < <(tmux list-sessions -F \
-		'#{session_name}|#{session_attached}|#{session_created}|#{session_activity}|#{pane_current_command}' \
+		"#{session_name}${US}#{session_attached}${US}#{session_created}${US}#{session_activity}${US}#{pane_current_command}" \
 		2>/dev/null)
 	local i
 	for i in "${!Ln[@]}"; do names+=("${Ln[$i]}"); cmds+=("${Lc[$i]}"); born+=("${Lb[$i]}"); acts+=("${La[$i]}"); state+=(1); done
@@ -161,6 +164,7 @@ banish_step() {
 }
 
 sel=0; arm=0; arm_sel=-1; arm_at=0
+mkdir -p "$(dirname "$PIDFILE")" 2>/dev/null; printf '%s\n' "$$" > "$PIDFILE"
 printf '\e[?1049h\e[?25l'
 intro
 load
