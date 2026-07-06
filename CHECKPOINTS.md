@@ -103,3 +103,17 @@ clamp (owner request). **The brew-cask Leader Key remains the daily driver.**
 `forks/LeaderKey/DerivedData/Build/Products/Debug/Leader Key.app` → tap F19.
 **Rollback:** quit the fork → `open -a "Leader Key"` — nothing else changes;
 both read the same live config (read-only for our purposes).
+
+### The wordmark builds letter by letter `[P1.8]`
+
+In the fork's Mini indicator: as keys land, the summon chain assembles —
+dim trail, bright head, per-letter spring-in; the box grows leftward from its
+bottom-right anchor (Combine subscription on navigationPath/display). Idle
+still shows the sigil. Cheap and atomic: text + one spring, no heavy effects.
+The full m-a-c-h-i-n-e-s-p-i-r-i-t flourish needs a live-config bind (behind
+the Phase-1 live-system boundary) — the accretion mechanic completes the step;
+the flourish waits for the owner demo / Phase 2.
+
+**Restore:** `git stash -u && git reset --hard <commit tagged [P1.8]>`
+**Re-verify:** rebuild the fork (command in FORK-NOTES.md); supervised demo
+as documented under [P1.7].
