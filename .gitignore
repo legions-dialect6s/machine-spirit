@@ -41,3 +41,12 @@ __pycache__/
 
 # ---- Compiled artifacts (built by install.sh, never committed) ----
 bin/shield-fx           # busy-pane shield overlay, compiled from assets/tools/shield-fx.swift
+
+# ---- Xcode / Swift build debris (app/, kit/, forks/) ----
+DerivedData/
+build/
+.build/
+*.xcuserdata
+*.xcuserdatad/
+xcuserdata/
+.swiftpm/

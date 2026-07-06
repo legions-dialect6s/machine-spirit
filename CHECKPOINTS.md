@@ -28,3 +28,13 @@ tmux protection + sheol, and the sigil assets (`assets/icon.png`,
 **Restore:** `git stash -u && git reset --hard v0.1-stable-config`
 (repo only — Phase 1 never writes the live system, so the live Mac needs no
 undoing.)
+
+### Forks vendored + building `[P1.2]`
+
+LeaderKey (`16bcb30`, MIT) and Rectangle (`7d6b4c5`, MIT) vendored as squashed
+subtrees under `forks/`; **both build from source** with ad-hoc signing — exact
+commands in `forks/FORK-NOTES.md`. Stale README fork-strategy paragraph fixed;
+`.gitignore` extended for Xcode debris.
+
+**Restore:** `git stash -u && git reset --hard <commit tagged [P1.2] below>`
+— or check out the commit whose subject starts with `[P1.2]`.
