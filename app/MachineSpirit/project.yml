@@ -1,0 +1,36 @@
+# MachineSpirit.app — XcodeGen spec. Regenerate the project with:
+#   cd app/MachineSpirit && xcodegen generate
+# The generated .xcodeproj is committed so a clone builds without xcodegen.
+name: MachineSpirit
+options:
+  bundleIdPrefix: com.machinespirit
+  deploymentTarget:
+    macOS: "26.0"
+  createIntermediateGroups: true
+packages:
+  MachineSpiritKit:
+    path: ../../kit/MachineSpiritKit
+targets:
+  MachineSpirit:
+    type: application
+    platform: macOS
+    sources:
+      - Sources
+    dependencies:
+      - package: MachineSpiritKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.machinespirit.MachineSpirit
+        MARKETING_VERSION: "0.1"
+        CURRENT_PROJECT_VERSION: "1"
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: "-"
+        DEVELOPMENT_TEAM: ""
+        SWIFT_VERSION: "6.0"
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_NSHumanReadableCopyright: ""
+        INFOPLIST_KEY_NSPrincipalClass: NSApplication
+        # No sandbox: the app reads Leader Key's live config in
+        # ~/Library/Application Support (read-only, Phase-1 law).
+        ENABLE_APP_SANDBOX: NO
+        ENABLE_HARDENED_RUNTIME: NO

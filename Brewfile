@@ -33,3 +33,7 @@ brew "tmux"               # start-time pane protection (plain tmux, one window) 
 brew "fastfetch"           # system info panel in the hotkey-window splash
 # Optional, only needed to regenerate splash art (all banners/logos ship pre-rendered):
 # brew "chafa"             # image -> terminal block art (shell/splash/tools)
+
+# --- MachineSpirit.app (app/, kit/, forks/) — build-time only ---
+# Building the app and forks needs full Xcode (not just CLT). Optional:
+# brew "xcodegen"          # regenerates app/MachineSpirit/MachineSpirit.xcodeproj from project.yml (generated project is committed)

@@ -51,3 +51,17 @@ canonically, read-only. This gate stays green at every checkpoint from here.
 
 **Restore:** `git stash -u && git reset --hard v0.2-fork-baseline`
 **Re-verify:** `cd kit/MachineSpiritKit && swift test`
+
+### The witness stands — tree renders the imported config `[P1.4]`
+
+`app/MachineSpirit`: SwiftUI app (macOS 26, kit as local package, project
+generated from committed `project.yml` via XcodeGen). Imports the live config
+read-only on launch; renders the full tree — key glyph, type badge, value
+summary, inert rows ghosted with reason on hover. One `@Observable` AppState
+owns model + selection + viewMode; both views are projections of it.
+
+**Restore:** `git stash -u && git reset --hard <commit tagged [P1.4]>`
+**Re-verify:** `cd app/MachineSpirit && xcodegen generate && xcodebuild
+-project MachineSpirit.xcodeproj -scheme MachineSpirit -configuration Debug
+-derivedDataPath DerivedData build && open
+DerivedData/Build/Products/Debug/MachineSpirit.app`
