@@ -156,11 +156,12 @@ load
 draw
 sig=$(sig)
 while :; do
-	IFS= read -rsn1 -t "$REFRESH" key
-	rc=$?
-	if (( rc != 0 )); then
-		(( rc <= 128 )) && break            # EOF/error (not a timeout) -> exit
-		arm=0; arm_sel=-1; load             # timeout -> refresh roster
+	# bash 3.2 returns 1 for BOTH read timeout AND EOF, so we can't tell them
+	# apart by return code. Distinguish by the tty: a live terminal -> it was a
+	# timeout (refresh); a closed stdin -> real EOF (exit, don't busy-loop).
+	if ! IFS= read -rsn1 -t "$REFRESH" key; then
+		[ -t 0 ] || break                   # stdin gone -> exit
+		arm=0; arm_sel=-1; load             # tty timeout -> refresh roster
 		(( sel >= total )) && sel=$(( total > 0 ? total - 1 : 0 ))
 		new=$(sig); [ "$new" != "$sig" ] && { draw; sig=$new; }   # redraw only if changed
 		continue
