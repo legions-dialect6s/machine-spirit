@@ -695,6 +695,33 @@
           "key" : "r",
           "type" : "application",
           "value" : "/System/Applications/Utilities/Terminal.app"
+        },
+        {
+          "key" : "t",
+          "type" : "command",
+          "value" : "~/bin/run-quiet.sh ~/bin/tmux-launch.sh"
+        },
+        {
+          "actions" : [
+            {
+              "actions" : [
+                {
+                  "key" : "x",
+                  "type" : "command",
+                  "value" : "~/bin/run-quiet.sh ~/bin/tmux-sheol-open.sh"
+                }
+              ],
+              "key" : "u",
+              "type" : "group"
+            }
+          ],
+          "key" : "m",
+          "type" : "group"
+        },
+        {
+          "key" : "d",
+          "type" : "command",
+          "value" : "~/bin/run-quiet.sh ~/bin/tmux-split.sh"
         }
       ],
       "key" : "t",

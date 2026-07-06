@@ -35,9 +35,9 @@ wiring being done at dev-time is the spec for what the app will later do itself.
 
 | # | Step | Today | Strategy |
 |---|---|---|---|
-| 1 | iTerm: enable Python API | ✋ | detect-and-guide |
-| 2 | iTerm: restart after enabling API | ✋ | automatable (relaunch) |
-| 3 | iTerm: ⌘W → shield keybinding | ⚠️ | plist-while-quit / iterm-api |
+| 1 | iTerm: enable Python API | 🗑 RETIRED | shield removed — no longer needed |
+| 2 | iTerm: restart after enabling API | 🗑 RETIRED | shield removed |
+| 3 | iTerm: ⌘W → shield keybinding | 🗑 RETIRED | shield removed; use built-in close-confirm |
 | 4 | iTerm: profiles, APS, semantic history, dimming, hotkey window, colors, greeting | ✋ | plist-while-quit / iterm-api |
 | 5 | Leader Key: F19 activation + Launch at Login | ⚠️ | own-when-forked / detect-and-guide |
 | 6 | Leader Key: reload after a config edit | ✅ | `reload-leaderkey.sh` |
@@ -54,30 +54,14 @@ wiring being done at dev-time is the spec for what the app will later do itself.
 
 ## iTerm2
 
-### 1. Enable the Python API
-- **Click-path:** iTerm2 → **Settings** (⌘,) → **General** → **Magic** → check **“Enable Python API”**, then **accept the security consent sheet** that appears.
-- **Set:** Python API = on; approve the consent.
-- **Why not scriptable:** the consent sheet is a deliberate security gate — enabling the API lets scripts drive the terminal, so iTerm requires an explicit human OK. No app can (or should) auto-accept it. The on/off bit itself is `defaults read com.googlecode.iterm2 EnableAPIServer`, but flipping it without the consent doesn't grant the capability.
-- **Strategy:** `detect-and-guide`. Read `EnableAPIServer`; if `0`/absent, surface a guided step ("iTerm needs its Python API — here's the toggle") and wait. Everything else iTerm-side depends on this.
+### 1–3. 🗑 RETIRED — busy-pane shield (Python API + ⌘W keybinding)
 
-### 2. Restart iTerm after enabling the API
-- **Click-path:** ⌘Q, relaunch iTerm.
-- **Set:** nothing — the restart is so the AutoLaunch daemon (`pane-shield.py`) starts under the now-enabled API. **First launch may download iTerm's managed Python runtime** (one-time, needs network).
-- **Why not scriptable:** the daemon only auto-launches at iTerm start; the API server binds at launch. A running iTerm won't retroactively pick it up.
-- **Strategy:** automatable — the app can quit/relaunch iTerm on the user's behalf (it already relaunches Leader Key; same move). Guard on the runtime download completing.
-
-### 3. Add the ⌘W busy-pane-shield keybinding
-- **Click-path:** Settings → **Keys** → **Key Bindings** tab — the **app-level** list, **NOT** *Profiles → Keys* → **`+`**.
-- **Set:**
-  - Keyboard Shortcut: press **⌘W** (override the native close when warned).
-  - Action: **Invoke Script Function**.
-  - Invocation string — **exactly**:
-    ```
-    pane_shield(session_id: id)
-    ```
-    ⚠️ **`pane_shield(session_id: \(id))` is WRONG** — `\(…)` is string-interpolation syntax and only valid *inside a quoted string*; the invocation field is an expression where a **bare identifier `id`** is the session-scope variable holding the session's GUID. The `\(id)` form throws *"Syntax error … Expected one of: Identifier, …"*.
-- **Why not scriptable (naively):** key bindings live in `com.googlecode.iterm2.plist`, which sync.sh does **not** capture and which **iTerm overwrites on quit** — so a `defaults write` while iTerm is running is silently reverted on the next quit.
-- **Strategy:** `plist-while-quit` (write the `GlobalKeyMap` entry with iTerm quit) **or** `iterm-api` (register the binding at runtime via the API). Per handoff #12, auto-writing this binding + handling the restart is the reference automation the app must own.
+**These three steps are gone.** They existed only to wire the busy-pane shield
+(iTerm Python API → AutoLaunch daemon → ⌘W keybinding). The shield was removed —
+its *safety* is now iTerm's own built-in setting (step 7 below / see HANDOFF), and
+nothing else in the repo needs the Python API. If you set them up before, see the
+handoff's **"undo the shield"** checklist to unwire them cleanly. This deletes the
+largest consent-gated + plist-resident chunk of the onboarding surface.
 
 ### 4. Profiles, APS, semantic history, dimming, hotkey window, colors, greeting
 The bulk of iTerm setup. All of it lives in the plist (not captured by sync — see CLAUDE.md), so it's **manual in the Settings UI today**.

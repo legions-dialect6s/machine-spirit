@@ -100,7 +100,16 @@ hotkey_splash() {
   # HOTKEY_SPLASH_LOGO forces a specific file; otherwise random from logos/.
   local logo=$dir/logo.txt
   local -a lfiles=("$dir"/logos/*.txt(N.on))
-  (( $#lfiles )) && logo=${lfiles[RANDOM % $#lfiles + 1]}
+  # Dragon is rare — only ~1 summon in 10 gets it; the other 9 force a
+  # non-dragon logo. (Split the pool, roll a d10 for the dragon.)
+  local -a nd=(${lfiles:#*dragon*}) dd=(${(M)lfiles:#*dragon*})
+  if (( RANDOM % 10 == 0 && $#dd )); then
+    logo=${dd[RANDOM % $#dd + 1]}
+  elif (( $#nd )); then
+    logo=${nd[RANDOM % $#nd + 1]}
+  elif (( $#lfiles )); then
+    logo=${lfiles[RANDOM % $#lfiles + 1]}
+  fi
   [[ -n $HOTKEY_SPLASH_LOGO && -r $HOTKEY_SPLASH_LOGO ]] && logo=$HOTKEY_SPLASH_LOGO
   local -a llines
   [[ -r $logo ]] && llines=("${(@f)$(<$logo)}")

@@ -11,7 +11,7 @@ Status legend: 🧭 north-star direction · 🔒 firm decision · 🌱 shapes wo
 
 ---
 
-## Design cache (items 1–13)
+## Design cache (items 1–15, plus loose notes 16–21)
 
 **1. Letter-by-letter logo build on summon.** 🧭
 Typing `f19 → m-a-c-h-i-n-e-s-p-i-r-i-t` builds the machine-spirit logo letter by
@@ -22,7 +22,7 @@ settings/node-graph. Doubles as a teaching moment for how nodes chain.
 Replace Leader Key's plain dot with an animated green ASCII skull; shipped as
 default and user-editable in the menu.
 
-**3. Shield as a node in the graph.** 🌱
+**3. ~~Shield as a node in the graph.~~** 🗑 RETIRED (shield removed — see "Removed: busy-pane shield" below)
 The busy-pane shield ships as a default node (greyed if no iTerm2), doubling as a
 teaching example of what a node can do. *(Load-bearing for shield finalization —
 see below.)*
@@ -72,15 +72,50 @@ at dev-time is the spec for what the app will later automate.
 be scripted today, and the per-step automation strategy. Treat it as the
 priority backlog for this item.
 
-**13. Shield must be parameterized/modular.** 🌱
+**13. ~~Shield must be parameterized/modular.~~** 🗑 RETIRED (shield removed)
 Expose the shield's behavior as node parameters (hit count, per-hit sounds,
 per-hit visuals/brightness, which processes count as "busy," flash vs.
 pane-tracked overlay, enable/disable) so machine-spirit can present it as a
 configurable node, not a hardcoded feature.
 
+**14. tmux start-time protection.** 🌱  *(v1 shipped: `t t` bind, one-window plain tmux)*
+Opt-in pane protection: launch a pane running inside tmux so the work outlives
+the window. **Hard constraint that shapes the whole design:** you CANNOT adopt an
+already-running process into tmux — tmux must be the parent from launch. So
+protection is a *launch-time* choice, not a retrofit; the busy-pane shield
+(#3/#13) is the complementary guard for the accidental-close case on an
+unprotected pane. Ships as **plain tmux (one window + status bar)**, NOT control
+mode `-CC` — `-CC` spawns separate native iTerm windows + a confusing gateway
+window (tested, rejected as too confusing). Visible markers: the tmux status bar
++ an iTerm TMUX badge. A clickable pane-title button (gold when available,
+Iron-Warriors-yellow when tmux'd) is a future item — iTerm's API doesn't expose
+custom pane-title buttons, so it waits for the app. In the node graph this is a
+"protected launch" action node with the session name as a parameter.
+
+**15. Sheol — the necromancer's ledger of tmux spirits.** 🌱  *(v1 shipped: `t m u x` TUI)*
+Theme is load-bearing, used in earnest across the code + docs: living sessions
+walk **the land of the living**; detached ones are **restless spirits** wandering
+**sheol**, the underworld, awaiting **revival** or **banishment**. v1 TUI
+(`bin/tmux-sheol.sh`): two auto-refreshed rosters (LIVING vs SHEOL), arrow/jk nav,
+**r** revive (reattach in a NEW window), **c** commune (attach in place to tend a
+spirit without fully reviving; status bar shows `Ctrl-b d → back to sheol`), and
+**d·d·d** banish (triple-tap with a decaying ◆ ward — the shield motif, since it's
+irreversible). No Enter-to-attach (was an accidental-dump footgun).
+**Deferred / future (all fit the theme):**
+- The **nag** — a Dock/menu-bar presence that shows ONLY while spirits wander,
+  hard to forget, auto-clears when empty. Needs a GUI agent, not a terminal
+  script → the app's job, with a first-class GUI ledger tab.
+- **Non-tmux "fragile" panes in the ledger** — list EVERY terminal + its state
+  (fragile/basic · tmux-hardened · living · dead spirit). Needs iTerm's API to
+  enumerate panes and cross-check tmux membership.
+**Honest constraints baked in:** tmux has no "detached-at" timestamp (quiet-for =
+`#{session_activity}` proxy; a true death-time means recording detach events
+ourselves); and you CANNOT retrofit tmux onto a live process — necromancy only
+revives the tmux-born (see #14).
+
 ---
 
-## Load-bearing for the shield (finalize with these in mind)
+## ~~Load-bearing for the shield~~ (RETIRED — shield removed)
 
 The busy-pane shield ([`bin/pane-shield.py`](bin/pane-shield.py), commit
 `bd0516b`) is the first real integration and a live test of the app's whole
@@ -112,3 +147,67 @@ philosophy. Three cache items directly govern how it should be finalized:
 #20 — Page-field cycling (l l extended, HARD/future): Research concluded the robust path is a browser extension (Safari + Chrome content scripts via native messaging, à la Vimium's gi), NOT keybind/AppleScript/accessibility. Simulated-Tab too crude; Accessibility API browser-brittle (Chrome needs --force-renderer-accessibility, Firefox unsupported); AppleScript-JS needs a fragile per-browser toggle. So field-cycling = a machine-spirit companion browser-extension feature (Phase 3+) with a native-messaging bridge. l l ships now as address-bar-only. Reuse Vimium/SurfingKeys content-script approach as reference.
 #21 — Shield sound (deferred): stdlib synth can't do the target "minor-key cybergoth" vibe (3 passes bounced — needs real samples or proper synth). Shield ships silent-by-design; CONFIG filenames are a drop-in contract — add real cybergoth .wavs at those asset paths (or wire as node params) later, zero code change. Also #13 (parameterize) applies: sounds become node params.
 Also: CC asked whether to commit the ~4 staged commits (Safari/browser cycle, shield redesign, VISION.md, onboarding docs). Yes — commit them per-subsystem as it proposed, but hold the push until I confirm.
+
+---
+
+## Removed: busy-pane shield (learnings + undo)
+
+The busy-pane shield (escalating Halo-style guard on closing a busy iTerm pane)
+was **removed**. It worked mechanically end-to-end, but the *point* of it was
+aesthetic game-feel, and that's the part that never landed.
+
+**Why it went:**
+- The **safety** it provided is a one-checkbox iTerm built-in: *Settings →
+  Profiles → Session → "Prompt before closing → If there are jobs besides the
+  login shell running."* The shield reinvented that the hard way.
+- The **swag** (per-pane flares, a skull death, "cybergoth" SFX) is where all the
+  effort went, and terminals aren't game engines: per-pane visuals are limited to
+  background-color + badge + injected text, and procedural stdlib audio can't do
+  "cool" (3 sound passes bounced; real samples/synth needed). Not a model/effort
+  miss — a wrong-medium-for-aesthetics miss.
+- Lesson kept: put game-feel where the medium supports it (the **splash**, and
+  **sheol's** theme). The shield's escalation/ward motif survived — reused as
+  sheol's `d·d·d` banish.
+
+**Already undone by CC (system + repo):** daemon killed; both AutoLaunch symlinks
+removed; `~/bin/{pane-shield.py,shield-on.sh,shield-off.sh,shield-fx}` deleted;
+repo `bin/` shield scripts + `assets/tools/shield-fx.swift` + all shield SFX
+removed; MANUAL-WIRING steps 1–3 retired; README/Brewfile/install.sh scrubbed.
+
+**Manual undo YOU still need to do (CC can't touch the live iTerm plist):**
+1. **Remove the ⌘W keybinding:** iTerm → Settings → **Keys → Key Bindings** →
+   select the `⌘W → Invoke Script Function pane_shield(...)` row → **`−`**.
+   (Until you do, ⌘W on a pane just errors "No function registered".)
+2. *(optional)* **Disable the Python API** — nothing in the repo uses it anymore:
+   Settings → General → Magic → uncheck **"Enable Python API."**
+3. **Turn on the real safety instead** *(if you want close-confirmation):*
+   Settings → Profiles → Session → **"Prompt before closing → If there are jobs
+   besides the login shell running."**
+
+---
+
+## Next-phase handoff (→ machine-spirit app)
+
+**Where the repo is now (all live + committed after this):** Leader Key launcher,
+Rectangle window grid, Karabiner remaps, the terminal splash, browser gestures
+(`s a` window-cycle, `l l` address bar), and **tmux protection + sheol** (`t t`
+launch, `t d` split, `t m u x` ledger). Shield removed. This is a solid, coherent
+"environment as code" base.
+
+**Next:** move to building the machine-spirit **app** (the node-graph tool). The
+spec is this whole file — design cache **1–15** (2, 3, 13 aside: 3/13 retired) +
+loose notes **16–21**. Sheol (#15) and its necromancer theme are the richest
+seed; the shield's removal is itself a design lesson (know which medium carries
+which idea).
+
+**Open threads carried forward (not blocking):**
+- **sheol nag + GUI ledger** (#15) — Dock/menu-bar haunt while spirits wander;
+  needs a GUI agent → app.
+- **Non-tmux "fragile" panes in the ledger** (#15) — needs iTerm API pane
+  enumeration → app or a companion helper.
+- **`c` commune status-bar hint** currently persists on the session after detach;
+  could scope/reset it. Minor.
+- **Page-field cycling** (#20) — browser extension, Phase 3+.
+- **"bring all iTerm/tmux windows to front" bind** — user reported a focus gap;
+  needs clarification on which bind + exact failure before changing anything.
+- **Pane-title button** (#14) — not in iTerm's API; app-era.

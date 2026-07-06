@@ -32,7 +32,7 @@ Everything else in this repo follows from that: additive not replacing, portable
 - **Menu bar management** — Ice / Thaw to hide clutter behind a single toggle, with [Stats](https://github.com/exelban/stats) for system monitoring.
 - **macOS tweaks** — snappier window resize and animation via reversible `defaults` writes.
 - **No dead-end dialogs** — a failed keybind (e.g. resizing an app that refuses it) silently does nothing instead of throwing a focus-stealing macOS alert that blocks the launcher. See [Command reliability](#command-reliability--no-focus-stealing-dialogs).
-- **Busy-pane shield** (experimental) — closing an iTerm pane that's running a live command (`claude`, `node`, a build…) doesn't die on the first ⌘W. It escalates Halo-style, all drawn inside the pane: eased **damage** washes on hits 1–2, a **shield break** on hit 3, then on hit 4 an ASCII **skull** powers up and the pane **dissolves to black**. Pause and the shield **regenerates**. Idle panes still close instantly. One-flag kill switch; silent for now (real audio TBD). See [Busy-pane shield](#busy-pane-shield-experimental).
+- **tmux protection + sheol** (experimental) — `⇪ t t` opens a pane running inside tmux (one window, status bar + **TMUX** badge), so its work survives the window closing. `⇪ t m u x` opens **sheol**, a necromancer's ledger of your tmux "spirits" — living (attached) vs wandering the underworld (detached), auto-refreshing — where you **revive** (`r`, reattach in a new window), **commune** (`c`, peek in place), or **banish** (`d·d·d`, destroy forever). See [tmux protection & sheol](#tmux-protection--sheol-experimental).
 
 ## Quick start (fresh Mac)
 
@@ -187,48 +187,56 @@ Every summon of the iTerm hotkey window boots a randomized splash, typed to the 
 - Knobs: `HOTKEY_SPLASH_BURST` (typing speed), `HOTKEY_SPLASH_CAPTION`, `HOTKEY_SPLASH_LOGO`, `HOTKEY_SPLASH_ORNAMENTS=0`.
 - Regenerating art: [`shell/splash/tools/`](shell/splash/tools/) has the CoreText text→PNG renderers and the density-based ASCII downsampler; banners came from OFL typefaces (Google Fonts) via `chafa --symbols block --stretch -s 114x10`.
 
-## Busy-pane shield (experimental)
+## tmux protection & sheol (experimental)
 
-> **v0.1 / feasibility prototype.** Real and working, but a probe as much as a feature — read the honest limits at the bottom.
+Deliberate terminal protection you opt into at launch, plus a way to recover sessions that outlived their window. (This replaced an earlier "busy-pane shield" experiment — see the design notes for why.)
 
-Closing an iTerm2 pane that's *busy* (running a real foreground process — `claude`, `node`, `python`, `caffeinate`, `ngrok`, …) shouldn't instantly kill it on a fat-fingered ⌘W. An idle shell pane closes instantly as always; a busy one raises a shield you have to overload — an escalating **damage → damage → break → death** beat:
+### `⇪ t t` — launch a protected pane
 
-| ⌘W on a busy pane | What happens |
+Opens a **new iTerm window running inside tmux** ([`bin/tmux-launch.sh`](bin/tmux-launch.sh) → [`bin/tmux-session.sh`](bin/tmux-session.sh)), under an auto-generated session name (`ms-HHMMSS`). Because tmux is the parent, the work **survives the window/pane being closed** — reattach it later from sheol. It's **one window** with tmux's **status bar along the bottom** (plus a **TMUX** badge) as the visible "this is protected" proof; control it with tmux's `Ctrl-b` (e.g. `Ctrl-b d` to detach and leave it running).
+
+> We deliberately use plain tmux, **not** control mode (`tmux -CC`): control mode renders tmux windows as separate native iTerm windows and leaves a confusing "gateway" window behind — two windows per launch. Plain tmux is one window, one status bar, no ghost.
+
+> ⚠️ **Hard constraint (by tmux's design, not a bug):** you **cannot** adopt an already-running process into tmux — tmux must be the **parent from launch**. So this only protects panes *started* this way; an existing busy pane can't be retrofitted.
+
+### `⇪ t d` — split into a protected pane
+
+[`bin/tmux-split.sh`](bin/tmux-split.sh) splits the **current** iTerm pane and runs a tmux-protected shell in the new half — a hardened pane right beside where you are. (If you're already inside a tmux session and want a tmux split of *that* session, use tmux's own `Ctrl-b "` / `Ctrl-b %`.)
+
+### `⇪ t m u x` — sheol, the necromancer's ledger
+
+[`bin/tmux-sheol.sh`](bin/tmux-sheol.sh) opens **sheol**, the necromancer's ledger of tmux spirits — and the theme is load-bearing, not decoration. A session with a watcher walks **the land of the living**; a detached one is a **restless spirit wandering the underworld**, its work still alive, awaiting revival or banishment. Two rosters, **auto-refreshed** (~2s poll, so spirits appear and vanish live as you spawn/kill them):
+
+- **☀ THE LIVING** — attached sessions (a client is watching)
+- **⌁ SHEOL** — detached/orphaned sessions (no watcher; the work lives on)
+
+Each row: **name · command · born · quiet-for**.
+
+| key | action |
 |---|---|
-| **Hit 1** | a gentle **cyan wash** (smooth eased background pulse, not a strobe) + badge `◆ SHIELD ▓▓░ ◆`. Pane stays. |
-| **Hit 2** | a deeper, longer **amber "strain"** wash + `◆ SHIELD ▓░░ ◆`. Pane stays. |
-| **Hit 3** | the shield **breaks** — a snappy bright-white flash + badge `⚡ SHIELD DOWN ⚡`. Pane **still stays** (the break is the warning, not the kill). |
-| **Hit 4** | **death:** an ASCII **skull + crossbones** powers up in the pane, holds lit, then the skull *and* the whole pane **dissolve to black** together — and it closes. |
-| pause ~5s | the shield **regenerates** to full (Halo-style), badge clears; the next ⌘W starts from hit 1. |
+| `↑` / `↓` or `k` / `j` | walk the ledger |
+| `r` | **revive** — reattach the spirit in a **new** terminal window (a fresh body in the land of the living); the ledger stays open |
+| `c` | **commune** — step *into* the spirit in place to tend it *without* fully reviving it; the session's status bar shows the way back (`Ctrl-b d → back to sheol`), and detaching returns you to the ledger |
+| `d` `d` `d` | **banish** — destroy forever; press `d` three times, the `◆` ward decaying each press (irreversible, so it resists you) |
 
-### The look — terminal-native
+(`⌘W` or `q` closes the ledger window.) *Revive* gives the spirit a new body (new window); *commune* is a temporary séance (detach with `Ctrl-b d` to return here); *banish* is permanent — a banished spirit cannot be recalled, which is why the triple-tap ward exists. There is deliberately **no Enter-to-attach** (an accidental Enter used to dump you straight into a session — gone).
 
-All feedback is drawn **inside the pane itself**, so it's pane-accurate by construction and never corrupts a live session: the escalating hits are **smooth eased background washes** (smoothstep blend toward the hit color) plus an iTerm **badge**; only the death frame injects text (the skull + a fade-to-black), and only because the pane is closing anyway. There is no full-screen overlay in the active path — an earlier fullscreen flare/shatter ([`assets/tools/shield-fx.swift`](assets/tools/shield-fx.swift)) is retained but **unwired**, kept as a future "pane-tracked overlay" option (see design notes).
+Only ever **one sheol** runs: pressing `⇪ t m u x` again kills any open ledger and opens a fresh one. It renders on the alternate screen with in-place redraw, so the ~2s auto-refresh doesn't flicker the scrollbar or flash the screen, and a brief `+++ S H E O L +++` reveal plays on open.
 
-**Sound is intentionally silent right now.** The placeholder synth SFX were dropped (they read corny); the shield ships as a purely visual safety feature. Sound is a clean drop-in — the daemon references swappable filenames and no-ops when they're absent, so dropping real `.wav`s into `assets/` (or wiring them as node parameters later) switches audio back on with zero code change. Target vibe when it lands: minor-key cybergoth.
-
-### Kill switch — and why it's safe by design
-
-The shield **never installs a system-wide `CGEventTap`** — that's the thing that can eat keystrokes globally if its process hangs. Instead, *all* interception is a single iTerm key binding routed to the daemon's RPC ([`bin/pane-shield.py`](bin/pane-shield.py)). So the blast radius is exactly one shortcut in one app.
-
-- **Instant off (no restart):** `~/bin/shield-off.sh` drops a flag file and ⌘W is stock behavior again immediately (busy or not, it just closes). `~/bin/shield-on.sh` re-arms. The daemon keeps running either way.
-- **Full teardown:** delete the AutoLaunch symlink and remove the ⌘W key binding in iTerm → ⌘W is 100% native, nothing left behind.
-- **Crash safety:** if the daemon dies, the *worst case* is ⌘W does nothing **inside iTerm only** until you restart it or remove the binding. It can **never** capture keystrokes system-wide, because there is no global tap. This trade — losing seamless fallback to guarantee no global keystroke capture — is deliberate.
-
-### Setup (three manual steps)
-
-1. **Enable the iTerm Python API:** iTerm → Settings → **General → Magic → “Enable Python API”** (accept the one-time consent prompt; iTerm downloads its managed runtime + `iterm2` module).
-2. **Install:** `install.sh` drops `pane-shield.py` into `~/bin`, symlinks it into iTerm's AutoLaunch dir, and compiles `shield-fx`. Restart iTerm so the daemon loads.
-3. **Rebind ⌘W:** iTerm → Settings → **Keys → Key Bindings → `+`** → shortcut ⌘W → Action *Invoke Script Function* → `pane_shield(session_id: id)` (bare `id` — **not** `\(id)`, which is string-interpolation syntax and errors in this field). Put it under app-level Key Bindings so it covers every pane; delete it to fully disable.
+> **Stuck in an attached session** (e.g. one running a full-screen TUI that eats `Ctrl-b`)? From any *other* window run `tmux detach-client` — it pops every client out; the sessions keep living.
 
 ### Honest limits
 
-- ✅ **The ⌘W → RPC round-trip is confirmed working live** (registration + all four beats + the skull death). Mechanically done; it's the *feel* that's still maturing.
-- 🔇 **Silent by design for now** — see the sound note above. The visuals carry it.
-- ⚠️ **Sound + feel are v0.x.** The escalation reads, but the "game-feel" polish (and real audio) is deferred; the natural home for it is tunable node parameters once the shield becomes a graph node.
-- ⚠️ **Death injection assumes the main screen buffer.** A full-screen TUI on the alternate buffer may fight the skull for the fraction of a second before close; plain jobs (`caffeinate`, builds) render clean.
-- ⚠️ **Requires the iTerm Python API enabled** (one-time manual consent) and works **only in iTerm**, not Terminal.app.
-- **Busy detection is coarse** — a `jobName` allow-list of shells; anything else counts as busy.
+- ⚠️ **No "detached-at" time.** tmux doesn't record *when* a session detached — there's no such timestamp in its model. **quiet-for** is time since last activity (`#{session_activity}`), the closest proxy.
+- ⚠️ **You can't retrofit tmux onto a running process** — necromancy only revives spirits that were tmux-born (`⇪ t t`). No adopt-a-live-process path exists in tmux.
+- 🚧 **Non-tmux "fragile" panes aren't listed yet.** A full ledger of *every* terminal and its state (fragile / hardened / living / dead) needs iTerm's API to enumerate panes — a future item that fits the theme well.
+- 🚧 **The nag is deferred.** A Dock/menu-bar presence that appears **only while spirits wander**, is hard to ignore, and auto-clears when empty **cannot** be done by a plain terminal script (needs a GUI agent). Deferred to the machine-spirit app, with a first-class GUI ledger tab.
+- 🩹 **bash 3.2 gotcha (fixed):** macOS ships bash 3.2, which rejects *fractional* `read -t` timeouts — that silently broke arrow-key nav until caught. sheol uses integer timeouts + `j`/`k`; any future TUI here must stay 3.2-safe.
+- **No custom pane button** (gold/Iron-Warriors-yellow) — iTerm's API doesn't expose pane-title buttons; the tmux status bar + badge are the markers. Future item.
+
+### what we're doing here
+
+sheol is the first piece of a terminal necromancer theme for machine-spirit. the idea: your terminals are spirits. living ones have a watcher, detached ones wander the underworld with their work still breathing, and you get to revive them, commune with them, or banish them for good. it started as a way to never lose a long running session again and turned into something with a bit of soul. the real version lives in the machine-spirit app later (a dock nag that only haunts you while spirits wander, a gui ledger, non-tmux fragile terminals listed too). for now it's a terminal tui and it already goes hard. lean into the language everywhere: land of the living, restless spirits, revive, commune, banish. it's a workflow tool that's also a little bit alive.
 
 ## Command reliability — no focus-stealing dialogs
 
@@ -260,12 +268,13 @@ machine-spirit/
 ├── CLAUDE.md               # handoff: teaches agent sessions this repo's rules
 ├── bin/                    # helpers: web-jump, win-lerp, site-home, center-window, vmware
 │   ├── run-quiet.sh        # wrap a command so a failure never dialogs (exit 0)
-│   ├── pane-shield.py      # experimental iTerm2 API daemon: busy-pane close guard
-│   ├── shield-off.sh       # kill switch: disable the shield instantly
-│   └── shield-on.sh        # re-arm the shield
-├── assets/                 # bundled media (committed, not synced)
-│   │                       # shield sounds are drop-in: absent = silent by design
-│   └── tools/              # shield-fx.swift — unwired overlay, kept for future
+│   ├── tmux-launch.sh      # t t: launch a tmux-protected pane (one window)
+│   ├── tmux-session.sh     # the protected pane's program: TMUX badge + exec tmux
+│   ├── tmux-split.sh       # t d: split current iTerm pane into a tmux-protected one
+│   ├── tmux-sheol.sh       # the sheol TUI: revive / commune / banish tmux spirits
+│   ├── tmux-sheol-open.sh  # t m u x: open the ONE sheol (kills any old one first)
+│   ├── iterm-new-window.sh # shared: open a new iTerm window running a command
+│   ├── reload-leaderkey.sh # restart Leader Key so a config edit goes live
 │   └── screenshots/        # screencapture wrappers behind the ⇪ s s tree
 ├── config/
 │   ├── leader-key/         # captured Leader Key config (templated)
@@ -325,7 +334,7 @@ It's feasible because the hard parts are already open source — Leader Key (lea
 - **License check, first.** Before building on or redistributing anything derived from Leader Key or Rectangle, confirm their terms permit derivative works and redistribution. Both appear MIT-family / permissive; verify before shipping.
 - **macOS-first, on purpose.** Cross-platform is out of scope for now, but the engine should avoid gratuitous macOS lock-in where avoiding it is cheap.
 - **Honest scope.** A cross-tool, node-based, multi-input window-and-launcher manager with a visual editor and a migration ecosystem is a substantial project (multi-week-plus, plausibly open-source-with-contributors), not a weekend. A working prototype is close; the polished editor and template ecosystem are the long tail. Ship a prototype (v0.1) first and iterate the editor and templates after — building it early also surfaces engine-integration conflicts before any UI is stacked on top.
-- **Harness-fork / patch-overlay strategy.** Modify open-source dependencies (Leader Key, Rectangle, iTerm) via *layered, interceptable exceptions* — API hooks, key-binding routes, config injection, login-item registration — rather than hard forks. Upstream security and feature updates keep flowing, and any modification can be reverted to the tool's stable behavior. Avoid maintaining full forks except where genuinely unavoidable (e.g. a custom summon-overlay that requires forking Leader Key's overlay). The busy-pane shield is the first live instance: it hooks iTerm purely through its public Python API and unbinds in one click, with iTerm itself untouched.
+- **Harness-fork / patch-overlay strategy.** Modify open-source dependencies (Leader Key, Rectangle, iTerm) via *layered, interceptable exceptions* — API hooks, key-binding routes, config injection, login-item registration — rather than hard forks. Upstream security and feature updates keep flowing, and any modification can be reverted to the tool's stable behavior. Avoid maintaining full forks except where genuinely unavoidable (e.g. a custom summon-overlay that requires forking Leader Key's overlay). The tmux protection + sheol tooling is a live instance: it drives iTerm purely through AppleScript + the tmux CLI, adds only things iTerm can cleanly forget, and touches no iTerm internals.
 - **Dependency-update safety.** Before allowing an update to a *hooked* dependency, run smoke tests against the specific functionality machine-spirit relies on. Gate or pin updates that would break a hook, and **surface the conflict to the user** rather than silently breaking or silently blocking. This is integration testing against our dependencies — the price of the patch-overlay strategy above.
 - **Coordinator, not parent.** When the app exists, it *coordinates* the other tools via their APIs, hooks, and login-item registration — it does **not** become their parent process or own their lifecycles. Leader Key, Rectangle, and iTerm keep running independently; machine-spirit layers behavior on top. This keeps the system antifragile (any component can crash, update, or be removed without taking the others down) and is the architectural form of *additive, not replacing*. The shield's CGEventTap-free design is a concrete down-payment on this.
 
