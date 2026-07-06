@@ -15,9 +15,11 @@
 		E0E3D8FE2EF7DA38AFF1B4C0 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 32D65BB0E4B6A0D0BB110E46 /* Assets.xcassets */; };
 		EFBAA750BEEE2D52CB8BC739 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D03F1A0DE367DED4735C5E1 /* AppState.swift */; };
 		F38442DA220CA4A379FAFC8B /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE260BAD489CB9D25CE5394B /* Theme.swift */; };
+		FF7001114F0F6CE852FA0578 /* SheolService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C61D57EF5E1027553CA1962 /* SheolService.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		0C61D57EF5E1027553CA1962 /* SheolService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SheolService.swift; sourceTree = "<group>"; };
 		32D65BB0E4B6A0D0BB110E46 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		41BA055CA9A05CA859DBB7D0 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		5D03F1A0DE367DED4735C5E1 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
@@ -56,6 +58,7 @@
 				41BA055CA9A05CA859DBB7D0 /* ContentView.swift */,
 				98EAE5FFEBA7D1FAEEF81FAE /* GraphView.swift */,
 				D78116A2645238BBF41D3FF7 /* MachineSpiritApp.swift */,
+				0C61D57EF5E1027553CA1962 /* SheolService.swift */,
 				AE260BAD489CB9D25CE5394B /* Theme.swift */,
 				8DC0B070810C9852F3EE3437 /* TreeView.swift */,
 			);
@@ -160,6 +163,7 @@
 				BAFAFC9DCF47C32765544359 /* ContentView.swift in Sources */,
 				019F7D79E1E876626E11B9A2 /* GraphView.swift in Sources */,
 				86F32D191CB8DA83C493D46F /* MachineSpiritApp.swift in Sources */,
+				FF7001114F0F6CE852FA0578 /* SheolService.swift in Sources */,
 				F38442DA220CA4A379FAFC8B /* Theme.swift in Sources */,
 				259C47702BFA8908157D476D /* TreeView.swift in Sources */,
 			);

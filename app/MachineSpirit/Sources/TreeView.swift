@@ -13,7 +13,7 @@ struct TreeView: View {
     @Bindable var state = state
     ScrollViewReader { proxy in
       List(selection: $state.selectedNodeID) {
-        if let model = state.model {
+        if let model = state.displayModel {
           ForEach(model.children) { child in
             NodeBranch(node: child)
           }
@@ -46,6 +46,8 @@ private struct NodeBranch: View {
         .tag(node.id)
         .id(node.id)
         .listRowBackground(Color.clear)
+        .contentShape(Rectangle())
+        .onTapGesture { _ = state.strikeSheolNode(node) }
     } else {
       DisclosureGroup(
         isExpanded: Binding(

@@ -72,4 +72,124 @@ final class AppState {
   }
 
   var nodeCount: Int { model.map { $0.totalCount - 1 } ?? 0 }
+
+  // MARK: - sheol, live
+
+  /// Wandering spirits from the last poll (detached tmux sessions).
+  var spirits: [Spirit] = []
+
+  /// The ◆◆◇ ward: banish arms per-node and decays after ~2s untouched.
+  var banishArm: (nodeID: String, count: Int, at: Date)?
+
+  @ObservationIgnored private var sheolPollTask: Task<Void, Never>?
+
+  static let spiritType = "spirit"
+  static let reviveType = "sheol-revive"
+  static let banishType = "sheol-banish"
+
+  /// What the views render: the imported config with the sheol bind grown
+  /// into a living node while spirits wander. Conditional visibility —
+  /// when sheol is empty the bind stays its plain imported self.
+  var displayModel: Node? {
+    guard let model else { return nil }
+    let wanderers = spirits.filter(\.isWandering)
+    guard !wanderers.isEmpty, let sheolID = sheolBindID(in: model) else { return model }
+    return graft(into: model, at: sheolID, wanderers: wanderers)
+  }
+
+  /// The bind that opens the full ledger (`tmux-sheol-open.sh`) is THE
+  /// sheol node — found by its value, not a hardcoded key path.
+  private func sheolBindID(in root: Node) -> String? {
+    if let action = root.action, action.value.contains("tmux-sheol-open") {
+      return root.id
+    }
+    for child in root.children {
+      if let found = sheolBindID(in: child) { return found }
+    }
+    return nil
+  }
+
+  private func graft(into node: Node, at id: String, wanderers: [Spirit]) -> Node {
+    var node = node
+    if node.id == id {
+      // Group+action duality on display: the ledger-opening action keeps
+      // its core; the wandering spirits give it the ring. Both lit.
+      node.children = wanderers.map { spirit in
+        let base = "\(id)/spirit:\(spirit.name)"
+        let armed = banishArm?.nodeID == "\(base)/banish" ? banishArm!.count : 0
+        let ward = (0..<3).map { $0 < armed ? "◆" : "◇" }.joined()
+        return Node(
+          id: base,
+          key: "⌁",
+          label: "\(spirit.name) · \(spirit.command) · quiet \(spirit.quietFor)",
+          children: [
+            Node(
+              id: "\(base)/revive",
+              key: "r",
+              label: "revive — a new body",
+              action: .other(type: Self.reviveType, value: spirit.name)),
+            Node(
+              id: "\(base)/banish",
+              key: "d",
+              label: "banish \(ward) — exile forever",
+              action: .other(type: Self.banishType, value: spirit.name)),
+          ],
+          extras: [:],
+          hadExplicitType: false,
+          hadChildrenArray: true
+        )
+      }
+      node.hadChildrenArray = true
+      return node
+    }
+    node.children = node.children.map { graft(into: $0, at: id, wanderers: wanderers) }
+    return node
+  }
+
+  func startSheolPolling() {
+    guard sheolPollTask == nil else { return }
+    sheolPollTask = Task { [weak self] in
+      while !Task.isCancelled {
+        let spirits = await SheolService.list()
+        guard let self else { return }
+        if self.spirits != spirits { self.spirits = spirits }
+        if let arm = self.banishArm, Date().timeIntervalSince(arm.at) > 2 {
+          self.banishArm = nil  // the ward decays
+        }
+        try? await Task.sleep(for: .seconds(2))
+      }
+    }
+  }
+
+  /// Invoked when a synthetic sheol action node is struck in either view.
+  /// Returns true if the node was a sheol action (and was handled).
+  func strikeSheolNode(_ node: Node) -> Bool {
+    guard case .other(let type, let name) = node.action else { return false }
+    switch type {
+    case Self.reviveType:
+      Task {
+        await SheolService.revive(name)
+        spirits = await SheolService.list()
+      }
+      return true
+    case Self.banishType:
+      if let arm = banishArm, arm.nodeID == node.id {
+        let count = arm.count + 1
+        if count >= 3 {
+          banishArm = nil
+          Task {
+            await SheolService.exile(name)
+            spirits = await SheolService.list()
+          }
+        } else {
+          banishArm = (node.id, count, Date())
+        }
+      } else {
+        banishArm = (node.id, 1, Date())
+      }
+      return true
+    default:
+      return false
+    }
+  }
 }

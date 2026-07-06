@@ -23,7 +23,7 @@ struct GraphView: View {
 
   var body: some View {
     GeometryReader { geometry in
-      let model = state.model
+      let model = state.displayModel
       let layout = model.map { TidyTreeLayout.layout(root: $0) }
 
       Canvas { context, size in
@@ -39,8 +39,12 @@ struct GraphView: View {
       .onTapGesture { location in
         guard let model, let layout else { return }
         let transform = canvasTransform(layout: layout, viewport: geometry.size)
-        state.selectedNodeID = hitTest(
-          location, in: model, layout: layout, transform: transform)
+        let hitID = hitTest(location, in: model, layout: layout, transform: transform)
+        state.selectedNodeID = hitID
+        // Striking a sheol verb node acts: revive fires; banish arms ◆◆◇.
+        if let hitID, let node = model.node(withID: hitID) {
+          _ = state.strikeSheolNode(node)
+        }
       }
       .onAppear {
         // Landing from the witness: center the shared selection, sane zoom.
@@ -210,7 +214,9 @@ struct GraphView: View {
       let selected = node.id == state.selectedNodeID
 
       let primary: Color =
-        inert ? Theme.ash : (node.isDual ? Theme.magenta : Theme.phosphor)
+        inert
+        ? Theme.ash
+        : (node.isDual || Theme.isNecromantic(node) ? Theme.magenta : Theme.phosphor)
 
       context.drawLayer { layer in
         if !inert {

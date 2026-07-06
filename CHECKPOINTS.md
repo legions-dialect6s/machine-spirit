@@ -135,3 +135,20 @@ This checkpoint stands alone: if 9b dies, the TUI works and the core exists.
 **Restore:** `git stash -u && git reset --hard <commit tagged [P1.9a]>`
 **Re-verify:** run the scratch test (unset TMUX; TMUX_TMPDIR=$(mktemp -d));
 owner glances at repo TUI on the real socket, read-only.
+
+### sheol lives in the graph `[P1.9b]`
+
+SheolService (app): all tmux through `bin/sheol-core`, never direct; 2s poll.
+The `t-m-u-x` bind (found by value, not key path) grows into the living dual
+node while spirits wander — ring AND core — with per-wanderer children
+(name · command · quiet-for) carrying revive and banish verbs; banish honors
+the ◆◆◇ ward (arms per node, decays ~2s). Conditional visibility: empty sheol
+= the plain imported bind. Proven on an isolated socket end-to-end: footer
+probe showed 2 wanderers and 152→158 grafted nodes. Real-socket use is
+revive-only until the owner demo.
+Tag `v0.3-phase1` is deferred until the owner has driven sheol live —
+findability on the altar was poor (tidy-tree sprawl), fixed in the next slice.
+
+**Restore:** `git stash -u && git reset --hard <commit tagged [P1.9b]>`
+**Re-verify:** throwaway socket + launch app binary with TMUX_TMPDIR (unset
+TMUX first); footer shows wanderers; strike r / d·d·d on test spirits.

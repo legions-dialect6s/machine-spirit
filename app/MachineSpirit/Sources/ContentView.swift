@@ -70,9 +70,13 @@ struct ContentView: View {
 
   private var footer: some View {
     HStack {
-      Text("\(state.nodeCount) nodes · imported live · read-only")
+      Text("\((state.displayModel?.totalCount ?? 1) - 1) nodes · imported live · read-only")
         .font(.system(.caption, design: .monospaced))
         .foregroundStyle(Theme.ash)
+      let wanderers = state.spirits.filter(\.isWandering).count
+      Text(wanderers > 0 ? "⌁ \(wanderers) spirit\(wanderers == 1 ? "" : "s") wander sheol" : "⌁ sheol is empty")
+        .font(.system(.caption, design: .monospaced))
+        .foregroundStyle(wanderers > 0 ? Theme.magenta : Theme.ash.opacity(0.6))
       Spacer()
       Text("⌥-click a triangle to unfold a whole branch")
         .font(.system(.caption, design: .monospaced))

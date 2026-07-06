@@ -14,6 +14,7 @@ struct MachineSpiritApp: App {
         .task {
           state.communeWithLiveConfig()
           state.installTabMonitor()
+          state.startSheolPolling()
         }
     }
     .defaultSize(width: 1440, height: 900)
