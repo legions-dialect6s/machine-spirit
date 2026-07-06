@@ -428,8 +428,8 @@
         },
         {
           "key" : "t",
-          "type" : "application",
-          "value" : "/Applications/iTerm.app"
+          "type" : "command",
+          "value" : "~/bin/run-quiet.sh osascript ~/bin/iterm-front.applescript"
         }
       ],
       "key" : "i",

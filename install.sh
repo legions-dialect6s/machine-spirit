@@ -44,6 +44,22 @@ while IFS= read -r -d '' f; do
   echo "    installed bin/$rel"
 done < <(find "$REPO_ROOT/bin" -type f -print0)
 
+# Busy-pane shield (OPT-IN, off by default): symlink the iTerm2 API daemon into
+# AutoLaunch so iTerm runs it, and drop the disable flag so it starts OFF (⌘W
+# closes panes normally until you run shield-on.sh). Reversible — delete the
+# symlink to remove. The ⌘W keybinding + Python API are the one-time manual step
+# (see README "Busy-pane shield"). Compile the optional visual overlay too.
+if [[ -f "$HOME/bin/pane-shield.py" ]]; then
+  AL="$HOME/Library/Application Support/iTerm2/Scripts/AutoLaunch"
+  mkdir -p "$AL"; ln -sf "$HOME/bin/pane-shield.py" "$AL/pane-shield.py"
+  mkdir -p "$HOME/.config/machine-spirit"; : > "$HOME/.config/machine-spirit/shield-disabled"
+  echo "    linked busy-pane shield into iTerm AutoLaunch (OFF by default)"
+  if command -v swiftc >/dev/null 2>&1 && [[ -f "$REPO_ROOT/assets/tools/shield-fx.swift" ]]; then
+    swiftc -O "$REPO_ROOT/assets/tools/shield-fx.swift" -o "$HOME/bin/shield-fx" 2>/dev/null \
+      && echo "    compiled shield-fx overlay" || true
+  fi
+fi
+
 echo "==> 4/5  App configs"
 # Leader Key — restore the real home path from the __HOME__ placeholder
 LK_SRC="$REPO_ROOT/config/leader-key/config.json"

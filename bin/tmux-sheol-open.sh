@@ -1,11 +1,9 @@
 #!/bin/sh
 # tmux-sheol-open.sh — open sheol, but only ever ONE. Kills any existing sheol
-# TUI first (its window closes with it), then opens a fresh one. Bound to
-# leader key  t m u x.
-#
-# (kill-and-respawn keeps it dead simple and guarantees a single instance;
-# sheol is a stateless live view, so nothing is lost. focus-the-existing-window
-# instead of respawn is a nicer future refinement.)
+# TUI first (now that sheol's trap exits on SIGTERM, pkill actually ends it and
+# its window closes), then opens a fresh one. Bound to leader key  t m u x.
 pkill -f 'bin/tmux-sheol.sh' 2>/dev/null
-sleep 0.15
+i=0
+while pgrep -f 'bin/tmux-sheol.sh' >/dev/null 2>&1 && [ "$i" -lt 8 ]; do sleep 0.1; i=$((i+1)); done
+pkill -9 -f 'bin/tmux-sheol.sh' 2>/dev/null      # belt-and-suspenders
 exec "$HOME/bin/iterm-new-window.sh" "$HOME/bin/tmux-sheol.sh"

@@ -22,7 +22,7 @@ settings/node-graph. Doubles as a teaching moment for how nodes chain.
 Replace Leader Key's plain dot with an animated green ASCII skull; shipped as
 default and user-editable in the menu.
 
-**3. ~~Shield as a node in the graph.~~** 🗑 RETIRED (shield removed — see "Removed: busy-pane shield" below)
+**3. Shield as a node in the graph.** 🌱 DEPRIORITIZED (shield is now opt-in / off-by-default; still a valid node example if it earns its place)
 The busy-pane shield ships as a default node (greyed if no iTerm2), doubling as a
 teaching example of what a node can do. *(Load-bearing for shield finalization —
 see below.)*
@@ -72,7 +72,7 @@ at dev-time is the spec for what the app will later automate.
 be scripted today, and the per-step automation strategy. Treat it as the
 priority backlog for this item.
 
-**13. ~~Shield must be parameterized/modular.~~** 🗑 RETIRED (shield removed)
+**13. Shield must be parameterized/modular.** 🌱 DEPRIORITIZED (opt-in shield; params still apply if it becomes a node)
 Expose the shield's behavior as node parameters (hit count, per-hit sounds,
 per-hit visuals/brightness, which processes count as "busy," flash vs.
 pane-tracked overlay, enable/disable) so machine-spirit can present it as a
@@ -115,7 +115,7 @@ revives the tmux-born (see #14).
 
 ---
 
-## ~~Load-bearing for the shield~~ (RETIRED — shield removed)
+## Load-bearing for the shield (context; shield now opt-in, off by default)
 
 The busy-pane shield ([`bin/pane-shield.py`](bin/pane-shield.py), commit
 `bd0516b`) is the first real integration and a live test of the app's whole
@@ -150,11 +150,13 @@ Also: CC asked whether to commit the ~4 staged commits (Safari/browser cycle, sh
 
 ---
 
-## Removed: busy-pane shield (learnings + undo)
+## Busy-pane shield: kept as opt-in (off by default) + learnings
 
 The busy-pane shield (escalating Halo-style guard on closing a busy iTerm pane)
-was **removed**. It worked mechanically end-to-end, but the *point* of it was
-aesthetic game-feel, and that's the part that never landed.
+was briefly removed, then **kept as an opt-in toy, OFF by default**. It works
+mechanically end-to-end; the *point* was aesthetic game-feel, which only partly
+landed, so it's not worth being on by default — but it's fun, so it stays behind
+a flag.
 
 **Why it went:**
 - The **safety** it provided is a one-checkbox iTerm built-in: *Settings →
@@ -169,20 +171,25 @@ aesthetic game-feel, and that's the part that never landed.
   **sheol's** theme). The shield's escalation/ward motif survived — reused as
   sheol's `d·d·d` banish.
 
-**Already undone by CC (system + repo):** daemon killed; both AutoLaunch symlinks
-removed; `~/bin/{pane-shield.py,shield-on.sh,shield-off.sh,shield-fx}` deleted;
-repo `bin/` shield scripts + `assets/tools/shield-fx.swift` + all shield SFX
-removed; MANUAL-WIRING steps 1–3 retired; README/Brewfile/install.sh scrubbed.
+**Toggle (no re-wiring needed):** the ⌘W keybinding + daemon are wired ONCE
+(already done). On/off is just a flag file the daemon checks:
+- `~/bin/shield-on.sh` — arm (busy panes escalate on ⌘W)
+- `~/bin/shield-off.sh` — disarm (⌘W closes normally) — **the default**
+The daemon is symlinked into iTerm AutoLaunch (auto-starts on iTerm launch) and
+started now; `install.sh` re-creates the symlink on a fresh machine (default off).
 
-**Manual undo YOU still need to do (CC can't touch the live iTerm plist):**
-1. **Remove the ⌘W keybinding:** iTerm → Settings → **Keys → Key Bindings** →
-   select the `⌘W → Invoke Script Function pane_shield(...)` row → **`−`**.
-   (Until you do, ⌘W on a pane just errors "No function registered".)
-2. *(optional)* **Disable the Python API** — nothing in the repo uses it anymore:
-   Settings → General → Magic → uncheck **"Enable Python API."**
-3. **Turn on the real safety instead** *(if you want close-confirmation):*
-   Settings → Profiles → Session → **"Prompt before closing → If there are jobs
-   besides the login shell running."**
+**If you ever want it fully gone:** delete `~/bin/{pane-shield.py,shield-*.sh}`,
+the AutoLaunch symlink(s), and the ⌘W keybinding (iTerm → Keys → Key Bindings →
+select the ⌘W row → `−`); then use iTerm's built-in *Prompt before closing → if
+jobs besides the login shell running* for plain safety.
+
+**Heat/pileup lesson (real bug found + fixed):** an earlier sheol trap caught
+SIGTERM without exiting, so `pkill` couldn't end it → instances piled up, each
+redrawing every 2s → WindowServer/iTerm pegged, keyboard lag, hot Mac. Fixes:
+INT/TERM trap now exits; sheol only redraws when the roster/selection changes
+(idle ≈ free); a lost stdin breaks instead of busy-looping; the opener force-kills
+stragglers. Lesson for any long-running TUI here: **traps must exit, redraw only
+on change, and guard the read loop against EOF.**
 
 ---
 

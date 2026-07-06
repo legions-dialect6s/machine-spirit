@@ -38,6 +38,13 @@ your contract. Read it before touching anything.
    `Brewfile` with a comment saying what it's for. Generation-only tools are
    committed under a `tools/` dir next to their assets, and listed in the
    Brewfile as commented-out optional lines.
+5. **Reduce window overflow.** A standing design goal: fight macOS's unbounded
+   window pile-up (the owner considers it a real weakness vs. Windows). When
+   adding a subsystem, prefer *one summonable/placed surface* over *N stray
+   windows*: place windows on the grid rather than let them scatter, pull an
+   app's windows forward together, gather ephemeral things (like detached tmux
+   sessions → `sheol`) into one ledger you actively clear. If a feature would
+   spawn windows without bound, that's a smell — give it a single home.
 
 ## Subsystem map
 

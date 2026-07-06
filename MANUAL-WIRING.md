@@ -35,9 +35,9 @@ wiring being done at dev-time is the spec for what the app will later do itself.
 
 | # | Step | Today | Strategy |
 |---|---|---|---|
-| 1 | iTerm: enable Python API | 🗑 RETIRED | shield removed — no longer needed |
-| 2 | iTerm: restart after enabling API | 🗑 RETIRED | shield removed |
-| 3 | iTerm: ⌘W → shield keybinding | 🗑 RETIRED | shield removed; use built-in close-confirm |
+| 1 | iTerm: enable Python API | ⭘ OPTIONAL | only for the opt-in shield |
+| 2 | iTerm: restart after enabling API | ⭘ OPTIONAL | only for the opt-in shield |
+| 3 | iTerm: ⌘W → shield keybinding | ⭘ OPTIONAL | opt-in shield; toggle via flag after |
 | 4 | iTerm: profiles, APS, semantic history, dimming, hotkey window, colors, greeting | ✋ | plist-while-quit / iterm-api |
 | 5 | Leader Key: F19 activation + Launch at Login | ⚠️ | own-when-forked / detect-and-guide |
 | 6 | Leader Key: reload after a config edit | ✅ | `reload-leaderkey.sh` |
@@ -54,14 +54,22 @@ wiring being done at dev-time is the spec for what the app will later do itself.
 
 ## iTerm2
 
-### 1–3. 🗑 RETIRED — busy-pane shield (Python API + ⌘W keybinding)
+### 1–3. ⭘ OPTIONAL — busy-pane shield (Python API + ⌘W keybinding)
 
-**These three steps are gone.** They existed only to wire the busy-pane shield
-(iTerm Python API → AutoLaunch daemon → ⌘W keybinding). The shield was removed —
-its *safety* is now iTerm's own built-in setting (step 7 below / see HANDOFF), and
-nothing else in the repo needs the Python API. If you set them up before, see the
-handoff's **"undo the shield"** checklist to unwire them cleanly. This deletes the
-largest consent-gated + plist-resident chunk of the onboarding surface.
+**These three steps are now optional** — the busy-pane shield is opt-in and OFF by
+default. They exist only to enable the shield (iTerm Python API → AutoLaunch
+daemon → ⌘W keybinding). Wire them once and toggle the shield with
+`shield-on.sh`/`shield-off.sh` (no re-wiring); skip them entirely and nothing else
+needs the Python API. For plain close-safety without the shield, use iTerm's
+built-in *Profiles → Session → Prompt before closing → if jobs besides the login
+shell running*. Full story in `HANDOFF-NOTES.md`.
+
+- **Enable Python API:** iTerm → Settings → General → Magic → "Enable Python API"
+  (accept the consent sheet — a security gate no app can auto-flip: `detect-and-guide`).
+- **Restart iTerm** so the AutoLaunch daemon starts.
+- **Bind ⌘W:** Settings → Keys → Key Bindings (app-level) → `+` → ⌘W → *Invoke
+  Script Function* → `pane_shield(session_id: id)` (bare `id`, **not** `\(id)`).
+  Lives in the iTerm plist (`plist-while-quit` / `iterm-api` to automate later).
 
 ### 4. Profiles, APS, semantic history, dimming, hotkey window, colors, greeting
 The bulk of iTerm setup. All of it lives in the plist (not captured by sync — see CLAUDE.md), so it's **manual in the Settings UI today**.

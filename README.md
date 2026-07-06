@@ -21,6 +21,8 @@ The name is the thesis: the machine has a spirit you learn to commune with throu
 
 Everything else in this repo follows from that: additive not replacing, portable by construction, the repo as the canonical artifact, zero secrets, assets pre-rendered so the runtime stays light.
 
+**A running theme: killing window overflow.** macOS lets windows pile up without bound — dozens of overlapping, half-forgotten windows across apps and Spaces, with no first-class notion of "put this away" or "there's too much here." (Arguably a real weakness versus Windows' more disciplined window model; maybe personal, but it bites.) A lot of machine-spirit is quietly aimed at this: the spatial window grid *places* windows instead of letting them scatter, `⇪ i t` pulls all of one app's windows forward at once, the hotkey terminal is a single summonable surface instead of N stray terminals, and **sheol** is the terminal version of the same fight — detached tmux sessions don't rot as invisible clutter, they're gathered into one ledger you actively clear. Reducing window entropy is a design goal, not an afterthought.
+
 ## Features
 
 - **Leader-key launcher** ([Leader Key](https://github.com/mikker/LeaderKey)) — one activation key opens a nested, Vim-style shortcut tree. `⇪ c o` → Codex, `⇪ c l` → Claude, `⇪ i t` → iTerm, `⇪ g p` → ChatGPT app, `⇪ g w` → an existing ChatGPT tab in Safari, and so on. No global-shortcut collisions, no chords to memorize. Full listing in [Keybind reference](#keybind-reference).
@@ -217,9 +219,9 @@ Each row: **name · command · born · quiet-for**.
 | `↑` / `↓` or `k` / `j` | walk the ledger |
 | `r` | **revive** — reattach the spirit in a **new** terminal window (a fresh body in the land of the living); the ledger stays open |
 | `c` | **commune** — step *into* the spirit in place to tend it *without* fully reviving it; the session's status bar shows the way back (`Ctrl-b d → back to sheol`), and detaching returns you to the ledger |
-| `d` `d` `d` | **banish** — destroy forever; press `d` three times, the `◆` ward decaying each press (irreversible, so it resists you) |
+| `d` `d` `d` | **banish** — press `d` three times (the `◆` ward decaying). A **living** spirit is **sent to sheol** (detached); a spirit **already in sheol** is **exiled** (killed forever). |
 
-(`⌘W` or `q` closes the ledger window.) *Revive* gives the spirit a new body (new window); *commune* is a temporary séance (detach with `Ctrl-b d` to return here); *banish* is permanent — a banished spirit cannot be recalled, which is why the triple-tap ward exists. There is deliberately **no Enter-to-attach** (an accidental Enter used to dump you straight into a session — gone).
+(`⌘W` or `q` closes the ledger window.) *Revive* gives the spirit a new body (new window); *commune* is a temporary séance (detach with `Ctrl-b d` to return here); *banish* is two-tier — banishing the **living** just **detaches** them into sheol (recoverable), while banishing what's **already dead exiles it for good** (killed), which is why the triple-tap ward guards it. There is deliberately **no Enter-to-attach** (an accidental Enter used to dump you straight into a session — gone).
 
 Only ever **one sheol** runs: pressing `⇪ t m u x` again kills any open ledger and opens a fresh one. It renders on the alternate screen with in-place redraw, so the ~2s auto-refresh doesn't flicker the scrollbar or flash the screen, and a brief `+++ S H E O L +++` reveal plays on open.
 
@@ -237,6 +239,17 @@ Only ever **one sheol** runs: pressing `⇪ t m u x` again kills any open ledger
 ### what we're doing here
 
 sheol is the first piece of a terminal necromancer theme for machine-spirit. the idea: your terminals are spirits. living ones have a watcher, detached ones wander the underworld with their work still breathing, and you get to revive them, commune with them, or banish them for good. it started as a way to never lose a long running session again and turned into something with a bit of soul. the real version lives in the machine-spirit app later (a dock nag that only haunts you while spirits wander, a gui ledger, non-tmux fragile terminals listed too). for now it's a terminal tui and it already goes hard. lean into the language everywhere: land of the living, restless spirits, revive, commune, banish. it's a workflow tool that's also a little bit alive.
+
+## Busy-pane shield (opt-in, default off)
+
+An experiment kept as a **toggle**: closing an iTerm pane that's running a live job (`claude`, `node`, a build) escalates Halo-style instead of dying on the first ⌘W — eased damage washes, a shield break, then an ASCII skull death on the fourth hit. It's driven by an iTerm Python-API daemon ([`bin/pane-shield.py`](bin/pane-shield.py)) that ⌘W is bound to.
+
+Honestly, it's more toy than necessity — the *safety* it provides is a built-in iTerm checkbox (Settings → Profiles → Session → "Prompt before closing → if jobs besides the login shell running"); the shield is the *fun* version, and terminals aren't game engines, so its polish is limited. It ships **off by default** and toggles with **no re-wiring**:
+
+- `~/bin/shield-on.sh` — arm it (busy panes now escalate on ⌘W)
+- `~/bin/shield-off.sh` — disarm it (⌘W closes normally); this is the default
+
+One-time setup is the ⌘W keybinding (iTerm → Keys → Key Bindings → ⌘W → *Invoke Script Function* → `pane_shield(session_id: id)`) and enabling iTerm's Python API. After that, on/off is just the flag file the daemon checks — instant, no restart. See `HANDOFF-NOTES.md` for the full story and why it's not the default.
 
 ## Command reliability — no focus-stealing dialogs
 
