@@ -38,3 +38,16 @@ commands in `forks/FORK-NOTES.md`. Stale README fork-strategy paragraph fixed;
 
 **Restore:** `git stash -u && git reset --hard <commit tagged [P1.2] below>`
 — or check out the commit whose subject starts with `[P1.2]`.
+
+### v0.2-fork-baseline — kit: model + lossless importer + round-trip gate `[P1.3]`
+
+`kit/MachineSpiritKit` (UI-free Swift package, headless `swift test`): Node
+model with native group+action duality, lossless Leader Key importer
+(unknown fields survive in `extras`), serializer, derived inertness via
+injectable probes, `GraphViewState` sidecar type. THE MECHANICAL WITNESS:
+14 tests green, including canonical round-trip of the repo fixture and
+unknown-key survival. Live config (153 nodes) also proven to round-trip
+canonically, read-only. This gate stays green at every checkpoint from here.
+
+**Restore:** `git stash -u && git reset --hard v0.2-fork-baseline`
+**Re-verify:** `cd kit/MachineSpiritKit && swift test`

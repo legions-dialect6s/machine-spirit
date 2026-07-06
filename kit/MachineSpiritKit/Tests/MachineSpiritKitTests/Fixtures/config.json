@@ -1,0 +1,826 @@
+{
+  "actions" : [
+    {
+      "actions" : [
+        {
+          "actions" : [
+            {
+              "key" : "1",
+              "type" : "command",
+              "value" : "open -g \"rectangle://execute-action?name=first-third\""
+            }
+          ],
+          "key" : "1",
+          "type" : "group"
+        }
+      ],
+      "key" : "1",
+      "type" : "group"
+    },
+    {
+      "actions" : [
+        {
+          "actions" : [
+            {
+              "key" : "2",
+              "type" : "command",
+              "value" : "open -g \"rectangle://execute-action?name=center-third\""
+            }
+          ],
+          "key" : "2",
+          "type" : "group"
+        }
+      ],
+      "key" : "2",
+      "type" : "group"
+    },
+    {
+      "actions" : [
+        {
+          "actions" : [
+            {
+              "key" : "3",
+              "type" : "command",
+              "value" : "open -g \"rectangle://execute-action?name=last-third\""
+            }
+          ],
+          "key" : "3",
+          "type" : "group"
+        }
+      ],
+      "key" : "3",
+      "type" : "group"
+    },
+    {
+      "actions" : [
+        {
+          "key" : "-",
+          "type" : "command",
+          "value" : "osascript __HOME__/bin/win-lerp.applescript -120"
+        }
+      ],
+      "key" : "-",
+      "type" : "group"
+    },
+    {
+      "actions" : [
+        {
+          "key" : "=",
+          "type" : "command",
+          "value" : "osascript __HOME__/bin/win-lerp.applescript 120"
+        }
+      ],
+      "key" : "=",
+      "type" : "group"
+    },
+    {
+      "actions" : [
+        {
+          "actions" : [
+            {
+              "key" : "a",
+              "type" : "command",
+              "value" : "open -g \"rectangle://execute-action?name=left-half\""
+            }
+          ],
+          "key" : "a",
+          "type" : "group"
+        },
+        {
+          "key" : "c",
+          "type" : "application",
+          "value" : "/System/Applications/Utilities/Activity Monitor.app"
+        },
+        {
+          "actions" : [
+            {
+              "actions" : [
+                {
+                  "key" : "m",
+                  "type" : "command",
+                  "value" : "open -g \"rectangle://execute-action?name=almost-maximize\""
+                }
+              ],
+              "key" : "m",
+              "type" : "group"
+            }
+          ],
+          "key" : "m",
+          "type" : "group"
+        }
+      ],
+      "key" : "a",
+      "type" : "group"
+    },
+    {
+      "actions" : [
+        {
+          "actions" : [
+            {
+              "key" : "b",
+              "type" : "command",
+              "value" : "open -g \"rectangle://execute-action?name=center-third\""
+            }
+          ],
+          "key" : "b",
+          "type" : "group"
+        }
+      ],
+      "key" : "b",
+      "type" : "group"
+    },
+    {
+      "actions" : [
+        {
+          "actions" : [
+            {
+              "key" : "r",
+              "type" : "application",
+              "value" : "/Applications/Google Chrome.app"
+            }
+          ],
+          "key" : "h",
+          "type" : "group"
+        },
+        {
+          "actions" : [
+            {
+              "key" : "c",
+              "type" : "command",
+              "value" : "open -g \"rectangle://execute-action?name=bottom-right\""
+            }
+          ],
+          "key" : "c",
+          "type" : "group"
+        },
+        {
+          "key" : "l",
+          "type" : "application",
+          "value" : "/Applications/Claude.app"
+        },
+        {
+          "key" : "o",
+          "type" : "application",
+          "value" : "/Applications/Codex.app"
+        },
+        {
+          "actions" : [
+            {
+              "key" : "n",
+              "type" : "command",
+              "value" : "osascript __HOME__/bin/center-window.applescript"
+            }
+          ],
+          "key" : "e",
+          "type" : "group"
+        },
+        {
+          "actions" : [
+            {
+              "key" : "s",
+              "type" : "command",
+              "value" : "open -g \"rectangle://execute-action?name=center\""
+            }
+          ],
+          "key" : "s",
+          "type" : "group"
+        },
+        {
+          "actions" : [
+            {
+              "key" : "h",
+              "type" : "command",
+              "value" : "~/bin/run-quiet.sh osascript -e 'tell application \"System Events\" to keystroke \" \"' -e 'delay 0.3' -e 'tell application \"System Events\" to keystroke \"4\" using command down'"
+            }
+          ],
+          "key" : "b",
+          "type" : "group"
+        }
+      ],
+      "key" : "c",
+      "type" : "group"
+    },
+    {
+      "actions" : [
+        {
+          "actions" : [
+            {
+              "key" : "d",
+              "type" : "command",
+              "value" : "open -g \"rectangle://execute-action?name=right-half\""
+            }
+          ],
+          "key" : "d",
+          "type" : "group"
+        },
+        {
+          "key" : "i",
+          "type" : "application",
+          "value" : "/Applications/Discord.app"
+        }
+      ],
+      "key" : "d",
+      "type" : "group"
+    },
+    {
+      "actions" : [
+        {
+          "actions" : [
+            {
+              "key" : "e",
+              "type" : "command",
+              "value" : "open -g \"rectangle://execute-action?name=top-right\""
+            }
+          ],
+          "key" : "e",
+          "type" : "group"
+        }
+      ],
+      "key" : "e",
+      "type" : "group"
+    },
+    {
+      "actions" : [
+        {
+          "actions" : [
+            {
+              "actions" : [
+                {
+                  "actions" : [
+                    {
+                      "actions" : [
+                        {
+                          "key" : ".",
+                          "type" : "command",
+                          "value" : "~/bin/run-quiet.sh osascript -e 'tell application \"Finder\" to open trash' -e 'tell application \"Finder\" to activate'"
+                        }
+                      ],
+                      "key" : ".",
+                      "type" : "group"
+                    }
+                  ],
+                  "key" : ".",
+                  "type" : "group"
+                }
+              ],
+              "key" : ".",
+              "type" : "group"
+            }
+          ],
+          "key" : ".",
+          "type" : "group"
+        },
+        {
+          "actions" : [
+            {
+              "key" : "c",
+              "type" : "application",
+              "value" : "/System/Applications/FaceTime.app"
+            },
+            {
+              "key" : "e",
+              "type" : "folder",
+              "value" : "__HOME__/Desktop/aesthetics "
+            },
+            {
+              "actions" : [
+                {
+                  "key" : "p",
+                  "type" : "folder",
+                  "value" : "/Applications"
+                }
+              ],
+              "key" : "p",
+              "type" : "group"
+            }
+          ],
+          "key" : "a",
+          "type" : "group"
+        },
+        {
+          "actions" : [
+            {
+              "actions" : [
+                {
+                  "key" : "c",
+                  "type" : "folder",
+                  "value" : "__HOME__/Documents"
+                },
+                {
+                  "key" : "w",
+                  "type" : "folder",
+                  "value" : "__HOME__/Downloads"
+                }
+              ],
+              "key" : "o",
+              "type" : "group"
+            }
+          ],
+          "key" : "d",
+          "type" : "group"
+        },
+        {
+          "actions" : [
+            {
+              "key" : "f",
+              "type" : "command",
+              "value" : "open -g \"rectangle://execute-action?name=next-display\""
+            }
+          ],
+          "key" : "f",
+          "type" : "group"
+        },
+        {
+          "key" : "i",
+          "type" : "application",
+          "value" : "/System/Library/CoreServices/Finder.app"
+        },
+        {
+          "key" : "p",
+          "type" : "folder",
+          "value" : "__HOME__/projects"
+        },
+        {
+          "actions" : [
+            {
+              "key" : "s",
+              "type" : "application",
+              "value" : "__HOME__/Documents/screenshots_n_recordings"
+            }
+          ],
+          "key" : "s",
+          "type" : "group"
+        },
+        {
+          "key" : "t",
+          "type" : "application",
+          "value" : "/System/Applications/FaceTime.app"
+        }
+      ],
+      "key" : "f",
+      "type" : "group"
+    },
+    {
+      "actions" : [
+        {
+          "actions" : [
+            {
+              "key" : "t",
+              "type" : "command",
+              "value" : "osascript ~/bin/web-jump.applescript github.com"
+            }
+          ],
+          "key" : "i",
+          "type" : "group"
+        },
+        {
+          "actions" : [
+            {
+              "actions" : [
+                {
+                  "key" : "k",
+                  "type" : "command",
+                  "value" : "osascript ~/bin/web-jump.applescript grok.com,x.com/i/grok"
+                }
+              ],
+              "key" : "o",
+              "type" : "group"
+            }
+          ],
+          "key" : "r",
+          "type" : "group"
+        },
+        {
+          "key" : "o",
+          "type" : "command",
+          "value" : "osascript ~/bin/web-jump.applescript google.com"
+        },
+        {
+          "key" : "p",
+          "type" : "application",
+          "value" : "/Applications/ChatGPT.app"
+        },
+        {
+          "key" : "w",
+          "type" : "command",
+          "value" : "osascript ~/bin/web-jump.applescript chatgpt.com,chat.openai.com"
+        }
+      ],
+      "key" : "g",
+      "type" : "group"
+    },
+    {
+      "key" : "h",
+      "type" : "command",
+      "value" : "~/bin/run-quiet.sh osascript -e 'tell application \"System Events\" to keystroke \"h\" using command down'"
+    },
+    {
+      "actions" : [
+        {
+          "key" : "g",
+          "type" : "command",
+          "value" : "osascript ~/bin/web-jump.applescript instagram.com"
+        },
+        {
+          "key" : "n",
+          "type" : "command",
+          "value" : "~/bin/run-quiet.sh osascript -e 'tell application \"iTerm\" to activate' -e 'tell application \"iTerm\" to create window with default profile'"
+        },
+        {
+          "key" : "t",
+          "type" : "command",
+          "value" : "~/bin/run-quiet.sh osascript ~/bin/iterm-front.applescript"
+        }
+      ],
+      "key" : "i",
+      "type" : "group"
+    },
+    {
+      "actions" : [
+        {
+          "key" : "k",
+          "type" : "command",
+          "value" : "open -a \"Leader Key\" --args --show-settings"
+        },
+        {
+          "key" : "l",
+          "type" : "command",
+          "value" : "~/bin/run-quiet.sh osascript -e 'tell application \"System Events\" to keystroke \"l\" using command down'"
+        },
+        {
+          "actions" : [
+            {
+              "actions" : [
+                {
+                  "key" : "s",
+                  "type" : "application",
+                  "value" : "/Applications/Little Snitch.app"
+                }
+              ],
+              "key" : "l",
+              "type" : "group"
+            },
+            {
+              "actions" : [
+                {
+                  "key" : "m",
+                  "type" : "command",
+                  "value" : "open -a \"Little Snitch Network Monitor\""
+                }
+              ],
+              "key" : "n",
+              "type" : "group"
+            }
+          ],
+          "key" : "s",
+          "type" : "group"
+        }
+      ],
+      "key" : "l",
+      "type" : "group"
+    },
+    {
+      "actions" : [
+        {
+          "key" : "e",
+          "type" : "application",
+          "value" : "/System/Applications/Messages.app"
+        },
+        {
+          "actions" : [
+            {
+              "key" : "m",
+              "type" : "command",
+              "value" : "open -g \"rectangle://execute-action?name=maximize\""
+            }
+          ],
+          "key" : "m",
+          "type" : "group"
+        }
+      ],
+      "key" : "m",
+      "type" : "group"
+    },
+    {
+      "actions" : [
+        {
+          "actions" : [
+            {
+              "key" : "n",
+              "type" : "command",
+              "value" : "open -g \"rectangle://execute-action?name=last-third\""
+            }
+          ],
+          "key" : "n",
+          "type" : "group"
+        },
+        {
+          "key" : "o",
+          "type" : "application",
+          "value" : "/System/Applications/Notes.app"
+        }
+      ],
+      "key" : "n",
+      "type" : "group"
+    },
+    {
+      "actions" : [
+        {
+          "key" : "h",
+          "type" : "application",
+          "value" : "/System/Applications/Photos.app"
+        },
+        {
+          "key" : "s",
+          "type" : "application",
+          "value" : "/Applications/Adobe Photoshop 2026/Adobe Photoshop 2026.app"
+        }
+      ],
+      "key" : "p",
+      "type" : "group"
+    },
+    {
+      "actions" : [
+        {
+          "actions" : [
+            {
+              "key" : "q",
+              "type" : "command",
+              "value" : "open -g \"rectangle://execute-action?name=top-left\""
+            }
+          ],
+          "key" : "q",
+          "type" : "group"
+        },
+        {
+          "actions" : [
+            {
+              "actions" : [
+                {
+                  "key" : "t",
+                  "type" : "command",
+                  "value" : "~/bin/run-quiet.sh osascript -e 'tell application \"System Events\" to keystroke \"q\" using command down'"
+                }
+              ],
+              "key" : "i",
+              "type" : "group"
+            }
+          ],
+          "key" : "u",
+          "type" : "group"
+        }
+      ],
+      "key" : "q",
+      "type" : "group"
+    },
+    {
+      "actions" : [
+        {
+          "key" : "r",
+          "type" : "command",
+          "value" : "osascript ~/bin/site-home.applescript"
+        }
+      ],
+      "key" : "r",
+      "type" : "group"
+    },
+    {
+      "actions" : [
+        {
+          "key" : "a",
+          "type" : "command",
+          "value" : "~/bin/run-quiet.sh osascript ~/bin/browser-window-cycle.applescript"
+        },
+        {
+          "key" : "e",
+          "type" : "application",
+          "value" : "/System/Applications/System Settings.app"
+        },
+        {
+          "key" : "p",
+          "type" : "application",
+          "value" : "/Applications/Spotify.app"
+        },
+        {
+          "actions" : [
+            {
+              "key" : "f",
+              "type" : "command",
+              "value" : "~/bin/run-quiet.sh ~/bin/screenshots/ss-finder.sh"
+            },
+            {
+              "key" : "m",
+              "type" : "command",
+              "value" : "~/bin/run-quiet.sh ~/bin/screenshots/ss-menu.sh"
+            },
+            {
+              "actions" : [
+                {
+                  "key" : "s",
+                  "type" : "command",
+                  "value" : "~/bin/run-quiet.sh ~/bin/screenshots/ss-rec-sel.sh"
+                },
+                {
+                  "key" : "w",
+                  "type" : "command",
+                  "value" : "~/bin/run-quiet.sh ~/bin/screenshots/ss-rec-whole.sh"
+                },
+                {
+                  "key" : "x",
+                  "type" : "command",
+                  "value" : "~/bin/run-quiet.sh ~/bin/screenshots/ss-rec-stop.sh"
+                }
+              ],
+              "key" : "r",
+              "type" : "group"
+            },
+            {
+              "actions" : [
+                {
+                  "key" : "c",
+                  "type" : "command",
+                  "value" : "~/bin/run-quiet.sh ~/bin/screenshots/ss-sel-copy.sh"
+                },
+                {
+                  "key" : "s",
+                  "type" : "command",
+                  "value" : "~/bin/run-quiet.sh ~/bin/screenshots/ss-sel-save.sh"
+                }
+              ],
+              "key" : "s",
+              "type" : "group"
+            },
+            {
+              "actions" : [
+                {
+                  "key" : "c",
+                  "type" : "command",
+                  "value" : "~/bin/run-quiet.sh ~/bin/screenshots/ss-whole-copy.sh"
+                },
+                {
+                  "key" : "s",
+                  "type" : "command",
+                  "value" : "~/bin/run-quiet.sh ~/bin/screenshots/ss-whole-save.sh"
+                }
+              ],
+              "key" : "w",
+              "type" : "group"
+            }
+          ],
+          "key" : "s",
+          "type" : "group"
+        },
+        {
+          "key" : "t",
+          "type" : "command",
+          "value" : "osascript ~/bin/web-jump.applescript x.com,twitter.com"
+        },
+        {
+          "key" : "x",
+          "type" : "command",
+          "value" : "osascript ~/bin/web-jump.applescript x.com,twitter.com"
+        }
+      ],
+      "key" : "s",
+      "type" : "group"
+    },
+    {
+      "actions" : [
+        {
+          "key" : "e",
+          "type" : "application",
+          "value" : "/System/Applications/TextEdit.app"
+        },
+        {
+          "key" : "r",
+          "type" : "application",
+          "value" : "/System/Applications/Utilities/Terminal.app"
+        },
+        {
+          "key" : "t",
+          "type" : "command",
+          "value" : "~/bin/run-quiet.sh ~/bin/tmux-launch.sh"
+        },
+        {
+          "actions" : [
+            {
+              "actions" : [
+                {
+                  "key" : "x",
+                  "type" : "command",
+                  "value" : "~/bin/run-quiet.sh ~/bin/tmux-sheol-open.sh"
+                }
+              ],
+              "key" : "u",
+              "type" : "group"
+            }
+          ],
+          "key" : "m",
+          "type" : "group"
+        },
+        {
+          "key" : "d",
+          "type" : "command",
+          "value" : "~/bin/run-quiet.sh ~/bin/tmux-split.sh"
+        }
+      ],
+      "key" : "t",
+      "type" : "group"
+    },
+    {
+      "actions" : [
+        {
+          "actions" : [
+            {
+              "key" : "v",
+              "type" : "command",
+              "value" : "open -g \"rectangle://execute-action?name=first-third\""
+            }
+          ],
+          "key" : "v",
+          "type" : "group"
+        },
+        {
+          "actions" : [
+            {
+              "key" : "w",
+              "type" : "command",
+              "value" : "osascript __HOME__/bin/vmware.applescript"
+            }
+          ],
+          "key" : "m",
+          "type" : "group"
+        }
+      ],
+      "key" : "v",
+      "type" : "group"
+    },
+    {
+      "actions" : [
+        {
+          "key" : "h",
+          "type" : "application",
+          "value" : "/Applications/WhatsApp.app"
+        },
+        {
+          "actions" : [
+            {
+              "key" : "w",
+              "type" : "command",
+              "value" : "open -g \"rectangle://execute-action?name=top-half\""
+            }
+          ],
+          "key" : "w",
+          "type" : "group"
+        }
+      ],
+      "key" : "w",
+      "type" : "group"
+    },
+    {
+      "actions" : [
+        {
+          "key" : ".",
+          "type" : "command",
+          "value" : "osascript ~/bin/web-jump.applescript x.com,twitter.com"
+        },
+        {
+          "actions" : [
+            {
+              "key" : "x",
+              "type" : "command",
+              "value" : "open -g \"rectangle://execute-action?name=bottom-half\""
+            }
+          ],
+          "key" : "x",
+          "type" : "group"
+        }
+      ],
+      "key" : "x",
+      "type" : "group"
+    },
+    {
+      "key" : "y",
+      "type" : "command",
+      "value" : "osascript ~/bin/web-jump.applescript youtube.com"
+    },
+    {
+      "actions" : [
+        {
+          "actions" : [
+            {
+              "key" : "z",
+              "type" : "command",
+              "value" : "open -g \"rectangle://execute-action?name=bottom-left\""
+            }
+          ],
+          "key" : "z",
+          "type" : "group"
+        }
+      ],
+      "key" : "z",
+      "type" : "group"
+    }
+  ],
+  "type" : "group"
+}
