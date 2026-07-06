@@ -1,0 +1,11 @@
+#!/bin/bash
+
+BUILD=$(git rev-list "$(git rev-parse --abbrev-ref HEAD)" | wc -l | awk '{ print $1 }')
+BUILD="$((BUILD + 0))"
+
+echo "${BUILD}"
+
+agvtool new-version -all ${BUILD}
+
+echo "Resolving package dependencies"
+xcodebuild -resolvePackageDependencies
