@@ -55,8 +55,6 @@ private struct NodeBranch: View {
         .tag(node.id)
         .id(node.id)
         .listRowBackground(Color.clear)
-        .contentShape(Rectangle())
-        .onTapGesture { _ = state.strikeSheolNode(node) }
     } else {
       DisclosureGroup(
         isExpanded: Binding(

@@ -167,3 +167,17 @@ Selection glides to center, smoothstep (win-lerp lineage).
 
 **Restore:** `git stash -u && git reset --hard <commit tagged [P1.10]>`
 **Re-verify:** build & open; type `1 1 1`; scroll/⌘scroll; Tab panes.
+
+### Spirits leave the config graph (owner ruling) + drive polish `[P1.11]`
+
+Owner ruled the living sheol node OUT of the config graph — that surface is
+for binds and commands (HANDOFF-NOTES #26 🔒). Graft + in-graph strikes
+reverted (history keeps them at [P1.9b]–[P1.10]); sheol-core, SheolService,
+and the footer nag remain as plumbing for the future ledger surface (#15).
+Same slice: twisty deterministic cables, dead-space click deselects,
+walking STAYS at branch ends (Esc/click to reset), ⌘=/⌘- zoom anchors on
+the selection, ⌘R breathes the graph + flashes "✓ re-imported N nodes".
+
+**Restore:** `git stash -u && git reset --hard <commit tagged [P1.11]>`
+**Re-verify:** build & open; walk to a leaf and keep typing (stays); click
+dead space (clears); ⌘R (breathe + flash).

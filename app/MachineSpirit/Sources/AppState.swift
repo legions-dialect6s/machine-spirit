@@ -78,9 +78,9 @@ final class AppState {
 
       if modifiers == .command {
         switch event.charactersIgnoringModifiers {
-        case "r": self.communeWithLiveConfig(); return nil
-        case "=", "+": self.zoom = min(self.zoom * 1.25, self.maxZoom); return nil
-        case "-": self.zoom = max(self.zoom / 1.25, self.minZoom); return nil
+        case "r": self.refresh(); return nil
+        case "=", "+": self.zoomKeyed(by: 1.25); return nil
+        case "-": self.zoomKeyed(by: 1 / 1.25); return nil
         default: return event
         }
       }
@@ -95,11 +95,6 @@ final class AppState {
         return nil
       case 51:  // delete — one step back up
         self.stepUp()
-        return nil
-      case 36:  // return — strike a sheol verb
-        if let id = self.selectedNodeID, let node = self.displayModel?.node(withID: id) {
-          _ = self.strikeSheolNode(node)
-        }
         return nil
       default:
         break
@@ -117,16 +112,53 @@ final class AppState {
   }
 
   /// Leader Key's grammar, in both views: match the typed key against the
-  /// current selection's children; a leaf with no match restarts from root.
+  /// current selection's children. At the end of a branch you STAY — more
+  /// keys do nothing; Esc (or dead-space click) returns to the root.
   private func walk(typed: String) -> Bool {
     guard let root = displayModel else { return false }
     let anchor = selectedNodeID.flatMap { root.node(withID: $0) } ?? root
-    if let hit = match(typed, in: anchor) ?? match(typed, in: root) {
+    if let hit = match(typed, in: anchor) {
       selectedNodeID = hit.id
       revealSelectionInTree()
       return true
     }
-    return false
+    // Consume the key anyway when a node is selected — a mistyped key at
+    // the end of a chain shouldn't leak into the system.
+    return selectedNodeID != nil
+  }
+
+  /// ⌘= / ⌘- : zoom anchored on the selection when there is one.
+  private func zoomKeyed(by factor: CGFloat) {
+    let newZoom = min(max(zoom * factor, minZoom), maxZoom)
+    if let id = selectedNodeID, let model = displayModel,
+      let position = RadialLayout.layout(root: model).positions[id]
+    {
+      glide(
+        toPan: CGSize(width: -position.x * newZoom, height: -position.y * newZoom),
+        zoom: newZoom)
+    } else {
+      zoom = newZoom
+    }
+  }
+
+  // MARK: - Refresh, with something to feel
+
+  var refreshFlashing = false
+
+  func refresh() {
+    communeWithLiveConfig()
+    Task { spirits = await SheolService.list() }
+    refreshFlashing = true
+    // The graph takes a breath: a small zoom swell out and back.
+    let restingZoom = zoom
+    let restingPan = pan
+    glide(toPan: restingPan, zoom: restingZoom * 1.1)
+    Task { [weak self] in
+      try? await Task.sleep(for: .milliseconds(400))
+      self?.glide(toPan: restingPan, zoom: restingZoom)
+      try? await Task.sleep(for: .milliseconds(1200))
+      self?.refreshFlashing = false
+    }
   }
 
   private func match(_ typed: String, in node: Node) -> Node? {
@@ -171,75 +203,19 @@ final class AppState {
   // MARK: - sheol, live
 
   /// Wandering spirits from the last poll (detached tmux sessions).
+  ///
+  /// Owner ruling (2026-07-06): live sessions do NOT appear inside the
+  /// config graph — that surface is for binds and commands. Spirits get
+  /// their own ledger surface later (design cache #15); until then the
+  /// footer carries the quiet nag and the TUI remains the ledger.
   var spirits: [Spirit] = []
-
-  /// The ◆◆◇ ward: banish arms per-node and decays after ~2s untouched.
-  var banishArm: (nodeID: String, count: Int, at: Date)?
 
   @ObservationIgnored private var sheolPollTask: Task<Void, Never>?
 
-  static let spiritType = "spirit"
-  static let reviveType = "sheol-revive"
-  static let banishType = "sheol-banish"
-
-  /// What the views render: the imported config with the sheol bind grown
-  /// into a living node while spirits wander. Conditional visibility —
-  /// when sheol is empty the bind stays its plain imported self.
-  var displayModel: Node? {
-    guard let model else { return nil }
-    let wanderers = spirits.filter(\.isWandering)
-    guard !wanderers.isEmpty, let sheolID = sheolBindID(in: model) else { return model }
-    return graft(into: model, at: sheolID, wanderers: wanderers)
-  }
-
-  /// The bind that opens the full ledger (`tmux-sheol-open.sh`) is THE
-  /// sheol node — found by its value, not a hardcoded key path.
-  private func sheolBindID(in root: Node) -> String? {
-    if let action = root.action, action.value.contains("tmux-sheol-open") {
-      return root.id
-    }
-    for child in root.children {
-      if let found = sheolBindID(in: child) { return found }
-    }
-    return nil
-  }
-
-  private func graft(into node: Node, at id: String, wanderers: [Spirit]) -> Node {
-    var node = node
-    if node.id == id {
-      // Group+action duality on display: the ledger-opening action keeps
-      // its core; the wandering spirits give it the ring. Both lit.
-      node.children = wanderers.map { spirit in
-        let base = "\(id)/spirit:\(spirit.name)"
-        let armed = banishArm?.nodeID == "\(base)/banish" ? banishArm!.count : 0
-        let ward = (0..<3).map { $0 < armed ? "◆" : "◇" }.joined()
-        return Node(
-          id: base,
-          key: "⌁",
-          label: "\(spirit.name) · \(spirit.command) · quiet \(spirit.quietFor)",
-          children: [
-            Node(
-              id: "\(base)/revive",
-              key: "r",
-              label: "revive — a new body",
-              action: .other(type: Self.reviveType, value: spirit.name)),
-            Node(
-              id: "\(base)/banish",
-              key: "d",
-              label: "banish \(ward) — exile forever",
-              action: .other(type: Self.banishType, value: spirit.name)),
-          ],
-          extras: [:],
-          hadExplicitType: false,
-          hadChildrenArray: true
-        )
-      }
-      node.hadChildrenArray = true
-      return node
-    }
-    node.children = node.children.map { graft(into: $0, at: id, wanderers: wanderers) }
-    return node
-  }
+  /// What the views render. (Identical to `model` since the owner ruled
+  /// spirits out of the config graph; kept as the views' single entry
+  /// point for whatever display-only layers come later.)
+  var displayModel: Node? { model }
 
   func startSheolPolling() {
     guard sheolPollTask == nil else { return }
@@ -248,43 +224,8 @@ final class AppState {
         let spirits = await SheolService.list()
         guard let self else { return }
         if self.spirits != spirits { self.spirits = spirits }
-        if let arm = self.banishArm, Date().timeIntervalSince(arm.at) > 2 {
-          self.banishArm = nil  // the ward decays
-        }
         try? await Task.sleep(for: .seconds(2))
       }
-    }
-  }
-
-  /// Invoked when a synthetic sheol action node is struck in either view.
-  /// Returns true if the node was a sheol action (and was handled).
-  func strikeSheolNode(_ node: Node) -> Bool {
-    guard case .other(let type, let name) = node.action else { return false }
-    switch type {
-    case Self.reviveType:
-      Task {
-        await SheolService.revive(name)
-        spirits = await SheolService.list()
-      }
-      return true
-    case Self.banishType:
-      if let arm = banishArm, arm.nodeID == node.id {
-        let count = arm.count + 1
-        if count >= 3 {
-          banishArm = nil
-          Task {
-            await SheolService.exile(name)
-            spirits = await SheolService.list()
-          }
-        } else {
-          banishArm = (node.id, count, Date())
-        }
-      } else {
-        banishArm = (node.id, 1, Date())
-      }
-      return true
-    default:
-      return false
     }
   }
 }

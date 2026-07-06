@@ -23,13 +23,17 @@ struct ContentView: View {
         .foregroundStyle(Theme.phosphor)
       Spacer()
       Button {
-        state.communeWithLiveConfig()
+        state.refresh()
       } label: {
-        Label("refresh", systemImage: "arrow.trianglehead.2.clockwise")
-          .font(.system(.callout, design: .monospaced))
+        Label(
+          state.refreshFlashing ? "✓ re-imported \((state.displayModel?.totalCount ?? 1) - 1) nodes" : "refresh",
+          systemImage: "arrow.trianglehead.2.clockwise"
+        )
+        .font(.system(.callout, design: .monospaced))
       }
       .buttonStyle(.plain)
-      .foregroundStyle(Theme.phosphorDim)
+      .foregroundStyle(state.refreshFlashing ? Theme.phosphor : Theme.phosphorDim)
+      .animation(.easeOut(duration: 0.2), value: state.refreshFlashing)
       .help("re-import the live Leader Key config (read-only) — ⌘R")
     }
     .padding(.horizontal, 14)
@@ -99,7 +103,7 @@ struct ContentView: View {
         .font(.system(.caption, design: .monospaced))
         .foregroundStyle(wanderers > 0 ? Theme.magenta : Theme.ash.opacity(0.6))
       Spacer()
-      Text("type keys to walk · esc root · ⌫ up · ⏎ strike · ⌘R refresh")
+      Text("type keys to walk · esc root · ⌫ up · ⌘R refresh")
         .font(.system(.caption, design: .monospaced))
         .foregroundStyle(Theme.ash.opacity(0.7))
     }

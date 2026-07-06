@@ -14,36 +14,26 @@ enum Theme {
   static let ash = Color(white: 0.52)
   static let ice = Color(red: 0.5, green: 0.93, blue: 0.9)
 
-  /// Synthetic sheol nodes (spirits and their verbs) wear the necromantic
-  /// accent. Display-only — these nodes never serialize.
-  static func isNecromantic(_ node: Node) -> Bool {
-    node.id.contains("/spirit:")
-  }
-
   static func badgeText(for node: Node) -> String {
-    guard let action = node.action else { return isNecromantic(node) ? "⌁" : "GRP" }
+    guard let action = node.action else { return "GRP" }
     if action.windowAction != nil { return "WIN" }
     switch action {
     case .application: return "APP"
     case .command: return "CMD"
     case .folder: return "DIR"
     case .url: return "URL"
-    case .other(AppState.reviveType, _): return "REV"
-    case .other(AppState.banishType, _): return "BAN"
     case .other(let type, _): return String(type.prefix(3)).uppercased()
     }
   }
 
   static func badgeColor(for node: Node) -> Color {
-    guard let action = node.action else { return isNecromantic(node) ? magenta : phosphorDim }
+    guard let action = node.action else { return phosphorDim }
     if action.windowAction != nil { return ice }
     switch action {
     case .application: return phosphor
     case .command: return Color(red: 0.55, green: 0.9, blue: 1.0)
     case .folder: return Color(red: 0.95, green: 0.8, blue: 0.35)
     case .url: return Color(red: 0.65, green: 0.7, blue: 1.0)
-    case .other(AppState.reviveType, _): return phosphor
-    case .other(AppState.banishType, _): return magenta
     case .other: return ash
     }
   }

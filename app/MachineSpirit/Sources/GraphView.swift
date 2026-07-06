@@ -57,12 +57,13 @@ struct GraphView: View {
       .onTapGesture { location in
         guard let model, let layout else { return }
         let transform = canvasTransform(viewport: geometry.size)
+        _ = model
         if let hitID = hitTest(location, in: layout, transform: transform) {
           state.selectedNodeID = hitID
           state.revealSelectionInTree()
-          if let node = model.node(withID: hitID) {
-            _ = state.strikeSheolNode(node)
-          }
+        } else {
+          // Dead space clears the walk — typing starts from the root again.
+          state.selectedNodeID = nil
         }
       }
       .onChange(of: state.selectedNodeID) {
@@ -206,29 +207,36 @@ struct GraphView: View {
       layer.addFilter(.shadow(color: Theme.phosphor.opacity(0.5), radius: 3))
       var livePath = Path()
       var inertPath = Path()
-      var sheolPath = Path()
       walk(root) { node in
         guard let from = layout.positions[node.id] else { return }
         for child in node.children {
           guard let to = layout.positions[child.id] else { continue }
           let a = transform.apply(from)
           let b = transform.apply(to)
-          // A gentle bow: control points pulled toward the midpoint radius.
+          // Twisty cables: each edge bows perpendicular to its run, the
+          // side and swell varied per-child so the loom reads organic.
           let mid = CGPoint(x: (a.x + b.x) / 2, y: (a.y + b.y) / 2)
+          let run = CGPoint(x: b.x - a.x, y: b.y - a.y)
+          let length = max(hypot(run.x, run.y), 0.001)
+          // Stable per-child variation (String.hashValue reseeds per launch
+          // and would break launch-to-launch determinism).
+          let byteSum = child.id.utf8.reduce(0) { $0 &+ Int($1) }
+          let side: CGFloat = byteSum & 1 == 0 ? 1 : -1
+          let swell = length * (0.14 + CGFloat(byteSum % 5) * 0.02) * side
+          let control = CGPoint(
+            x: mid.x - run.y / length * swell,
+            y: mid.y + run.x / length * swell)
           var segment = Path()
           segment.move(to: a)
-          segment.addQuadCurve(to: b, control: mid)
+          segment.addQuadCurve(to: b, control: control)
           if child.status.isInert {
             inertPath.addPath(segment)
-          } else if Theme.isNecromantic(child) {
-            sheolPath.addPath(segment)
           } else {
             livePath.addPath(segment)
           }
         }
       }
       layer.stroke(livePath, with: .color(Theme.phosphorDim.opacity(0.75)), lineWidth: 1)
-      layer.stroke(sheolPath, with: .color(Theme.magenta.opacity(0.7)), lineWidth: 1)
       layer.stroke(inertPath, with: .color(Theme.ash.opacity(0.3)), lineWidth: 1)
     }
   }
@@ -244,13 +252,12 @@ struct GraphView: View {
       let center = transform.apply(position)
       let inert = node.status.isInert
       let selected = node.id == state.selectedNodeID
-      let necromantic = node.isDual || Theme.isNecromantic(node)
       // A pruned node still opens onward — the band just hides it for now.
       let hidesMore = node.extras["__ms_pruned"] != nil
       // Constant screen size: the space zooms, the nodes do not.
       let radius = node.isDual ? dualRadius : nodeRadius
 
-      let primary: Color = inert ? Theme.ash : (necromantic ? Theme.magenta : Theme.phosphor)
+      let primary: Color = inert ? Theme.ash : (node.isDual ? Theme.magenta : Theme.phosphor)
 
       context.drawLayer { layer in
         if !inert {
@@ -317,7 +324,7 @@ struct GraphView: View {
   private func glyphColor(for node: Node) -> Color {
     if node.status.isInert { return Theme.ash }
     if node.action != nil { return Color.white.opacity(0.92) }
-    return node.isDual || Theme.isNecromantic(node) ? Theme.magenta : Theme.phosphor
+    return node.isDual ? Theme.magenta : Theme.phosphor
   }
 
   private func walk(_ node: Node, _ visit: (Node) -> Void) {
