@@ -28,7 +28,7 @@
 # no "detached-at" time (quiet-for = time since last activity); non-tmux
 # "fragile" panes + the dock nag are deferred to the app.
 
-REFRESH=2
+REFRESH=1        # poll interval; redraw only fires when something actually changed
 
 BOLD=$'\e[1m'; DIM=$'\e[2m'; INV=$'\e[7m'; RST=$'\e[0m'
 GRN=$'\e[32m'; RED=$'\e[31m'; YEL=$'\e[33m'; CYN=$'\e[36m'; MAG=$'\e[35m'
@@ -69,7 +69,17 @@ load() {
 	total=${#names[@]}
 }
 
-sig() { printf '%s|%s|%s|%s|%s|%s' "$total" "$first_dead" "$sel" "$arm" "$arm_sel" "${names[*]}"; }
+sig() {
+	# capture everything VISIBLE so any real change (session added/removed,
+	# attach<->detach, the running command changing, a minute ticking on
+	# born/quiet-for) triggers a redraw — but nothing that would churn every tick
+	# (times are minute-bucketed via fmt_ago, not raw epochs).
+	local s="$total|$first_dead|$sel|$arm|$arm_sel" i
+	for (( i=0; i<total; i++ )); do
+		s+="|${names[$i]}:${cmds[$i]}:${state[$i]}:$(fmt_ago "${born[$i]}"):$(fmt_ago "${acts[$i]}")"
+	done
+	printf '%s' "$s"
+}
 
 ward() {   # $1 = arm, $2 = 1 living (→sheol) / 0 dead (→exile)
 	local a=$1 o='' i where
@@ -138,6 +148,7 @@ commune() {
 banish_step() {
 	(( total == 0 )) && return
 	if (( arm_sel != sel )); then arm=1; arm_sel=$sel; else (( arm++ )); fi
+	arm_at=$SECONDS
 	if (( arm >= 3 )); then
 		if (( ${state[$sel]} == 1 )); then
 			tmux detach-client -s "${names[$sel]}" 2>/dev/null   # living -> sheol
@@ -149,7 +160,7 @@ banish_step() {
 	fi
 }
 
-sel=0; arm=0; arm_sel=-1
+sel=0; arm=0; arm_sel=-1; arm_at=0
 printf '\e[?1049h\e[?25l'
 intro
 load
@@ -161,7 +172,8 @@ while :; do
 	# timeout (refresh); a closed stdin -> real EOF (exit, don't busy-loop).
 	if ! IFS= read -rsn1 -t "$REFRESH" key; then
 		[ -t 0 ] || break                   # stdin gone -> exit
-		arm=0; arm_sel=-1; load             # tty timeout -> refresh roster
+		(( arm > 0 && SECONDS - arm_at >= 2 )) && { arm=0; arm_sel=-1; }  # ward decays after ~2s idle
+		load                                # tty timeout -> refresh roster
 		(( sel >= total )) && sel=$(( total > 0 ? total - 1 : 0 ))
 		new=$(sig); [ "$new" != "$sig" ] && { draw; sig=$new; }   # redraw only if changed
 		continue
