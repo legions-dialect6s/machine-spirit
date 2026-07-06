@@ -223,6 +223,8 @@ Each row: **name · command · born · quiet-for**.
 
 (`⌘W` or `q` closes the ledger window.) *Revive* gives the spirit a new body (new window); *commune* is a temporary séance (detach with `Ctrl-b d` to return here); *banish* is two-tier — banishing the **living** just **detaches** them into sheol (recoverable), while banishing what's **already dead exiles it for good** (killed), which is why the triple-tap ward guards it. There is deliberately **no Enter-to-attach** (an accidental Enter used to dump you straight into a session — gone).
 
+Under the hood, every tmux operation (list/revive/detach/kill) goes through [`bin/sheol-core`](bin/sheol-core) — a policy-free verb layer shared between this TUI and MachineSpirit.app's live sheol node, so both always agree on what the spirits are doing. The two-tier banish decision stays in the callers.
+
 Only ever **one sheol** runs: pressing `⇪ t m u x` again kills any open ledger and opens a fresh one. It renders on the alternate screen with in-place redraw, so the ~2s auto-refresh doesn't flicker the scrollbar or flash the screen, and a brief `+++ S H E O L +++` reveal plays on open.
 
 > **Stuck in an attached session** (e.g. one running a full-screen TUI that eats `Ctrl-b`)? From any *other* window run `tmux detach-client` — it pops every client out; the sessions keep living.
@@ -285,6 +287,7 @@ machine-spirit/
 │   ├── tmux-session.sh     # the protected pane's program: TMUX badge + exec tmux
 │   ├── tmux-split.sh       # t d: split current iTerm pane into a tmux-protected one
 │   ├── tmux-sheol.sh       # the sheol TUI: revive / commune / banish tmux spirits
+│   ├── sheol-core          # shared primitive verbs (list/revive/detach/kill) — TUI + app
 │   ├── tmux-sheol-open.sh  # t m u x: open the ONE sheol (kills any old one first)
 │   ├── iterm-new-window.sh # shared: open a new iTerm window running a command
 │   ├── reload-leaderkey.sh # restart Leader Key so a config edit goes live

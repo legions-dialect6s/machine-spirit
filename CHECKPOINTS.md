@@ -117,3 +117,21 @@ the flourish waits for the owner demo / Phase 2.
 **Restore:** `git stash -u && git reset --hard <commit tagged [P1.8]>`
 **Re-verify:** rebuild the fork (command in FORK-NOTES.md); supervised demo
 as documented under [P1.7].
+
+### sheol-core extracted; TUI rewired; parity proven `[P1.9a]`
+
+`bin/sheol-core` (zsh): policy-free verbs — `list` (byte-identical to the
+TUI's \x1f format), `list --json`, `revive`, `detach`, `kill`; exact-match
+`=name` targeting; exits 0 on expected-empty; never dialogs; forwards
+TMUX_TMPDIR into revive's new window. The TUI's four call sites rewired
+(bash-3.2-clean; trap/redraw/signature machinery untouched). Proven on an
+isolated socket: list parity byte-for-byte, JSON valid (incl. a space in a
+session name), detach 1→0, revive 0→1 in a fresh window, kill exiles.
+War story renewed: `$TMUX` must be UNSET in tests — a client inside a
+session ignores TMUX_TMPDIR (three stray sessions briefly landed on the real
+server; removed by exact name; nothing else touched).
+This checkpoint stands alone: if 9b dies, the TUI works and the core exists.
+
+**Restore:** `git stash -u && git reset --hard <commit tagged [P1.9a]>`
+**Re-verify:** run the scratch test (unset TMUX; TMUX_TMPDIR=$(mktemp -d));
+owner glances at repo TUI on the real socket, read-only.

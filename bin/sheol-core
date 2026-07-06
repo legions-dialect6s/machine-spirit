@@ -1,0 +1,95 @@
+#!/bin/zsh
+# sheol-core — primitive verbs over tmux for sheol's operations. The single
+# source of truth shared by the TUI (bin/tmux-sheol.sh) and MachineSpirit.app.
+#
+#   sheol-core list          one line per session, \x1f-delimited:
+#                            name US attached US created US activity US command
+#                            (byte-identical to what the TUI's load() parses)
+#   sheol-core list --json   the same data as a JSON array
+#   sheol-core revive <name> reattach the spirit in a NEW iTerm window
+#   sheol-core detach <name> pop its clients (living -> sheol)
+#   sheol-core kill <name>   end it forever (dead -> exile)
+#
+# Policy-free by design: the living→sheol / dead→exile two-tier decision and
+# the triple-tap ward stay in the callers. This core only does verbs.
+#
+# Safety: never raises dialogs; exits 0 on expected-empty paths (no tmux, no
+# server, no such session); inherits TMUX_TMPDIR from the environment so
+# tests isolate for free — revive forwards it into the new window's attach.
+
+set -u
+
+US=$'\x1f'
+FMT="#{session_name}${US}#{session_attached}${US}#{session_created}${US}#{session_activity}${US}#{pane_current_command}"
+HERE="${0:A:h}"
+
+have_tmux() { command -v tmux >/dev/null 2>&1 }
+
+json_escape() {
+  local s=$1
+  s=${s//\\/\\\\}
+  s=${s//\"/\\\"}
+  s=${s//$'\t'/\\t}
+  s=${s//$'\r'/\\r}
+  s=${s//$'\n'/\\n}
+  print -rn -- "$s"
+}
+
+verb="${1:-}"
+case "$verb" in
+  list)
+    have_tmux || exit 0
+    if [[ "${2:-}" == "--json" ]]; then
+      print -n '['
+      tmux list-sessions -F "$FMT" 2>/dev/null | {
+        first=1
+        while IFS="$US" read -r name attached created activity command; do
+          [[ -z "$name" ]] && continue
+          [[ "$attached" == <-> ]] || attached=0
+          [[ "$created" == <-> ]] || created=0
+          [[ "$activity" == <-> ]] || activity=0
+          (( first )) || print -n ','
+          first=0
+          print -rn -- "{\"name\":\"$(json_escape "$name")\",\"attached\":${attached},\"created\":${created},\"activity\":${activity},\"command\":\"$(json_escape "${command:-?}")\"}"
+        done
+      }
+      print ']'
+    else
+      tmux list-sessions -F "$FMT" 2>/dev/null
+    fi
+    exit 0
+    ;;
+  revive)
+    name="${2:-}"
+    [[ -z "$name" ]] && exit 0
+    have_tmux || exit 0
+    tmux has-session -t "=$name" 2>/dev/null || exit 0
+    # A GUI can't host `tmux attach` inline — a fresh body means a new window.
+    # env-forward TMUX_TMPDIR so an isolated-socket test revives on the same
+    # isolated socket instead of the default one.
+    if [[ -n "${TMUX_TMPDIR:-}" ]]; then
+      "$HERE/iterm-new-window.sh" env TMUX_TMPDIR="$TMUX_TMPDIR" tmux attach -t "$name"
+    else
+      "$HERE/iterm-new-window.sh" tmux attach -t "$name"
+    fi
+    exit 0
+    ;;
+  detach)
+    name="${2:-}"
+    [[ -z "$name" ]] && exit 0
+    have_tmux || exit 0
+    tmux detach-client -s "=$name" 2>/dev/null
+    exit 0
+    ;;
+  kill)
+    name="${2:-}"
+    [[ -z "$name" ]] && exit 0
+    have_tmux || exit 0
+    tmux kill-session -t "=$name" 2>/dev/null
+    exit 0
+    ;;
+  *)
+    print -u2 "sheol-core: list [--json] | revive <name> | detach <name> | kill <name>"
+    exit 0
+    ;;
+esac

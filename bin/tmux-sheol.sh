@@ -30,6 +30,9 @@
 
 REFRESH=1        # poll interval; redraw only fires when something actually changed
 PIDFILE="$HOME/.cache/machine-spirit/sheol.pid"   # single-instance marker
+# All tmux operations go through sheol-core (shared with MachineSpirit.app) —
+# resolved beside this script so the pair works from ~/bin and from the repo.
+CORE="$(cd "$(dirname "$0")" && pwd)/sheol-core"
 
 BOLD=$'\e[1m'; DIM=$'\e[2m'; INV=$'\e[7m'; RST=$'\e[0m'
 GRN=$'\e[32m'; RED=$'\e[31m'; YEL=$'\e[33m'; CYN=$'\e[36m'; MAG=$'\e[35m'
@@ -62,9 +65,7 @@ load() {
 		[ -z "$n" ] && continue
 		if [ "$a" != "0" ]; then Ln+=("$n"); Lc+=("${cmd:-?}"); Lb+=("$c"); La+=("$act")
 		else                     Dn+=("$n"); Dc+=("${cmd:-?}"); Db+=("$c"); Da+=("$act"); fi
-	done < <(tmux list-sessions -F \
-		"#{session_name}${US}#{session_attached}${US}#{session_created}${US}#{session_activity}${US}#{pane_current_command}" \
-		2>/dev/null)
+	done < <("$CORE" list)
 	local i
 	for i in "${!Ln[@]}"; do names+=("${Ln[$i]}"); cmds+=("${Lc[$i]}"); born+=("${Lb[$i]}"); acts+=("${La[$i]}"); state+=(1); done
 	first_dead=${#names[@]}
@@ -133,7 +134,7 @@ move() { arm=0; arm_sel=-1; local n=$(( sel + $1 )); (( n >= 0 && n < total )) &
 revive() {
 	(( total == 0 )) && return
 	(( ${state[$sel]} == 1 )) && return
-	"$HOME/bin/iterm-new-window.sh" tmux attach -t "${names[$sel]}"
+	"$CORE" revive "${names[$sel]}"
 	load
 }
 
@@ -154,9 +155,9 @@ banish_step() {
 	arm_at=$SECONDS
 	if (( arm >= 3 )); then
 		if (( ${state[$sel]} == 1 )); then
-			tmux detach-client -s "${names[$sel]}" 2>/dev/null   # living -> sheol
+			"$CORE" detach "${names[$sel]}"   # living -> sheol
 		else
-			tmux kill-session -t "${names[$sel]}" 2>/dev/null    # dead -> exiled
+			"$CORE" kill "${names[$sel]}"     # dead -> exiled
 		fi
 		arm=0; arm_sel=-1; load
 		(( sel >= total )) && sel=$(( total > 0 ? total - 1 : 0 ))
