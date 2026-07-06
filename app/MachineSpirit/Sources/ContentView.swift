@@ -21,9 +21,15 @@ struct ContentView: View {
       Text("+++ machine-spirit +++")
         .font(.system(.title3, design: .monospaced).weight(.bold))
         .foregroundStyle(Theme.phosphor)
-      Text(state.viewMode == .tree ? "the witness" : "the altar")
-        .font(.system(.callout, design: .monospaced))
-        .foregroundStyle(Theme.ash)
+      Button {
+        state.viewMode = state.viewMode == .tree ? .graph : .tree
+      } label: {
+        Text(state.viewMode == .tree ? "the witness" : "the altar")
+          .font(.system(.callout, design: .monospaced))
+          .foregroundStyle(state.viewMode == .tree ? Theme.ash : Theme.magenta)
+      }
+      .buttonStyle(.plain)
+      .help("cross between worlds — tree ⇄ graph")
       Spacer()
       Button {
         state.communeWithLiveConfig()
@@ -33,7 +39,8 @@ struct ContentView: View {
       }
       .buttonStyle(.plain)
       .foregroundStyle(Theme.phosphorDim)
-      .help("re-import the live Leader Key config (read-only)")
+      .keyboardShortcut("r", modifiers: .command)
+      .help("re-import the live Leader Key config (read-only) — ⌘R")
     }
     .padding(.horizontal, 14)
     .padding(.vertical, 10)
@@ -53,7 +60,7 @@ struct ContentView: View {
     } else if state.model != nil {
       switch state.viewMode {
       case .tree: TreeView()
-      case .graph: TreeView()  // the altar arrives in [P1.5]
+      case .graph: GraphView()
       }
     } else {
       ProgressView()

@@ -8,8 +8,11 @@ enum Theme {
   static let groundRaised = Color(red: 0.035, green: 0.062, blue: 0.048)
   static let phosphor = Color(red: 0.29, green: 1.0, blue: 0.55)
   static let phosphorDim = Color(red: 0.18, green: 0.55, blue: 0.33)
+  /// Reserved for sheol / necromantic accents (duality wears it too — the
+  /// centerpiece dual node IS sheol). Everything mundane stays off magenta.
   static let magenta = Color(red: 1.0, green: 0.27, blue: 0.72)
   static let ash = Color(white: 0.52)
+  static let ice = Color(red: 0.5, green: 0.93, blue: 0.9)
 
   static func badgeText(for node: Node) -> String {
     guard let action = node.action else { return "GRP" }
@@ -25,7 +28,7 @@ enum Theme {
 
   static func badgeColor(for node: Node) -> Color {
     guard let action = node.action else { return phosphorDim }
-    if action.windowAction != nil { return magenta.opacity(0.85) }
+    if action.windowAction != nil { return ice }
     switch action {
     case .application: return phosphor
     case .command: return Color(red: 0.55, green: 0.9, blue: 1.0)

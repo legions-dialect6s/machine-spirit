@@ -65,3 +65,17 @@ owns model + selection + viewMode; both views are projections of it.
 -project MachineSpirit.xcodeproj -scheme MachineSpirit -configuration Debug
 -derivedDataPath DerivedData build && open
 DerivedData/Build/Products/Debug/MachineSpirit.app`
+
+### The altar stands — node-graph canvas over the same model `[P1.5]`
+
+`GraphView`: SwiftUI Canvas with drag-pan + pinch-zoom, deterministic
+tidy-tree layout (kit `TidyTreeLayout`, headless-tested: deterministic, every
+node placed, single-child chains compressed so `q-u-i-t` reads as a route).
+Glyph language: action = filled core, group = halo ring, both = both (dual
+wears magenta — reserved for the necromantic), inert = ashen ghost. Header
+label toggles worlds until Tab lands in [P1.6]. Owner eyeballed it live.
+Owner's far-look ideas cached as HANDOFF-NOTES #22–25.
+
+**Restore:** `git stash -u && git reset --hard <commit tagged [P1.5]>`
+**Re-verify:** kit `swift test` (19 green) + build & open the app, click
+"the witness" to cross to the altar.

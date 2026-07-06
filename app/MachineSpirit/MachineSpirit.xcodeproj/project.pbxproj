@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		019F7D79E1E876626E11B9A2 /* GraphView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98EAE5FFEBA7D1FAEEF81FAE /* GraphView.swift */; };
 		259C47702BFA8908157D476D /* TreeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DC0B070810C9852F3EE3437 /* TreeView.swift */; };
 		86F32D191CB8DA83C493D46F /* MachineSpiritApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D78116A2645238BBF41D3FF7 /* MachineSpiritApp.swift */; };
 		B759736072FF493ADEB723E2 /* MachineSpiritKit in Frameworks */ = {isa = PBXBuildFile; productRef = 5BCD9078BC72C5F027120B5B /* MachineSpiritKit */; };
@@ -20,6 +21,7 @@
 		5D03F1A0DE367DED4735C5E1 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
 		724FBCC190FD8D5C54BA1753 /* MachineSpiritKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = MachineSpiritKit; path = ../../kit/MachineSpiritKit; sourceTree = SOURCE_ROOT; };
 		8DC0B070810C9852F3EE3437 /* TreeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TreeView.swift; sourceTree = "<group>"; };
+		98EAE5FFEBA7D1FAEEF81FAE /* GraphView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphView.swift; sourceTree = "<group>"; };
 		AE260BAD489CB9D25CE5394B /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		D78116A2645238BBF41D3FF7 /* MachineSpiritApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MachineSpiritApp.swift; sourceTree = "<group>"; };
 		E9D11E59FDFE782CBF1FB7B0 /* MachineSpirit.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MachineSpirit.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -50,6 +52,7 @@
 			children = (
 				5D03F1A0DE367DED4735C5E1 /* AppState.swift */,
 				41BA055CA9A05CA859DBB7D0 /* ContentView.swift */,
+				98EAE5FFEBA7D1FAEEF81FAE /* GraphView.swift */,
 				D78116A2645238BBF41D3FF7 /* MachineSpiritApp.swift */,
 				AE260BAD489CB9D25CE5394B /* Theme.swift */,
 				8DC0B070810C9852F3EE3437 /* TreeView.swift */,
@@ -140,6 +143,7 @@
 			files = (
 				EFBAA750BEEE2D52CB8BC739 /* AppState.swift in Sources */,
 				BAFAFC9DCF47C32765544359 /* ContentView.swift in Sources */,
+				019F7D79E1E876626E11B9A2 /* GraphView.swift in Sources */,
 				86F32D191CB8DA83C493D46F /* MachineSpiritApp.swift in Sources */,
 				F38442DA220CA4A379FAFC8B /* Theme.swift in Sources */,
 				259C47702BFA8908157D476D /* TreeView.swift in Sources */,
