@@ -46,6 +46,12 @@ carried; the SHAs below are the exact upstream commits captured.
   Product: `forks/Rectangle/DerivedData/Build/Products/Debug/Rectangle.app`,
   ad-hoc signed (`codesign -dv` → `flags=0x2(adhoc)`).
 
+## Local patches (the fork diverges here)
+
+- **LeaderKey — summon sigil indicator** (`[P1.7]`): `Themes/Mini.swift` renders
+  `SummonSigil` (new imageset from `assets/icon_transparent.png`, 256px) when
+  idle instead of the plain `●`; typed keys still take over mid-sequence.
+
 ## Signing
 
 Ad-hoc / free personal team is the Phase 1 posture. The exact incantation that

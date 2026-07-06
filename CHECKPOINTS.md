@@ -90,3 +90,16 @@ it. Selection lives ONLY in AppState. Owner-verified live ("works :)").
 
 **Restore:** `git stash -u && git reset --hard <commit tagged [P1.6]>`
 **Re-verify:** build & open; select on either side; Tab across.
+
+### The sigil as app icon + F19 indicator (Route A) `[P1.7]`
+
+App icon: asset catalog built from `assets/icon.png` (sips 1254 → 16…1024);
+Dock and window wear the sigil. Summon indicator: the LeaderKey fork's Mini
+theme renders `assets/icon_transparent.png` when idle instead of the plain
+dot — fork builds green. Altar got a zoom slider, ⌘=/⌘-, and a wide zoom
+clamp (owner request). **The brew-cask Leader Key remains the daily driver.**
+
+**Supervised demo (owner present only):** quit the cask app → open
+`forks/LeaderKey/DerivedData/Build/Products/Debug/Leader Key.app` → tap F19.
+**Rollback:** quit the fork → `open -a "Leader Key"` — nothing else changes;
+both read the same live config (read-only for our purposes).

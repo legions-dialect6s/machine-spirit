@@ -18,6 +18,8 @@ struct GraphView: View {
   @GestureState private var pinchFactor: CGFloat = 1
 
   private let nodeRadius: CGFloat = 13
+  private let minZoom: CGFloat = 0.03
+  private let maxZoom: CGFloat = 6
 
   var body: some View {
     GeometryReader { geometry in
@@ -46,6 +48,34 @@ struct GraphView: View {
       }
     }
     .clipped()
+    .overlay(alignment: .topTrailing) { zoomControls }
+  }
+
+  /// Slider + ⌘= / ⌘- — pinch still works; scroll-wheel zoom is Phase 2.
+  private var zoomControls: some View {
+    HStack(spacing: 8) {
+      Button("−") { zoom = max(zoom / 1.25, minZoom) }
+        .keyboardShortcut("-", modifiers: .command)
+      Slider(
+        value: Binding(
+          get: { log(zoom) },
+          set: { zoom = min(max(exp($0), minZoom), maxZoom) }
+        ),
+        in: log(minZoom)...log(maxZoom)
+      )
+      .frame(width: 160)
+      .tint(Theme.phosphorDim)
+      Button("+") { zoom = min(zoom * 1.25, maxZoom) }
+        .keyboardShortcut("=", modifiers: .command)
+    }
+    .buttonStyle(.plain)
+    .font(.system(.body, design: .monospaced).weight(.bold))
+    .foregroundStyle(Theme.phosphor)
+    .padding(.horizontal, 10)
+    .padding(.vertical, 6)
+    .background(
+      RoundedRectangle(cornerRadius: 6).fill(Theme.groundRaised.opacity(0.85)))
+    .padding(10)
   }
 
   private func centerSelection(layout: GraphLayout, viewport: CGSize) {
@@ -112,7 +142,7 @@ struct GraphView: View {
     MagnifyGesture()
       .updating($pinchFactor) { value, factor, _ in factor = value.magnification }
       .onEnded { value in
-        zoom = min(max(zoom * value.magnification, 0.15), 4)
+        zoom = min(max(zoom * value.magnification, minZoom), maxZoom)
       }
   }
 

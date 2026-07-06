@@ -46,16 +46,30 @@ enum Mini {
 
     var body: some View {
       ZStack {
-        let keyText = userState.currentGroup?.key ?? userState.display ?? "●"
-        let glyphText = KeyMaps.glyph(for: keyText) ?? keyText
-        let text = Text(glyphText)
-          .fontDesign(.rounded)
-          .fontWeight(.bold)
+        // machine-spirit: the summon sigil replaces the plain dot when idle;
+        // typed keys still take over the box mid-sequence.
+        if let keyText = userState.currentGroup?.key ?? userState.display {
+          let glyphText = KeyMaps.glyph(for: keyText) ?? keyText
+          let text = Text(glyphText)
+            .fontDesign(.rounded)
+            .fontWeight(.bold)
 
-        if userState.isShowingRefreshState {
-          text.pulsate()
+          if userState.isShowingRefreshState {
+            text.pulsate()
+          } else {
+            text
+          }
         } else {
-          text
+          let sigil = Image("SummonSigil")
+            .resizable()
+            .scaledToFit()
+            .padding(3)
+
+          if userState.isShowingRefreshState {
+            sigil.pulsate()
+          } else {
+            sigil
+          }
         }
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)

@@ -12,11 +12,13 @@
 		86F32D191CB8DA83C493D46F /* MachineSpiritApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D78116A2645238BBF41D3FF7 /* MachineSpiritApp.swift */; };
 		B759736072FF493ADEB723E2 /* MachineSpiritKit in Frameworks */ = {isa = PBXBuildFile; productRef = 5BCD9078BC72C5F027120B5B /* MachineSpiritKit */; };
 		BAFAFC9DCF47C32765544359 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41BA055CA9A05CA859DBB7D0 /* ContentView.swift */; };
+		E0E3D8FE2EF7DA38AFF1B4C0 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 32D65BB0E4B6A0D0BB110E46 /* Assets.xcassets */; };
 		EFBAA750BEEE2D52CB8BC739 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D03F1A0DE367DED4735C5E1 /* AppState.swift */; };
 		F38442DA220CA4A379FAFC8B /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE260BAD489CB9D25CE5394B /* Theme.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		32D65BB0E4B6A0D0BB110E46 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		41BA055CA9A05CA859DBB7D0 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		5D03F1A0DE367DED4735C5E1 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
 		724FBCC190FD8D5C54BA1753 /* MachineSpiritKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = MachineSpiritKit; path = ../../kit/MachineSpiritKit; sourceTree = SOURCE_ROOT; };
@@ -63,6 +65,7 @@
 		9EF7AA6FDFC3F2302106A398 = {
 			isa = PBXGroup;
 			children = (
+				32D65BB0E4B6A0D0BB110E46 /* Assets.xcassets */,
 				CD174ECF25B6D22FAEA81C58 /* Packages */,
 				7746AEE7D6B8C6DEE1A62BA0 /* Sources */,
 				56C8093687AC5C63D2A8ADB8 /* Products */,
@@ -85,6 +88,7 @@
 			buildConfigurationList = BA56BDCE9C273470B8ADBB90 /* Build configuration list for PBXNativeTarget "MachineSpirit" */;
 			buildPhases = (
 				F515BDCF607542E851BA88EB /* Sources */,
+				19631E6AC54CB4E161CF65F7 /* Resources */,
 				AD1D3A579F19A9C535C3AAB2 /* Frameworks */,
 			);
 			buildRules = (
@@ -135,6 +139,17 @@
 			);
 		};
 /* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		19631E6AC54CB4E161CF65F7 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E0E3D8FE2EF7DA38AFF1B4C0 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		F515BDCF607542E851BA88EB /* Sources */ = {
