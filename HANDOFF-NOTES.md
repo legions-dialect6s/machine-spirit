@@ -224,4 +224,13 @@ which idea).
 - **Page-field cycling** (#20) — browser extension, Phase 3+.
 - **"bring all iTerm/tmux windows to front" bind** — user reported a focus gap;
   needs clarification on which bind + exact failure before changing anything.
+- **`s a` browser-window-cycle skips minimized windows** (owner, 2026-07-06:
+  1 open + 1 minimized Safari window; the minimized one never rose). Root
+  cause: the script rides ⌘` ("move focus to next window"), which ignores
+  minimized windows by design. Desired: first press restores/raises ALL of the
+  frontmost browser's windows, further presses cycle. Fix shape: in
+  `bin/browser-window-cycle.applescript`, unminiaturize via System Events
+  (`set value of attribute "AXMinimized" to false` per window) before cycling —
+  keep it browser-agnostic, dialog-safe (try-wrapped). Deferred past Phase 1
+  (live `~/bin` is behind the live-system boundary this phase).
 - **Pane-title button** (#14) — not in iTerm's API; app-era.

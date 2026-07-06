@@ -79,3 +79,14 @@ Owner's far-look ideas cached as HANDOFF-NOTES #22–25.
 **Restore:** `git stash -u && git reset --hard <commit tagged [P1.5]>`
 **Re-verify:** kit `swift test` (19 green) + build & open the app, click
 "the witness" to cross to the altar.
+
+### Tab-switch carries the selection across worlds `[P1.6]`
+
+Tab toggles tree ⇄ graph via a retained local NSEvent monitor (the unretained
+token was a real caught bug — monitor died instantly). Landing behavior:
+tree unfolds ancestors (`expandedIDs` in AppState, tree rebuilt on
+DisclosureGroups) and scrolls to the selection; graph centers + sane-zooms on
+it. Selection lives ONLY in AppState. Owner-verified live ("works :)").
+
+**Restore:** `git stash -u && git reset --hard <commit tagged [P1.6]>`
+**Re-verify:** build & open; select on either side; Tab across.

@@ -40,8 +40,25 @@ struct GraphView: View {
         state.selectedNodeID = hitTest(
           location, in: model, layout: layout, transform: transform)
       }
+      .onAppear {
+        // Landing from the witness: center the shared selection, sane zoom.
+        if let layout { centerSelection(layout: layout, viewport: geometry.size) }
+      }
     }
     .clipped()
+  }
+
+  private func centerSelection(layout: GraphLayout, viewport: CGSize) {
+    guard let id = state.selectedNodeID,
+      let position = layout.positions[id]
+    else { return }
+    if zoom < 0.8 { zoom = 1.0 }
+    let base = CGSize(
+      width: 60 * zoom,
+      height: viewport.height / 2 - layout.height / 2 * zoom)
+    pan = CGSize(
+      width: viewport.width / 2 - position.x * zoom - base.width,
+      height: viewport.height / 2 - position.y * zoom - base.height)
   }
 
   // MARK: - Viewport math

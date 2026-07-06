@@ -1,3 +1,4 @@
+import AppKit
 import MachineSpiritKit
 import SwiftUI
 
@@ -10,7 +11,10 @@ struct MachineSpiritApp: App {
       ContentView()
         .environment(state)
         .preferredColorScheme(.dark)
-        .task { state.communeWithLiveConfig() }
+        .task {
+          state.communeWithLiveConfig()
+          state.installTabMonitor()
+        }
     }
     .defaultSize(width: 1440, height: 900)
   }

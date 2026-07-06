@@ -1,30 +1,74 @@
 import MachineSpiritKit
 import SwiftUI
 
-extension Node {
-  /// OutlineGroup wants nil for leaves, not an empty array.
-  var outlineChildren: [Node]? { children.isEmpty ? nil : children }
-}
-
 /// The witness: the imported config as a directory tree, node for node
 /// beside Leader Key's reality. Read-only.
+///
+/// Disclosure state lives in AppState (`expandedIDs`) so landing from the
+/// altar can unfold the path to the selection and scroll to it.
 struct TreeView: View {
   @Environment(AppState.self) private var state
 
   var body: some View {
     @Bindable var state = state
-    List(selection: $state.selectedNodeID) {
-      if let model = state.model {
-        OutlineGroup(model.children, id: \.id, children: \.outlineChildren) { node in
-          NodeRow(node: node)
-            .tag(node.id)
-            .listRowBackground(Color.clear)
+    ScrollViewReader { proxy in
+      List(selection: $state.selectedNodeID) {
+        if let model = state.model {
+          ForEach(model.children) { child in
+            NodeBranch(node: child)
+          }
+        }
+      }
+      .scrollContentBackground(.hidden)
+      .background(Theme.ground)
+      .environment(\.defaultMinListRowHeight, 26)
+      .onAppear {
+        state.revealSelectionInTree()
+        if let id = state.selectedNodeID {
+          // Let the freshly-expanded rows lay out before scrolling.
+          DispatchQueue.main.async {
+            withAnimation { proxy.scrollTo(id, anchor: .center) }
+          }
         }
       }
     }
-    .scrollContentBackground(.hidden)
-    .background(Theme.ground)
-    .environment(\.defaultMinListRowHeight, 26)
+  }
+}
+
+private struct NodeBranch: View {
+  @Environment(AppState.self) private var state
+  let node: Node
+
+  var body: some View {
+    @Bindable var state = state
+    if node.children.isEmpty {
+      NodeRow(node: node)
+        .tag(node.id)
+        .id(node.id)
+        .listRowBackground(Color.clear)
+    } else {
+      DisclosureGroup(
+        isExpanded: Binding(
+          get: { state.expandedIDs.contains(node.id) },
+          set: { expanded in
+            if expanded {
+              state.expandedIDs.insert(node.id)
+            } else {
+              state.expandedIDs.remove(node.id)
+            }
+          }
+        )
+      ) {
+        ForEach(node.children) { child in
+          NodeBranch(node: child)
+        }
+      } label: {
+        NodeRow(node: node)
+          .tag(node.id)
+          .id(node.id)
+      }
+      .listRowBackground(Color.clear)
+    }
   }
 }
 
