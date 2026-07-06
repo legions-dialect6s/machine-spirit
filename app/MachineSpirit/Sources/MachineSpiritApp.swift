@@ -13,7 +13,7 @@ struct MachineSpiritApp: App {
         .preferredColorScheme(.dark)
         .task {
           state.communeWithLiveConfig()
-          state.installTabMonitor()
+          state.installKeyMonitor()
           state.startSheolPolling()
         }
     }

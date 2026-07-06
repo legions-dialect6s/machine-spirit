@@ -152,3 +152,18 @@ findability on the altar was poor (tidy-tree sprawl), fixed in the next slice.
 **Restore:** `git stash -u && git reset --hard <commit tagged [P1.9b]>`
 **Re-verify:** throwaway socket + launch app binary with TMUX_TMPDIR (unset
 TMUX first); footer shows wanderers; strike r / d·d·d on test spirits.
+
+### Altar v2 — radial 360°, both views side by side, walk by key `[P1.10]`
+
+Owner-driven redesign: directory and node graph visible together (focused
+pane marked; Tab switches); UI copy de-lored (directory / node graph /
+refresh — theme stays where it's earned: sheol). RadialLayout in the kit
+(360° from center, arc pressure with cap, chains as spokes; 23 tests green).
+Constant screen-size nodes + semantic zoom (depth bands bloom as you zoom).
+Letter-walk in both views (Leader Key grammar: 1→1→first-third), Esc root,
+⌫ up, ⏎ strike, ⌘R refresh, ⌘=/⌘- zoom — one retained key monitor. Scroll
+pans, ⌘scroll zooms (NSView catcher so the directory keeps its own scroll).
+Selection glides to center, smoothstep (win-lerp lineage).
+
+**Restore:** `git stash -u && git reset --hard <commit tagged [P1.10]>`
+**Re-verify:** build & open; type `1 1 1`; scroll/⌘scroll; Tab panes.

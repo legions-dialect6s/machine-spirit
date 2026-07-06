@@ -3,46 +3,141 @@ import Foundation
 import MachineSpiritKit
 import Observation
 
-enum ViewMode: Hashable {
-  case tree
+enum FocusedPane: Hashable {
+  case directory
   case graph
 }
 
-/// The one source of truth. Selection lives here and ONLY here — the tree
-/// and the graph are both projections of this state, which is what makes
-/// tab-switching carry the selection across worlds for free.
+/// The one source of truth. Selection lives here and ONLY here — the
+/// directory and the node graph render side by side as projections of it,
+/// so walking with the keyboard moves both at once.
 @Observable
 @MainActor
 final class AppState {
   var model: Node?
   var selectedNodeID: String?
-  var viewMode: ViewMode = .tree
+  var focusedPane: FocusedPane = .graph
   var importError: String?
 
-  /// Disclosure state for the tree — programmatic so landing can unfold
-  /// the path to the selection.
+  /// Disclosure state for the directory — programmatic so navigation can
+  /// unfold the path to the selection.
   var expandedIDs: Set<String> = []
 
-  func crossBetweenWorlds() {
-    viewMode = viewMode == .tree ? .graph : .tree
+  // MARK: - Graph viewport (shared so keys, slider, and gestures agree)
+
+  var zoom: CGFloat = 0.4  // opens on the skeleton bands; walking zooms in
+  var pan: CGSize = .zero
+  let minZoom: CGFloat = 0.03
+  let maxZoom: CGFloat = 6
+
+  @ObservationIgnored private var glideTask: Task<Void, Never>?
+
+  /// Organic lerp of the graph viewport — smoothstep, ~a third of a second,
+  /// the win-lerp lineage. Direct gestures cancel it.
+  func glide(toPan target: CGSize, zoom targetZoom: CGFloat? = nil) {
+    glideTask?.cancel()
+    let fromPan = pan
+    let fromZoom = zoom
+    let toZoom = min(max(targetZoom ?? zoom, minZoom), maxZoom)
+    glideTask = Task { [weak self] in
+      let steps = 22
+      for step in 1...steps {
+        guard let self, !Task.isCancelled else { return }
+        let t = Double(step) / Double(steps)
+        let eased = t * t * (3 - 2 * t)  // smoothstep
+        self.pan = CGSize(
+          width: fromPan.width + (target.width - fromPan.width) * eased,
+          height: fromPan.height + (target.height - fromPan.height) * eased)
+        self.zoom = fromZoom + (toZoom - fromZoom) * eased
+        try? await Task.sleep(for: .milliseconds(15))
+      }
+    }
   }
 
-  /// Tab crosses between worlds — tree ⇄ graph, one selection carried.
-  /// A local NSEvent monitor beats .onKeyPress here: it works regardless of
-  /// which subview holds focus, and there are no text fields to starve yet.
-  /// The token MUST be retained — an unheld monitor deallocates immediately.
-  @ObservationIgnored private var tabMonitor: Any?
+  func cancelGlide() { glideTask?.cancel() }
 
-  func installTabMonitor() {
-    guard tabMonitor == nil else { return }
-    tabMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-      let tabKeyCode: UInt16 = 48
-      guard event.keyCode == tabKeyCode,
-        event.modifierFlags.intersection([.command, .option, .control, .shift]).isEmpty
-      else { return event }
-      self?.crossBetweenWorlds()
-      return nil
+  // MARK: - Keyboard: walk the graph like Leader Key itself
+
+  /// One retained local NSEvent monitor handles every key (the token MUST
+  /// be held — an unretained monitor deallocates immediately; that bug
+  /// already bit once):
+  ///   letters  walk the binds (1 → 1 → first-third), both views follow
+  ///   esc      back to the root (clear selection)
+  ///   ⌫        step up one level
+  ///   ⏎        strike a selected sheol verb (revive / arm the ward)
+  ///   tab      switch focused pane
+  ///   ⌘r       refresh (re-import)
+  ///   ⌘= / ⌘-  zoom the graph
+  @ObservationIgnored private var keyMonitor: Any?
+
+  func installKeyMonitor() {
+    guard keyMonitor == nil else { return }
+    keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+      guard let self else { return event }
+      let modifiers = event.modifierFlags.intersection([.command, .option, .control, .shift])
+
+      if modifiers == .command {
+        switch event.charactersIgnoringModifiers {
+        case "r": self.communeWithLiveConfig(); return nil
+        case "=", "+": self.zoom = min(self.zoom * 1.25, self.maxZoom); return nil
+        case "-": self.zoom = max(self.zoom / 1.25, self.minZoom); return nil
+        default: return event
+        }
+      }
+      guard modifiers.isEmpty else { return event }
+
+      switch event.keyCode {
+      case 48:  // tab
+        self.focusedPane = self.focusedPane == .directory ? .graph : .directory
+        return nil
+      case 53:  // esc — the walk returns to the root
+        self.selectedNodeID = nil
+        return nil
+      case 51:  // delete — one step back up
+        self.stepUp()
+        return nil
+      case 36:  // return — strike a sheol verb
+        if let id = self.selectedNodeID, let node = self.displayModel?.node(withID: id) {
+          _ = self.strikeSheolNode(node)
+        }
+        return nil
+      default:
+        break
+      }
+
+      if let typed = event.charactersIgnoringModifiers, typed.count == 1,
+        typed.rangeOfCharacter(from: .alphanumerics.union(.punctuationCharacters).union(.symbols))
+          != nil,
+        self.walk(typed: typed)
+      {
+        return nil
+      }
+      return event
     }
+  }
+
+  /// Leader Key's grammar, in both views: match the typed key against the
+  /// current selection's children; a leaf with no match restarts from root.
+  private func walk(typed: String) -> Bool {
+    guard let root = displayModel else { return false }
+    let anchor = selectedNodeID.flatMap { root.node(withID: $0) } ?? root
+    if let hit = match(typed, in: anchor) ?? match(typed, in: root) {
+      selectedNodeID = hit.id
+      revealSelectionInTree()
+      return true
+    }
+    return false
+  }
+
+  private func match(_ typed: String, in node: Node) -> Node? {
+    node.children.first { $0.key == typed }
+      ?? node.children.first { $0.key?.lowercased() == typed.lowercased() }
+  }
+
+  private func stepUp() {
+    guard let id = selectedNodeID, let slash = id.lastIndex(of: "/") else { return }
+    let parent = String(id[id.startIndex..<slash])
+    selectedNodeID = parent == "root" ? nil : parent
   }
 
   /// Ancestor ids of a structural path id: `root/g/p` → `root/g`
@@ -67,7 +162,7 @@ final class AppState {
       importError = nil
     } catch {
       model = nil
-      importError = "the spirits are silent: \(error)"
+      importError = "could not read the live config: \(error)"
     }
   }
 

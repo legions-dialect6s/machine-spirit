@@ -31,6 +31,15 @@ struct TreeView: View {
           }
         }
       }
+      .onChange(of: state.selectedNodeID) {
+        // Both panes are always visible: the directory follows every walk.
+        state.revealSelectionInTree()
+        if let id = state.selectedNodeID {
+          DispatchQueue.main.async {
+            withAnimation(.spring(duration: 0.3)) { proxy.scrollTo(id, anchor: .center) }
+          }
+        }
+      }
     }
   }
 }

@@ -13,7 +13,7 @@ struct ContentView: View {
       footer
     }
     .background(Theme.ground)
-    .frame(minWidth: 720, minHeight: 520)
+    .frame(minWidth: 1100, minHeight: 620)
   }
 
   private var header: some View {
@@ -21,25 +21,15 @@ struct ContentView: View {
       Text("+++ machine-spirit +++")
         .font(.system(.title3, design: .monospaced).weight(.bold))
         .foregroundStyle(Theme.phosphor)
-      Button {
-        state.viewMode = state.viewMode == .tree ? .graph : .tree
-      } label: {
-        Text(state.viewMode == .tree ? "the witness" : "the altar")
-          .font(.system(.callout, design: .monospaced))
-          .foregroundStyle(state.viewMode == .tree ? Theme.ash : Theme.magenta)
-      }
-      .buttonStyle(.plain)
-      .help("cross between worlds — tree ⇄ graph")
       Spacer()
       Button {
         state.communeWithLiveConfig()
       } label: {
-        Label("commune again", systemImage: "arrow.trianglehead.2.clockwise")
+        Label("refresh", systemImage: "arrow.trianglehead.2.clockwise")
           .font(.system(.callout, design: .monospaced))
       }
       .buttonStyle(.plain)
       .foregroundStyle(Theme.phosphorDim)
-      .keyboardShortcut("r", modifiers: .command)
       .help("re-import the live Leader Key config (read-only) — ⌘R")
     }
     .padding(.horizontal, 14)
@@ -49,7 +39,7 @@ struct ContentView: View {
   @ViewBuilder private var main: some View {
     if let error = state.importError {
       VStack(spacing: 8) {
-        Text("⚠ the communion failed")
+        Text("⚠ import failed")
           .font(.system(.headline, design: .monospaced))
           .foregroundStyle(Theme.magenta)
         Text(error)
@@ -58,14 +48,45 @@ struct ContentView: View {
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity)
     } else if state.model != nil {
-      switch state.viewMode {
-      case .tree: TreeView()
-      case .graph: GraphView()
+      HSplitView {
+        pane(.directory, title: "directory") { TreeView() }
+          .frame(minWidth: 340, idealWidth: 460, maxWidth: 720)
+        pane(.graph, title: "node graph") { GraphView() }
+          .frame(minWidth: 480, maxWidth: .infinity)
       }
     } else {
       ProgressView()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
+  }
+
+  /// Both projections stay visible; the focused one wears the brighter rail.
+  private func pane<Content: View>(
+    _ pane: FocusedPane, title: String, @ViewBuilder content: () -> Content
+  ) -> some View {
+    let focused = state.focusedPane == pane
+    return VStack(spacing: 0) {
+      HStack {
+        Text(title)
+          .font(.system(.caption, design: .monospaced).weight(focused ? .bold : .regular))
+          .foregroundStyle(focused ? Theme.phosphor : Theme.ash)
+        if focused {
+          Circle().fill(Theme.phosphor).frame(width: 5, height: 5)
+        }
+        Spacer()
+      }
+      .padding(.horizontal, 12)
+      .padding(.vertical, 5)
+      .background(Theme.groundRaised.opacity(focused ? 0.9 : 0.4))
+      content()
+    }
+    .overlay(
+      Rectangle()
+        .strokeBorder(
+          focused ? Theme.phosphorDim.opacity(0.7) : Color.clear, lineWidth: 1)
+    )
+    .contentShape(Rectangle())
+    .simultaneousGesture(TapGesture().onEnded { state.focusedPane = pane })
   }
 
   private var footer: some View {
@@ -78,7 +99,7 @@ struct ContentView: View {
         .font(.system(.caption, design: .monospaced))
         .foregroundStyle(wanderers > 0 ? Theme.magenta : Theme.ash.opacity(0.6))
       Spacer()
-      Text("⌥-click a triangle to unfold a whole branch")
+      Text("type keys to walk · esc root · ⌫ up · ⏎ strike · ⌘R refresh")
         .font(.system(.caption, design: .monospaced))
         .foregroundStyle(Theme.ash.opacity(0.7))
     }

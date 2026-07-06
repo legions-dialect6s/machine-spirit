@@ -1,107 +1,113 @@
+import AppKit
 import MachineSpiritKit
 import SwiftUI
 
-/// The altar: the same model as the witness tree, projected onto a
-/// pan/zoom node-graph canvas. Deterministic tidy-tree layout — no wobble.
+/// The node graph: the same model as the directory, projected 360° from the
+/// center (one center per leader key; more middles are a Phase-2 concern).
 ///
-/// The glyph language (the proof this is not a prettier Leader Key clone):
+/// The glyph language:
 ///   action  = filled core
 ///   group   = halo ring
 ///   both    = ring AND core, both lit — group+action duality
 ///   inert   = ashen ghost
+///
+/// Nodes hold a constant screen size; zoom moves the space between them.
+/// Scroll pans, ⌘-scroll zooms, pinch zooms, letters walk, selection glides
+/// to center.
 struct GraphView: View {
   @Environment(AppState.self) private var state
 
-  @State private var zoom: CGFloat = 0.9
-  @State private var pan: CGSize = .zero
   @GestureState private var dragDelta: CGSize = .zero
   @GestureState private var pinchFactor: CGFloat = 1
 
   private let nodeRadius: CGFloat = 13
-  private let minZoom: CGFloat = 0.03
-  private let maxZoom: CGFloat = 6
+  private let dualRadius: CGFloat = 18
 
   var body: some View {
     GeometryReader { geometry in
       let model = state.displayModel
-      let layout = model.map { TidyTreeLayout.layout(root: $0) }
+      // Semantic zoom: zoomed out shows the shallow rings; zooming in makes
+      // deeper rings bloom and the layout reorganize around them. Nodes
+      // keep a constant screen size throughout.
+      let drawModel = model.map { prune($0, depth: 0, maxDepth: visibleDepth) }
+      let layout = drawModel.map { RadialLayout.layout(root: $0) }
 
       Canvas { context, size in
-        guard let model, let layout else { return }
-        let transform = canvasTransform(layout: layout, viewport: size)
-        drawEdges(model, layout: layout, transform: transform, in: &context)
-        drawNodes(model, layout: layout, transform: transform, in: &context)
+        guard let drawModel, let layout else { return }
+        let transform = canvasTransform(viewport: size)
+        drawEdges(drawModel, layout: layout, transform: transform, in: &context)
+        drawNodes(drawModel, layout: layout, transform: transform, in: &context)
       }
       .background(Theme.ground)
+      .background(
+        ScrollCatcher { deltaX, deltaY, commandHeld in
+          state.cancelGlide()
+          if commandHeld {
+            state.zoom = min(
+              max(state.zoom * (1 + deltaY * 0.01), state.minZoom), state.maxZoom)
+          } else {
+            state.pan.width += deltaX
+            state.pan.height += deltaY
+          }
+        }
+      )
       .contentShape(Rectangle())
       .gesture(panGesture)
       .simultaneousGesture(zoomGesture)
       .onTapGesture { location in
         guard let model, let layout else { return }
-        let transform = canvasTransform(layout: layout, viewport: geometry.size)
-        let hitID = hitTest(location, in: model, layout: layout, transform: transform)
-        state.selectedNodeID = hitID
-        // Striking a sheol verb node acts: revive fires; banish arms ◆◆◇.
-        if let hitID, let node = model.node(withID: hitID) {
-          _ = state.strikeSheolNode(node)
+        let transform = canvasTransform(viewport: geometry.size)
+        if let hitID = hitTest(location, in: layout, transform: transform) {
+          state.selectedNodeID = hitID
+          state.revealSelectionInTree()
+          if let node = model.node(withID: hitID) {
+            _ = state.strikeSheolNode(node)
+          }
         }
       }
-      .onAppear {
-        // Landing from the witness: center the shared selection, sane zoom.
-        if let layout { centerSelection(layout: layout, viewport: geometry.size) }
+      .onChange(of: state.selectedNodeID) {
+        // The walk: glide the selection to center, both hands on the keys.
+        // Centering targets the FULL layout — deep selections zoom to a
+        // band where they are visible, and there pruned == full.
+        guard let id = state.selectedNodeID, let model,
+          let position = RadialLayout.layout(root: model).positions[id]
+        else { return }
+        let zoom = max(state.zoom, 1.0)
+        state.glide(
+          toPan: CGSize(width: -position.x * zoom, height: -position.y * zoom),
+          zoom: zoom)
       }
     }
     .clipped()
     .overlay(alignment: .topTrailing) { zoomControls }
   }
 
-  /// Slider + ⌘= / ⌘- — pinch still works; scroll-wheel zoom is Phase 2.
-  private var zoomControls: some View {
-    HStack(spacing: 8) {
-      Button("−") { zoom = max(zoom / 1.25, minZoom) }
-        .keyboardShortcut("-", modifiers: .command)
-      Slider(
-        value: Binding(
-          get: { log(zoom) },
-          set: { zoom = min(max(exp($0), minZoom), maxZoom) }
-        ),
-        in: log(minZoom)...log(maxZoom)
-      )
-      .frame(width: 160)
-      .tint(Theme.phosphorDim)
-      Button("+") { zoom = min(zoom * 1.25, maxZoom) }
-        .keyboardShortcut("=", modifiers: .command)
+  /// Depth band per zoom: the reorganize-as-you-zoom mechanic.
+  private var visibleDepth: Int {
+    switch effectiveZoom {
+    case ..<0.22: return 1
+    case ..<0.45: return 2
+    case ..<0.8: return 3
+    default: return .max
     }
-    .buttonStyle(.plain)
-    .font(.system(.body, design: .monospaced).weight(.bold))
-    .foregroundStyle(Theme.phosphor)
-    .padding(.horizontal, 10)
-    .padding(.vertical, 6)
-    .background(
-      RoundedRectangle(cornerRadius: 6).fill(Theme.groundRaised.opacity(0.85)))
-    .padding(10)
   }
 
-  private func centerSelection(layout: GraphLayout, viewport: CGSize) {
-    guard let id = state.selectedNodeID,
-      let position = layout.positions[id]
-    else { return }
-    if zoom < 0.8 { zoom = 1.0 }
-    let base = CGSize(
-      width: 60 * zoom,
-      height: viewport.height / 2 - layout.height / 2 * zoom)
-    pan = CGSize(
-      width: viewport.width / 2 - position.x * zoom - base.width,
-      height: viewport.height / 2 - position.y * zoom - base.height)
+  /// Display-only copy cut to the band; nodes that lost children carry a
+  /// marker so they can whisper that more waits below.
+  private func prune(_ node: Node, depth: Int, maxDepth: Int) -> Node {
+    var pruned = node
+    if depth >= maxDepth, !node.children.isEmpty {
+      pruned.children = []
+      pruned.extras["__ms_pruned"] = .bool(true)
+    } else {
+      pruned.children = node.children.map { prune($0, depth: depth + 1, maxDepth: maxDepth) }
+    }
+    return pruned
   }
 
-  // MARK: - Viewport math
+  // MARK: - Viewport math (screen = world * zoom + center + pan)
 
-  private var effectiveZoom: CGFloat { zoom * pinchFactor }
-
-  private var effectivePan: CGSize {
-    CGSize(width: pan.width + dragDelta.width, height: pan.height + dragDelta.height)
-  }
+  private var effectiveZoom: CGFloat { state.zoom * pinchFactor }
 
   private struct CanvasTransform {
     var scale: CGFloat
@@ -120,25 +126,21 @@ struct GraphView: View {
     }
   }
 
-  private func canvasTransform(layout: GraphLayout, viewport: CGSize) -> CanvasTransform {
-    // Root rests near the left edge, vertically centered, then the user's
-    // pan/zoom rides on top.
-    let base = CGSize(
-      width: 60 * effectiveZoom,
-      height: viewport.height / 2 - layout.height / 2 * effectiveZoom)
-    return CanvasTransform(
+  private func canvasTransform(viewport: CGSize) -> CanvasTransform {
+    CanvasTransform(
       scale: effectiveZoom,
       offset: CGSize(
-        width: base.width + effectivePan.width,
-        height: base.height + effectivePan.height))
+        width: viewport.width / 2 + state.pan.width + dragDelta.width,
+        height: viewport.height / 2 + state.pan.height + dragDelta.height))
   }
 
   private var panGesture: some Gesture {
-    DragGesture(minimumDistance: 2)
+    DragGesture(minimumDistance: 3)
       .updating($dragDelta) { value, delta, _ in delta = value.translation }
       .onEnded { value in
-        pan.width += value.translation.width
-        pan.height += value.translation.height
+        state.cancelGlide()
+        state.pan.width += value.translation.width
+        state.pan.height += value.translation.height
       }
   }
 
@@ -146,15 +148,16 @@ struct GraphView: View {
     MagnifyGesture()
       .updating($pinchFactor) { value, factor, _ in factor = value.magnification }
       .onEnded { value in
-        zoom = min(max(zoom * value.magnification, minZoom), maxZoom)
+        state.cancelGlide()
+        state.zoom = min(max(state.zoom * value.magnification, state.minZoom), state.maxZoom)
       }
   }
 
   private func hitTest(
-    _ point: CGPoint, in model: Node, layout: GraphLayout, transform: CanvasTransform
+    _ point: CGPoint, in layout: GraphLayout, transform: CanvasTransform
   ) -> String? {
     let world = transform.unapply(point)
-    let reach = Double(nodeRadius + 8) / Double(transform.scale)
+    let reach = Double(dualRadius + 8) / Double(transform.scale)
     var best: (id: String, distance: Double)?
     for (id, position) in layout.positions {
       let distance = hypot(position.x - world.x, position.y - world.y)
@@ -165,6 +168,34 @@ struct GraphView: View {
     return best?.id
   }
 
+  // MARK: - Controls
+
+  private var zoomControls: some View {
+    @Bindable var state = state
+    return HStack(spacing: 8) {
+      Text("−").foregroundStyle(Theme.phosphor)
+      Slider(
+        value: Binding(
+          get: { log(state.zoom) },
+          set: {
+            state.cancelGlide()
+            state.zoom = min(max(exp($0), state.minZoom), state.maxZoom)
+          }
+        ),
+        in: log(state.minZoom)...log(state.maxZoom)
+      )
+      .frame(width: 160)
+      .tint(Theme.phosphorDim)
+      Text("+").foregroundStyle(Theme.phosphor)
+    }
+    .font(.system(.body, design: .monospaced).weight(.bold))
+    .padding(.horizontal, 10)
+    .padding(.vertical, 6)
+    .background(
+      RoundedRectangle(cornerRadius: 6).fill(Theme.groundRaised.opacity(0.85)))
+    .padding(10)
+  }
+
   // MARK: - Drawing
 
   private func drawEdges(
@@ -173,29 +204,31 @@ struct GraphView: View {
   ) {
     context.drawLayer { layer in
       layer.addFilter(.shadow(color: Theme.phosphor.opacity(0.5), radius: 3))
-      var path = Path()
+      var livePath = Path()
       var inertPath = Path()
+      var sheolPath = Path()
       walk(root) { node in
         guard let from = layout.positions[node.id] else { return }
         for child in node.children {
           guard let to = layout.positions[child.id] else { continue }
           let a = transform.apply(from)
           let b = transform.apply(to)
-          let midX = (a.x + b.x) / 2
+          // A gentle bow: control points pulled toward the midpoint radius.
+          let mid = CGPoint(x: (a.x + b.x) / 2, y: (a.y + b.y) / 2)
           var segment = Path()
           segment.move(to: a)
-          segment.addCurve(
-            to: b,
-            control1: CGPoint(x: midX, y: a.y),
-            control2: CGPoint(x: midX, y: b.y))
+          segment.addQuadCurve(to: b, control: mid)
           if child.status.isInert {
             inertPath.addPath(segment)
+          } else if Theme.isNecromantic(child) {
+            sheolPath.addPath(segment)
           } else {
-            path.addPath(segment)
+            livePath.addPath(segment)
           }
         }
       }
-      layer.stroke(path, with: .color(Theme.phosphorDim.opacity(0.75)), lineWidth: 1)
+      layer.stroke(livePath, with: .color(Theme.phosphorDim.opacity(0.75)), lineWidth: 1)
+      layer.stroke(sheolPath, with: .color(Theme.magenta.opacity(0.7)), lineWidth: 1)
       layer.stroke(inertPath, with: .color(Theme.ash.opacity(0.3)), lineWidth: 1)
     }
   }
@@ -204,38 +237,46 @@ struct GraphView: View {
     _ root: Node, layout: GraphLayout, transform: CanvasTransform,
     in context: inout GraphicsContext
   ) {
-    let scale = transform.scale
-    let radius = nodeRadius * scale
+    let zoom = transform.scale
 
     walk(root) { node in
       guard let position = layout.positions[node.id] else { return }
       let center = transform.apply(position)
       let inert = node.status.isInert
       let selected = node.id == state.selectedNodeID
+      let necromantic = node.isDual || Theme.isNecromantic(node)
+      // A pruned node still opens onward — the band just hides it for now.
+      let hidesMore = node.extras["__ms_pruned"] != nil
+      // Constant screen size: the space zooms, the nodes do not.
+      let radius = node.isDual ? dualRadius : nodeRadius
 
-      let primary: Color =
-        inert
-        ? Theme.ash
-        : (node.isDual || Theme.isNecromantic(node) ? Theme.magenta : Theme.phosphor)
+      let primary: Color = inert ? Theme.ash : (necromantic ? Theme.magenta : Theme.phosphor)
 
       context.drawLayer { layer in
         if !inert {
           layer.addFilter(
-            .shadow(color: primary.opacity(selected ? 0.9 : 0.45), radius: selected ? 8 : 4))
+            .shadow(color: primary.opacity(selected ? 0.95 : 0.45), radius: selected ? 9 : 4))
         }
 
-        // Dark disc so glyphs and crossing edges never fight.
         let discRect = CGRect(
           x: center.x - radius, y: center.y - radius,
           width: radius * 2, height: radius * 2)
         layer.fill(Circle().path(in: discRect), with: .color(Theme.ground))
 
-        // Halo ring — this node opens onward (a group).
-        if node.isGroup {
+        // Halo ring — this node opens onward (a group, or a band-pruned
+        // branch whose depths wait below).
+        if node.isGroup || hidesMore {
           layer.stroke(
             Circle().path(in: discRect),
             with: .color(primary.opacity(inert ? 0.5 : 1)),
-            lineWidth: (selected ? 2.5 : 1.5) * scale)
+            lineWidth: selected ? 2.5 : 1.5)
+        }
+        if hidesMore {
+          // A faint outer whisper: more is folded beneath this ring.
+          let hintRect = discRect.insetBy(dx: -4, dy: -4)
+          layer.stroke(
+            Circle().path(in: hintRect),
+            with: .color(primary.opacity(0.25)), lineWidth: 1)
         }
 
         // Filled core — this node acts.
@@ -250,27 +291,25 @@ struct GraphView: View {
           if !node.isGroup, selected {
             layer.stroke(
               Circle().path(in: discRect),
-              with: .color(primary.opacity(0.8)), lineWidth: 1.5 * scale)
+              with: .color(primary.opacity(0.8)), lineWidth: 1.5)
           }
         }
       }
 
-      // Key glyph, large — the address of the node.
-      if scale > 0.28 {
-        context.draw(
-          Text(node.key ?? "·")
-            .font(.system(size: 12 * scale, design: .monospaced).weight(.bold))
-            .foregroundStyle(glyphColor(for: node)),
-          at: CGPoint(x: center.x, y: center.y))
-      }
+      // Key glyph, constant size — the address of the node.
+      context.draw(
+        Text(node.key ?? "·")
+          .font(.system(size: node.isDual ? 14 : 12, design: .monospaced).weight(.bold))
+          .foregroundStyle(glyphColor(for: node)),
+        at: center)
 
-      // Name/summary, small, beside the node.
-      if scale > 0.55 {
+      // Name/summary appears once there is room for it.
+      if zoom > 0.5 || selected {
         context.draw(
           Text(node.displayName)
-            .font(.system(size: 8.5 * scale, design: .monospaced))
+            .font(.system(size: 9, design: .monospaced))
             .foregroundStyle(inert ? Theme.ash.opacity(0.6) : Theme.ash),
-          at: CGPoint(x: center.x, y: center.y + radius + 8 * scale))
+          at: CGPoint(x: center.x, y: center.y + radius + 9))
       }
     }
   }
@@ -278,11 +317,38 @@ struct GraphView: View {
   private func glyphColor(for node: Node) -> Color {
     if node.status.isInert { return Theme.ash }
     if node.action != nil { return Color.white.opacity(0.92) }
-    return node.isDual ? Theme.magenta : Theme.phosphor
+    return node.isDual || Theme.isNecromantic(node) ? Theme.magenta : Theme.phosphor
   }
 
   private func walk(_ node: Node, _ visit: (Node) -> Void) {
     visit(node)
     for child in node.children { walk(child, visit) }
+  }
+}
+
+/// AppKit shim: receives scrollWheel events when the cursor is over the
+/// graph (and only the graph — the directory's List keeps its own scroll).
+private struct ScrollCatcher: NSViewRepresentable {
+  var onScroll: (CGFloat, CGFloat, Bool) -> Void
+
+  func makeNSView(context: Context) -> CatcherView {
+    let view = CatcherView()
+    view.onScroll = onScroll
+    return view
+  }
+
+  func updateNSView(_ nsView: CatcherView, context: Context) {
+    nsView.onScroll = onScroll
+  }
+
+  final class CatcherView: NSView {
+    var onScroll: ((CGFloat, CGFloat, Bool) -> Void)?
+
+    override func scrollWheel(with event: NSEvent) {
+      onScroll?(
+        event.scrollingDeltaX,
+        event.scrollingDeltaY,
+        event.modifierFlags.contains(.command))
+    }
   }
 }
