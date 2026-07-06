@@ -1,0 +1,46 @@
+/// LowerLeftCalculation.swift
+
+import Foundation
+
+class LowerLeftCalculation: WindowCalculation, CornerCycleExpansionCalculation, QuartersRepeated {
+    
+    let horizontalSide: HalfSplitSide = .leading
+    let verticalSide: HalfSplitSide = .trailing
+    var horizontalSplitFraction: Float { Defaults.horizontalSplitRatio.value / 100.0 }
+    var verticalSplitFraction: Float { 1.0 - Defaults.verticalSplitRatio.value / 100.0 }
+
+    override func calculateRect(_ params: RectCalculationParameters) -> RectResult {
+
+        if Defaults.subsequentExecutionMode.cyclesQuadrantPositions {
+            if let last = params.lastAction,
+               let lastSubAction = last.subAction,
+               last.action == .bottomLeft || lastSubAction == .bottomLeftQuarter {
+                if let calculation = self.nextCalculation(subAction: lastSubAction, direction: .right) {
+                    return calculation(params.visibleFrameOfScreen)
+                }
+            }
+            return quarterRect(params.visibleFrameOfScreen)
+        }
+
+        if params.lastAction == nil || !Defaults.subsequentExecutionMode.resizes {
+            return calculateFirstRect(params)
+        }
+
+        return calculateRepeatedRect(params)
+    }
+
+    func quarterRect(_ visibleFrameOfScreen: CGRect) -> RectResult {
+        return RectResult(cornerRect(visibleFrameOfScreen,
+                                     horizontalFraction: horizontalSplitFraction,
+                                     verticalFraction: verticalSplitFraction),
+                          subAction: .bottomLeftQuarter)
+    }
+
+    private func cornerRect(_ visibleFrameOfScreen: CGRect, horizontalFraction: Float, verticalFraction: Float) -> CGRect {
+        HalfSplitFrameCalculation.cornerRect(in: visibleFrameOfScreen,
+                                             horizontalSide: horizontalSide,
+                                             verticalSide: verticalSide,
+                                             horizontalFraction: horizontalFraction,
+                                             verticalFraction: verticalFraction)
+    }
+}
