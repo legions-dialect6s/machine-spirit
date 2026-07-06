@@ -30,6 +30,10 @@ final class AppState {
   let minZoom: CGFloat = 0.03
   let maxZoom: CGFloat = 6
 
+  /// The graph pane's frame in window coordinates (top-left origin), kept
+  /// fresh by GraphView so the scroll monitor can scope itself to it.
+  @ObservationIgnored var graphFrame: CGRect = .zero
+
   @ObservationIgnored private var glideTask: Task<Void, Never>?
 
   /// Organic lerp of the graph viewport — smoothstep, ~a third of a second,
@@ -170,6 +174,54 @@ final class AppState {
     guard let id = selectedNodeID, let slash = id.lastIndex(of: "/") else { return }
     let parent = String(id[id.startIndex..<slash])
     selectedNodeID = parent == "root" ? nil : parent
+  }
+
+  // MARK: - Scroll: wheel zooms at the cursor, trackpad pans, ⌘ always zooms
+
+  @ObservationIgnored private var scrollMonitor: Any?
+
+  func installScrollMonitor() {
+    guard scrollMonitor == nil else { return }
+    scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) {
+      [weak self] event in
+      guard let self, let window = event.window,
+        let contentHeight = window.contentView?.bounds.height
+      else { return event }
+      // Window coords are bottom-left; SwiftUI global frames are top-left.
+      let point = CGPoint(
+        x: event.locationInWindow.x,
+        y: contentHeight - event.locationInWindow.y)
+      guard self.graphFrame.contains(point) else { return event }
+
+      self.cancelGlide()
+      let cursorOffset = CGSize(
+        width: point.x - self.graphFrame.midX,
+        height: point.y - self.graphFrame.midY)
+      let commandHeld = event.modifierFlags.contains(.command)
+      let isTrackpad = event.hasPreciseScrollingDeltas
+
+      if commandHeld || !isTrackpad {
+        // Zoom, anchored so the world point under the cursor stays put.
+        let factor = 1 + (isTrackpad ? 0.01 : 0.06) * event.scrollingDeltaY
+        self.zoom(at: cursorOffset, by: factor)
+      } else {
+        self.pan.width += event.scrollingDeltaX
+        self.pan.height += event.scrollingDeltaY
+      }
+      return nil
+    }
+  }
+
+  private func zoom(at cursorOffset: CGSize, by factor: CGFloat) {
+    let newZoom = min(max(zoom * factor, minZoom), maxZoom)
+    guard newZoom != zoom else { return }
+    // Keep the world point under the cursor stationary through the zoom.
+    let worldX = (cursorOffset.width - pan.width) / zoom
+    let worldY = (cursorOffset.height - pan.height) / zoom
+    pan = CGSize(
+      width: cursorOffset.width - worldX * newZoom,
+      height: cursorOffset.height - worldY * newZoom)
+    zoom = newZoom
   }
 
   /// Ancestor ids of a structural path id: `root/g/p` → `root/g`

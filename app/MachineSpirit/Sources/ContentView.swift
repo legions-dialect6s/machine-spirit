@@ -23,6 +23,15 @@ struct ContentView: View {
         .foregroundStyle(Theme.phosphor)
       Spacer()
       Button {
+        SheolService.openLedger()
+      } label: {
+        Label("sheol", systemImage: "moon.haze")
+          .font(.system(.callout, design: .monospaced))
+      }
+      .buttonStyle(.plain)
+      .foregroundStyle(Theme.magenta.opacity(0.8))
+      .help("open the ledger — sheol is a terminal; only its commands live here")
+      Button {
         state.refresh()
       } label: {
         Label(

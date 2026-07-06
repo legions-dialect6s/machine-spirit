@@ -181,3 +181,18 @@ the selection, ⌘R breathes the graph + flashes "✓ re-imported N nodes".
 **Restore:** `git stash -u && git reset --hard <commit tagged [P1.11]>`
 **Re-verify:** build & open; walk to a leaf and keep typing (stays); click
 dead space (clears); ⌘R (breathe + flash).
+
+### Circuit-board traces, path glow, real scroll, the sheol door `[P1.12]`
+
+Edges route like circuit traces in polar space (spoke out → arc along a
+per-trace junction ring → spoke to child; launch-deterministic variation).
+Selection lights the path: center→selection trace + its children glow,
+the rest recedes. Scroll rebuilt as a window-level monitor scoped to the
+graph pane: mouse wheel zooms AT THE CURSOR, trackpad pans, ⌘-scroll zooms
+(directory scrolling untouched). Header gains "⌁ sheol" — launches the
+ledger terminal; the config surface carries sheol's commands, never its
+live state (#26 doctrine).
+
+**Restore:** `git stash -u && git reset --hard <commit tagged [P1.12]>`
+**Re-verify:** build & open; wheel-zoom over the graph; walk `t` (path
+glows); click "sheol" (ledger window opens).

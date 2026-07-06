@@ -14,6 +14,7 @@ struct MachineSpiritApp: App {
         .task {
           state.communeWithLiveConfig()
           state.installKeyMonitor()
+          state.installScrollMonitor()
           state.startSheolPolling()
         }
     }

@@ -29,17 +29,19 @@ enum SheolService {
   /// Prefer the live ~/bin install; fall back to the repo copy beside this
   /// source file (dev builds — #filePath resolves on the building machine,
   /// so no username is ever committed).
-  static let corePath: String = {
+  static func helperPath(_ name: String) -> String {
     let home = FileManager.default.homeDirectoryForCurrentUser.path
-    let installed = home + "/bin/sheol-core"
+    let installed = home + "/bin/" + name
     if FileManager.default.isExecutableFile(atPath: installed) { return installed }
     return URL(fileURLWithPath: #filePath)  // …/app/MachineSpirit/Sources/SheolService.swift
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .deletingLastPathComponent()
-      .appendingPathComponent("bin/sheol-core").path
-  }()
+      .appendingPathComponent("bin/" + name).path
+  }
+
+  static let corePath: String = helperPath("sheol-core")
 
   private static func run(_ arguments: [String]) async -> Data {
     await withCheckedContinuation { continuation in
@@ -76,5 +78,15 @@ enum SheolService {
   /// behind the ◆◆◇ ward.
   static func exile(_ name: String) async {
     _ = await run(["kill", name])
+  }
+
+  /// Open the full ledger — sheol is a terminal app; the config surface only
+  /// carries its commands. Same opener the ⇪ t m u x bind uses.
+  static func openLedger() {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: helperPath("tmux-sheol-open.sh"))
+    process.standardOutput = FileHandle.nullDevice
+    process.standardError = FileHandle.nullDevice
+    try? process.run()
   }
 }

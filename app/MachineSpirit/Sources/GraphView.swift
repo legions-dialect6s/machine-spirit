@@ -35,22 +35,16 @@ struct GraphView: View {
       Canvas { context, size in
         guard let drawModel, let layout else { return }
         let transform = canvasTransform(viewport: size)
-        drawEdges(drawModel, layout: layout, transform: transform, in: &context)
-        drawNodes(drawModel, layout: layout, transform: transform, in: &context)
+        let glow = glowSet(in: drawModel)
+        drawEdges(drawModel, layout: layout, transform: transform, glow: glow, in: &context)
+        drawNodes(drawModel, layout: layout, transform: transform, glow: glow, in: &context)
       }
       .background(Theme.ground)
-      .background(
-        ScrollCatcher { deltaX, deltaY, commandHeld in
-          state.cancelGlide()
-          if commandHeld {
-            state.zoom = min(
-              max(state.zoom * (1 + deltaY * 0.01), state.minZoom), state.maxZoom)
-          } else {
-            state.pan.width += deltaX
-            state.pan.height += deltaY
-          }
-        }
-      )
+      .onGeometryChange(for: CGRect.self) { proxy in
+        proxy.frame(in: .global)
+      } action: { frame in
+        state.graphFrame = frame
+      }
       .contentShape(Rectangle())
       .gesture(panGesture)
       .simultaneousGesture(zoomGesture)
@@ -91,6 +85,19 @@ struct GraphView: View {
     case ..<0.8: return 3
     default: return .max
     }
+  }
+
+  /// The lit path: with a selection, the trace from the center to it plus
+  /// its children glow; everything else recedes. No selection → nil, and
+  /// the whole board sits at normal brightness.
+  private func glowSet(in model: Node) -> Set<String>? {
+    guard let id = state.selectedNodeID else { return nil }
+    var lit = Set(AppState.ancestorIDs(of: id))
+    lit.insert(id)
+    if let node = model.node(withID: id) {
+      for child in node.children { lit.insert(child.id) }
+    }
+    return lit
   }
 
   /// Display-only copy cut to the band; nodes that lost children carry a
@@ -201,49 +208,91 @@ struct GraphView: View {
 
   private func drawEdges(
     _ root: Node, layout: GraphLayout, transform: CanvasTransform,
-    in context: inout GraphicsContext
+    glow: Set<String>?, in context: inout GraphicsContext
   ) {
     context.drawLayer { layer in
       layer.addFilter(.shadow(color: Theme.phosphor.opacity(0.5), radius: 3))
-      var livePath = Path()
+      var litPath = Path()
+      var dimPath = Path()
       var inertPath = Path()
       walk(root) { node in
         guard let from = layout.positions[node.id] else { return }
         for child in node.children {
           guard let to = layout.positions[child.id] else { continue }
-          let a = transform.apply(from)
-          let b = transform.apply(to)
-          // Twisty cables: each edge bows perpendicular to its run, the
-          // side and swell varied per-child so the loom reads organic.
-          let mid = CGPoint(x: (a.x + b.x) / 2, y: (a.y + b.y) / 2)
-          let run = CGPoint(x: b.x - a.x, y: b.y - a.y)
-          let length = max(hypot(run.x, run.y), 0.001)
-          // Stable per-child variation (String.hashValue reseeds per launch
-          // and would break launch-to-launch determinism).
-          let byteSum = child.id.utf8.reduce(0) { $0 &+ Int($1) }
-          let side: CGFloat = byteSum & 1 == 0 ? 1 : -1
-          let swell = length * (0.14 + CGFloat(byteSum % 5) * 0.02) * side
-          let control = CGPoint(
-            x: mid.x - run.y / length * swell,
-            y: mid.y + run.x / length * swell)
-          var segment = Path()
-          segment.move(to: a)
-          segment.addQuadCurve(to: b, control: control)
+          let segment = trace(from: from, to: to, childID: child.id, transform: transform)
+          // A trace is lit when it runs along the selected path or fans out
+          // of the selected node.
+          let lit =
+            glow == nil
+            ? false
+            : (glow!.contains(child.id)
+              && (glow!.contains(node.id) || node.id == "root"))
           if child.status.isInert {
             inertPath.addPath(segment)
+          } else if lit {
+            litPath.addPath(segment)
           } else {
-            livePath.addPath(segment)
+            dimPath.addPath(segment)
           }
         }
       }
-      layer.stroke(livePath, with: .color(Theme.phosphorDim.opacity(0.75)), lineWidth: 1)
-      layer.stroke(inertPath, with: .color(Theme.ash.opacity(0.3)), lineWidth: 1)
+      let dimOpacity = glow == nil ? 0.75 : 0.28
+      layer.stroke(dimPath, with: .color(Theme.phosphorDim.opacity(dimOpacity)), lineWidth: 1)
+      layer.stroke(inertPath, with: .color(Theme.ash.opacity(glow == nil ? 0.3 : 0.15)), lineWidth: 1)
+      layer.stroke(litPath, with: .color(Theme.phosphor.opacity(0.95)), lineWidth: 1.6)
     }
+  }
+
+  /// Circuit-board routing in polar space: out along the spoke, around the
+  /// board on an intermediate ring, out again to the child. The junction
+  /// ring varies a little per trace (stable byte-sum, launch-deterministic)
+  /// so parallel traces layer instead of stacking.
+  private func trace(
+    from: GraphLayout.Position, to: GraphLayout.Position,
+    childID: String, transform: CanvasTransform
+  ) -> Path {
+    var path = Path()
+    let r1 = hypot(from.x, from.y)
+    let r2 = hypot(to.x, to.y)
+    let a = transform.apply(from)
+    let b = transform.apply(to)
+
+    // From the center (or a negligible ring), the trace is a straight spoke.
+    guard r1 > 5, r2 > r1 + 8 else {
+      path.move(to: a)
+      path.addLine(to: b)
+      return path
+    }
+
+    let theta1 = atan2(from.y, from.x)
+    let theta2 = atan2(to.y, to.x)
+    var deltaTheta = theta2 - theta1
+    while deltaTheta > .pi { deltaTheta -= 2 * .pi }
+    while deltaTheta < -.pi { deltaTheta += 2 * .pi }
+
+    let byteSum = childID.utf8.reduce(0) { $0 &+ Int($1) }
+    let junction = r1 + (r2 - r1) * (0.38 + Double(byteSum % 5) * 0.06)
+    let origin = transform.apply(.init(x: 0, y: 0))
+    let junctionOut = transform.apply(
+      .init(x: junction * cos(theta1), y: junction * sin(theta1)))
+
+    path.move(to: a)
+    path.addLine(to: junctionOut)
+    if abs(deltaTheta) > 0.004 {
+      path.addArc(
+        center: origin,
+        radius: junction * Double(transform.scale),
+        startAngle: .radians(theta1),
+        endAngle: .radians(theta2),
+        clockwise: deltaTheta < 0)
+    }
+    path.addLine(to: b)
+    return path
   }
 
   private func drawNodes(
     _ root: Node, layout: GraphLayout, transform: CanvasTransform,
-    in context: inout GraphicsContext
+    glow: Set<String>?, in context: inout GraphicsContext
   ) {
     let zoom = transform.scale
 
@@ -252,6 +301,8 @@ struct GraphView: View {
       let center = transform.apply(position)
       let inert = node.status.isInert
       let selected = node.id == state.selectedNodeID
+      let lit = glow?.contains(node.id) ?? true
+      let recede = glow != nil && !lit
       // A pruned node still opens onward — the band just hides it for now.
       let hidesMore = node.extras["__ms_pruned"] != nil
       // Constant screen size: the space zooms, the nodes do not.
@@ -260,9 +311,12 @@ struct GraphView: View {
       let primary: Color = inert ? Theme.ash : (node.isDual ? Theme.magenta : Theme.phosphor)
 
       context.drawLayer { layer in
-        if !inert {
+        if recede { layer.opacity = 0.35 }
+        if !inert && !recede {
           layer.addFilter(
-            .shadow(color: primary.opacity(selected ? 0.95 : 0.45), radius: selected ? 9 : 4))
+            .shadow(
+              color: primary.opacity(selected ? 0.95 : (lit && glow != nil ? 0.8 : 0.45)),
+              radius: selected ? 9 : (lit && glow != nil ? 6 : 4)))
         }
 
         let discRect = CGRect(
@@ -307,15 +361,19 @@ struct GraphView: View {
       context.draw(
         Text(node.key ?? "·")
           .font(.system(size: node.isDual ? 14 : 12, design: .monospaced).weight(.bold))
-          .foregroundStyle(glyphColor(for: node)),
+          .foregroundStyle(glyphColor(for: node).opacity(recede ? 0.35 : 1)),
         at: center)
 
-      // Name/summary appears once there is room for it.
-      if zoom > 0.5 || selected {
+      // Name/summary appears once there is room for it (and always along
+      // the lit path).
+      if zoom > 0.5 || selected || (lit && glow != nil) {
         context.draw(
           Text(node.displayName)
             .font(.system(size: 9, design: .monospaced))
-            .foregroundStyle(inert ? Theme.ash.opacity(0.6) : Theme.ash),
+            .foregroundStyle(
+              recede
+                ? Theme.ash.opacity(0.25)
+                : (inert ? Theme.ash.opacity(0.6) : Theme.ash)),
           at: CGPoint(x: center.x, y: center.y + radius + 9))
       }
     }
@@ -333,29 +391,3 @@ struct GraphView: View {
   }
 }
 
-/// AppKit shim: receives scrollWheel events when the cursor is over the
-/// graph (and only the graph — the directory's List keeps its own scroll).
-private struct ScrollCatcher: NSViewRepresentable {
-  var onScroll: (CGFloat, CGFloat, Bool) -> Void
-
-  func makeNSView(context: Context) -> CatcherView {
-    let view = CatcherView()
-    view.onScroll = onScroll
-    return view
-  }
-
-  func updateNSView(_ nsView: CatcherView, context: Context) {
-    nsView.onScroll = onScroll
-  }
-
-  final class CatcherView: NSView {
-    var onScroll: ((CGFloat, CGFloat, Bool) -> Void)?
-
-    override func scrollWheel(with event: NSEvent) {
-      onScroll?(
-        event.scrollingDeltaX,
-        event.scrollingDeltaY,
-        event.modifierFlags.contains(.command))
-    }
-  }
-}
