@@ -51,6 +51,13 @@ carried; the SHAs below are the exact upstream commits captured.
 - **LeaderKey — summon sigil indicator** (`[P1.7]`): `Themes/Mini.swift` renders
   `SummonSigil` (new imageset from `assets/icon_transparent.png`, 256px) when
   idle instead of the plain `●`; typed keys still take over mid-sequence.
+- **LeaderKey — test sandbox for the config home** (`[P2.4x]`, incident fix):
+  `UserConfig.defaultDirectory()` returns a temp-dir sandbox whenever XCTest
+  is loaded. Upstream's `testCreatesDefaultConfigDirIfNotExists` DELETES the
+  real `~/Library/Application Support/Leader Key/` — running the full test
+  plan once destroyed the owner's live config (SESSION-LOG war story,
+  2026-07-06). Never remove this guard; re-check it survives any upstream
+  merge.
 - **LeaderKey — config hot-reload** (`[P2.4]`): `ConfigFileMonitor` (in
   `UserConfig.swift` — no new compile unit for the app target) watches the
   live config via a DispatchSource file-system object source, 300ms debounce,

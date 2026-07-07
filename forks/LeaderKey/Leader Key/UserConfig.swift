@@ -179,6 +179,17 @@ class UserConfig: ObservableObject {
   // MARK: - Directory Management
 
   static func defaultDirectory() -> String {
+    // machine-spirit fork: under XCTest this must NEVER resolve to the real
+    // config home. Upstream's own suite deletes defaultDirectory() and
+    // writes junk configs into it — running it once destroyed a live
+    // config (war story, 2026-07-06). Sandboxing the resolver here guards
+    // every test, present and future-merged.
+    if NSClassFromString("XCTestCase") != nil {
+      let path = NSTemporaryDirectory() + "LeaderKeyTests-DefaultDir"
+      try? FileManager.default.createDirectory(
+        atPath: path, withIntermediateDirectories: true)
+      return path
+    }
     let appSupportDir = FileManager.default.urls(
       for: .applicationSupportDirectory, in: .userDomainMask)[0]
     let path = (appSupportDir.path as NSString).appendingPathComponent(

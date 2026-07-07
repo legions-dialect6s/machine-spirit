@@ -253,6 +253,40 @@ input layer:
 > do NOT restructure working features; the round-trip test gate
 > (`cd kit/MachineSpiritKit && swift test`, 26 tests) must stay green.
 
+## ⚠ War story (Phase 2, 2026-07-06 ~22:49): the fork's own tests ate the live config
+
+Running the LeaderKey fork's full test plan (`-testPlan TestPlan`) **deleted
+the owner's real `~/Library/Application Support/Leader Key/` directory and
+left a 16-byte `{ invalid json }` corpse as config.json.** Root cause is
+UPSTREAM's `testCreatesDefaultConfigDirIfNotExists`: it calls
+`UserConfig.defaultDirectory()` — the REAL config home — and
+`removeItem`s it to test the bootstrap path; sibling tests then write junk
+configs through the same resolver. The suite's per-test UserDefaults/temp-dir
+isolation does not cover that one static path.
+
+- **Detection:** the kit's new `liveConfigCopySurvivesTheFullRitual` test
+  (P2.6a) read the live config minutes later and failed on parse — the
+  write-back gate's philosophy (prove the artifact before trusting it)
+  found the corruption almost immediately.
+- **Blast radius:** on-disk config only. The running cask Leader Key never
+  hot-reloads, so the owner's keyboard kept working from memory the whole
+  time.
+- **Recovery:** repo mirror (`config/leader-key/config.json`, `__HOME__`
+  expanded) validated and moved atomically into place — 151 nodes. The live
+  config had drifted ~2 nodes ahead of the repo (Phase 1 never synced —
+  read-only law), so the drifted binds exist ONLY in the cask app's memory:
+  when the owner is next present, any config edit in LK's settings will pop
+  its "changed on disk" conflict alert — choose **Overwrite** to land the
+  in-memory truth, then `sync.sh`. If LK restarts before that, the floor is
+  the 151-node repo state.
+- **Fix:** fork patch — `defaultDirectory()` resolves to a temp sandbox
+  whenever XCTest is loaded, so NO test (present or future-merged) can
+  reach the real config home. Full test plan re-run: green, live config
+  byte-identical before/after.
+- **Law renewed:** the tmux law generalizes — **any test suite that can
+  write the machine gets a sandboxed resolver before its first run.** The
+  corrupted corpse is preserved in the session scratchpad.
+
 ## Session close addendum ([P1.21]–[P1.23], 2026-07-06 ~21:30)
 
 - Keystroke chips ride whole and true: `[l-s-n-m]`, bracketed/dashed, above
