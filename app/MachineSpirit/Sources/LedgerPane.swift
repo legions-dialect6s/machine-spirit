@@ -1,4 +1,5 @@
 import AppKit
+import Darwin
 import SwiftTerm
 import SwiftUI
 
@@ -107,13 +108,40 @@ struct LedgerTerminal: NSViewRepresentable {
   func updateNSView(_ nsView: LocalProcessTerminalView, context: Context) {}
 
   /// The TUI's own single-instance doctrine, applied from the app side:
-  /// its INT/TERM trap exits cleanly (SESSION-LOG war story made sure).
+  /// prefer the pidfile that tmux-sheol writes; broad pkill is only a stale-file fallback.
   static func endTUI() {
+    let pidfile = FileManager.default.homeDirectoryForCurrentUser
+      .appendingPathComponent(".cache/machine-spirit/sheol.pid")
+    if let text = try? String(contentsOf: pidfile, encoding: .utf8),
+      let pid = Int32(text.trimmingCharacters(in: .whitespacesAndNewlines)),
+      commandLine(for: pid).contains("tmux-sheol.sh")
+    {
+      kill(pid, SIGTERM)
+      return
+    }
+
     let process = Process()
     process.executableURL = URL(fileURLWithPath: "/usr/bin/pkill")
     process.arguments = ["-f", "bin/tmux-sheol.sh"]
     process.standardOutput = FileHandle.nullDevice
     process.standardError = FileHandle.nullDevice
     try? process.run()
+  }
+
+  private static func commandLine(for pid: Int32) -> String {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/bin/ps")
+    process.arguments = ["-p", String(pid), "-o", "command="]
+    let pipe = Pipe()
+    process.standardOutput = pipe
+    process.standardError = FileHandle.nullDevice
+    do {
+      try process.run()
+      let data = pipe.fileHandleForReading.readDataToEndOfFile()
+      process.waitUntilExit()
+      return String(data: data, encoding: .utf8) ?? ""
+    } catch {
+      return ""
+    }
   }
 }

@@ -328,18 +328,32 @@ final class AppState {
         pan = CGSize(width: saved.panX, height: saved.panY)
       }
     }
-    NotificationCenter.default.addObserver(
+    terminationObserver = NotificationCenter.default.addObserver(
       forName: NSApplication.willTerminateNotification, object: nil, queue: .main
     ) { [weak self] _ in
-      MainActor.assumeIsolated { self?.saveSidecar() }
+      MainActor.assumeIsolated {
+        self?.saveSidecar()
+        self?.shutdown()
+      }
     }
+  }
+
+  func shutdown() {
+    if let keyMonitor { NSEvent.removeMonitor(keyMonitor); self.keyMonitor = nil }
+    if let scrollMonitor { NSEvent.removeMonitor(scrollMonitor); self.scrollMonitor = nil }
+    if let terminationObserver {
+      NotificationCenter.default.removeObserver(terminationObserver)
+      self.terminationObserver = nil
+    }
+    glideTask?.cancel()
+    sheolPollTask?.cancel()
   }
 
   func saveSidecar() {
     var saved = GraphViewState(zoom: zoom, panX: pan.width, panY: pan.height)
     saved.nodes = nodeOverrides.mapValues { .init(x: $0.x, y: $0.y) }
     if let data = try? saved.data() {
-      try? data.write(to: Self.sidecarURL)
+      try? data.write(to: Self.sidecarURL, options: .atomic)
     }
   }
 
@@ -374,6 +388,7 @@ final class AppState {
   var spirits: [Spirit] = []
 
   @ObservationIgnored private var sheolPollTask: Task<Void, Never>?
+  @ObservationIgnored private var terminationObserver: NSObjectProtocol?
 
   /// What the views render. (Identical to `model` since the owner ruled
   /// spirits out of the config graph; kept as the views' single entry

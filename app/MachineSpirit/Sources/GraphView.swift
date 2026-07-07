@@ -719,7 +719,7 @@ struct GraphView: View {
     }
   }
 
-  private func glyphColor(for node: Node) -> Color {
+  nonisolated private func glyphColor(for node: Node) -> Color {
     if node.status.isInert { return Theme.ash }
     if node.action != nil { return Color.white.opacity(0.92) }
     return node.isDual ? Theme.magenta : Theme.phosphor
