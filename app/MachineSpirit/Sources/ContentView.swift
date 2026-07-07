@@ -4,6 +4,24 @@ import SwiftUI
 struct ContentView: View {
   @Environment(AppState.self) private var state
 
+  // The wordmark types itself in on boot and refresh — the same reveal
+  // sheol's TUI plays. (Aesthetics become user parameters later — #29.)
+  private static let fullTitle = "+++ machine-spirit +++"
+  @State private var typedTitle = ""
+  @State private var typingTask: Task<Void, Never>?
+
+  private func typeTitle() {
+    typingTask?.cancel()
+    typedTitle = ""
+    typingTask = Task {
+      for character in Self.fullTitle {
+        guard !Task.isCancelled else { return }
+        typedTitle.append(character)
+        try? await Task.sleep(for: .milliseconds(26))
+      }
+    }
+  }
+
   var body: some View {
     VStack(spacing: 0) {
       header
@@ -14,13 +32,18 @@ struct ContentView: View {
     }
     .background(Theme.ground)
     .frame(minWidth: 1100, minHeight: 620)
+    .onAppear { typeTitle() }
+    .onChange(of: state.bootStamp) { typeTitle() }
   }
 
   private var header: some View {
     HStack(spacing: 10) {
-      Text("+++ machine-spirit +++")
-        .font(.system(.title3, design: .monospaced).weight(.bold))
-        .foregroundStyle(Theme.phosphor)
+      ZStack(alignment: .leading) {
+        Text(Self.fullTitle).hidden()  // reserve the full width
+        Text(typedTitle)
+      }
+      .font(.system(.title3, design: .monospaced).weight(.bold))
+      .foregroundStyle(Theme.phosphor)
       Spacer()
       Button {
         SheolService.openLedger()

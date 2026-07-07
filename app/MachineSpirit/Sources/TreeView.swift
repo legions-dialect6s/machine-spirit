@@ -14,11 +14,15 @@ struct TreeView: View {
     ScrollViewReader { proxy in
       List(selection: $state.selectedNodeID) {
         if let model = state.displayModel {
-          ForEach(model.children) { child in
+          // Rows cascade in on boot/refresh — the retro terminal build.
+          // List identity keys on bootStamp so refresh replays the reveal.
+          ForEach(Array(model.children.enumerated()), id: \.element.id) { index, child in
             NodeBranch(node: child)
+              .modifier(CascadeIn(delay: Double(index) * 0.035))
           }
         }
       }
+      .id(state.bootStamp)
       .scrollContentBackground(.hidden)
       .background(Theme.ground)
       .environment(\.defaultMinListRowHeight, 26)
@@ -41,6 +45,22 @@ struct TreeView: View {
         }
       }
     }
+  }
+}
+
+/// Boot/refresh reveal: each row types itself onto the ledger in order,
+/// left-shifted and dim until its moment — the hotkey-splash lineage.
+private struct CascadeIn: ViewModifier {
+  let delay: Double
+  @State private var appeared = false
+
+  func body(content: Content) -> some View {
+    content
+      .opacity(appeared ? 1 : 0)
+      .offset(x: appeared ? 0 : -12)
+      .onAppear {
+        withAnimation(.easeOut(duration: 0.16).delay(delay)) { appeared = true }
+      }
   }
 }
 

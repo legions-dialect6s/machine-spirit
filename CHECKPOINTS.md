@@ -196,3 +196,19 @@ live state (#26 doctrine).
 **Restore:** `git stash -u && git reset --hard <commit tagged [P1.12]>`
 **Re-verify:** build & open; wheel-zoom over the graph; walk `t` (path
 glows); click "sheol" (ledger window opens).
+
+### The board lives — growth, sway, taper, typewriter, cascade `[P1.13]`
+
+TimelineView-driven canvas (20fps, heat-conscious): traces GROW from the
+center to the rim on boot/refresh (trimmed paths, staggered by radius, nodes
+fade in behind their trace); at rest the lines sway faintly and stir when
+the viewport moves (vines in water; smooth sibling-staggered cubics along
+junction rings — no hard corners); widths taper with depth. The header
+wordmark types itself in (sheol's reveal); the directory cascades row by
+row on boot/refresh. Zoom bar de-chromed. Kit: command display names skip
+wrapper plumbing (`run-quiet.sh …/ss-menu.sh` → `ss-menu`; 24 tests green).
+Cache: #29 aesthetics-as-parameters 🔒, #30 drag-and-drop design.
+
+**Restore:** `git stash -u && git reset --hard <commit tagged [P1.13]>`
+**Re-verify:** build & open (growth + typewriter + cascade); ⌘R replays
+them; pan hard and watch the lines stir, then settle.

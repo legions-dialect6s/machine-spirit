@@ -34,6 +34,16 @@ final class AppState {
   /// fresh by GraphView so the scroll monitor can scope itself to it.
   @ObservationIgnored var graphFrame: CGRect = .zero
 
+  /// Reference instant for the boot/refresh growth animation — traces grow
+  /// out of the center toward the rim, the directory cascades in.
+  var bootStamp = Date()
+
+  /// The lines live: they sway faintly at rest and stir when the viewport
+  /// moves. Views derive the sway amplitude from time-since-disturbance.
+  @ObservationIgnored var lastDisturbance = Date.distantPast
+
+  func disturb() { lastDisturbance = Date() }
+
   @ObservationIgnored private var glideTask: Task<Void, Never>?
 
   /// Organic lerp of the graph viewport — smoothstep, ~a third of a second,
@@ -53,6 +63,7 @@ final class AppState {
           width: fromPan.width + (target.width - fromPan.width) * eased,
           height: fromPan.height + (target.height - fromPan.height) * eased)
         self.zoom = fromZoom + (toZoom - fromZoom) * eased
+        self.disturb()
         try? await Task.sleep(for: .milliseconds(15))
       }
     }
@@ -153,14 +164,10 @@ final class AppState {
     communeWithLiveConfig()
     Task { spirits = await SheolService.list() }
     refreshFlashing = true
-    // The graph takes a breath: a small zoom swell out and back.
-    let restingZoom = zoom
-    let restingPan = pan
-    glide(toPan: restingPan, zoom: restingZoom * 1.1)
+    bootStamp = Date()  // regrow the traces, re-cascade the directory
+    disturb()
     Task { [weak self] in
-      try? await Task.sleep(for: .milliseconds(400))
-      self?.glide(toPan: restingPan, zoom: restingZoom)
-      try? await Task.sleep(for: .milliseconds(1200))
+      try? await Task.sleep(for: .milliseconds(1600))
       self?.refreshFlashing = false
     }
   }
@@ -208,6 +215,7 @@ final class AppState {
         self.pan.width += event.scrollingDeltaX
         self.pan.height += event.scrollingDeltaY
       }
+      self.disturb()
       return nil
     }
   }

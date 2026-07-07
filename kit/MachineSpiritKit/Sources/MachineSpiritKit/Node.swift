@@ -85,12 +85,38 @@ public struct Node: Identifiable, Equatable, Sendable {
       return (path as NSString).lastPathComponent
     case .command(let value):
       if let windowAction = action.windowAction { return windowAction }
-      return value.components(separatedBy: " ").first ?? value
+      return Node.commandDisplayName(value)
     case .url(let value):
       return value
     case .other(_, let value):
       return value
     }
+  }
+
+  /// Command display names skip the plumbing (run-quiet.sh, osascript…) and
+  /// show the script that actually does the work, plus its first argument:
+  /// `osascript ~/bin/web-jump.applescript github.com` → `web-jump github.com`.
+  static func commandDisplayName(_ value: String) -> String {
+    let wrappers: Set<String> = ["run-quiet.sh", "osascript", "env", "sh", "zsh", "bash", "open"]
+    let tokens = value.components(separatedBy: " ").filter { !$0.isEmpty }
+    var script: String?
+    var argument: String?
+    for token in tokens {
+      if token.hasPrefix("-") { continue }
+      if token.hasPrefix("'") || token.hasPrefix("\"") { break }
+      let base = (token as NSString).lastPathComponent
+      if wrappers.contains(base) { continue }
+      if script == nil {
+        if token.contains("/") || base.contains(".") { script = base; continue }
+        break
+      }
+      argument = token
+      break
+    }
+    guard let script else { return tokens.first ?? value }
+    let name = (script as NSString).deletingPathExtension
+    if let argument { return "\(name) \(argument)" }
+    return name
   }
 
   /// Depth-first count of this node and everything under it.

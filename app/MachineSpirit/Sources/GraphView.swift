@@ -2,18 +2,19 @@ import AppKit
 import MachineSpiritKit
 import SwiftUI
 
-/// The node graph: the same model as the directory, projected 360° from the
-/// center (one center per leader key; more middles are a Phase-2 concern).
+/// The node graph: the config projected 360° from the center (one center
+/// per leader key; more middles are a Phase-2 concern).
 ///
 /// The glyph language:
 ///   action  = filled core
 ///   group   = halo ring
-///   both    = ring AND core, both lit — group+action duality
+///   both    = ring AND core, both lit — group+action duality (magenta)
 ///   inert   = ashen ghost
 ///
-/// Nodes hold a constant screen size; zoom moves the space between them.
-/// Scroll pans, ⌘-scroll zooms, pinch zooms, letters walk, selection glides
-/// to center.
+/// The board is alive: traces grow out of the center on boot/refresh, sway
+/// faintly at rest like vines in water, stir when the viewport moves, and
+/// taper as they run outward. Nodes hold a constant screen size; zoom moves
+/// the space between them. Selection lights the path from the center.
 struct GraphView: View {
   @Environment(AppState.self) private var state
 
@@ -22,22 +23,36 @@ struct GraphView: View {
 
   private let nodeRadius: CGFloat = 13
   private let dualRadius: CGFloat = 18
+  private let growthDuration = 1.5
 
   var body: some View {
     GeometryReader { geometry in
       let model = state.displayModel
-      // Semantic zoom: zoomed out shows the shallow rings; zooming in makes
-      // deeper rings bloom and the layout reorganize around them. Nodes
-      // keep a constant screen size throughout.
+      // Semantic zoom: shallow rings when far out; deeper rings bloom and
+      // the layout reorganizes as you come closer.
       let drawModel = model.map { prune($0, depth: 0, maxDepth: visibleDepth) }
       let layout = drawModel.map { RadialLayout.layout(root: $0) }
 
-      Canvas { context, size in
-        guard let drawModel, let layout else { return }
-        let transform = canvasTransform(viewport: size)
-        let glow = glowSet(in: drawModel)
-        drawEdges(drawModel, layout: layout, transform: transform, glow: glow, in: &context)
-        drawNodes(drawModel, layout: layout, transform: transform, glow: glow, in: &context)
+      // 20fps: the sway is slow (≈1.7 rad/s) and reads identically, and an
+      // always-running canvas must respect the heat lesson (SESSION-LOG).
+      TimelineView(.animation(minimumInterval: 1.0 / 20.0)) { timeline in
+        Canvas { context, size in
+          guard let drawModel, let layout else { return }
+          let transform = canvasTransform(viewport: size)
+          let glow = glowSet(in: drawModel)
+          let pulse = Pulse(
+            now: timeline.date,
+            bootStamp: state.bootStamp,
+            lastDisturbance: state.lastDisturbance,
+            maxRadius: max(layout.width / 2, 1),
+            growthDuration: growthDuration)
+          drawEdges(
+            drawModel, layout: layout, transform: transform, glow: glow, pulse: pulse,
+            in: &context)
+          drawNodes(
+            drawModel, layout: layout, transform: transform, glow: glow, pulse: pulse,
+            in: &context)
+        }
       }
       .background(Theme.ground)
       .onGeometryChange(for: CGRect.self) { proxy in
@@ -49,9 +64,8 @@ struct GraphView: View {
       .gesture(panGesture)
       .simultaneousGesture(zoomGesture)
       .onTapGesture { location in
-        guard let model, let layout else { return }
+        guard let layout else { return }
         let transform = canvasTransform(viewport: geometry.size)
-        _ = model
         if let hitID = hitTest(location, in: layout, transform: transform) {
           state.selectedNodeID = hitID
           state.revealSelectionInTree()
@@ -77,40 +91,36 @@ struct GraphView: View {
     .overlay(alignment: .topTrailing) { zoomControls }
   }
 
-  /// Depth band per zoom: the reorganize-as-you-zoom mechanic.
-  private var visibleDepth: Int {
-    switch effectiveZoom {
-    case ..<0.22: return 1
-    case ..<0.45: return 2
-    case ..<0.8: return 3
-    default: return .max
-    }
-  }
+  // MARK: - Time: growth on boot, sway at rest, stir on movement
 
-  /// The lit path: with a selection, the trace from the center to it plus
-  /// its children glow; everything else recedes. No selection → nil, and
-  /// the whole board sits at normal brightness.
-  private func glowSet(in model: Node) -> Set<String>? {
-    guard let id = state.selectedNodeID else { return nil }
-    var lit = Set(AppState.ancestorIDs(of: id))
-    lit.insert(id)
-    if let node = model.node(withID: id) {
-      for child in node.children { lit.insert(child.id) }
-    }
-    return lit
-  }
+  private struct Pulse {
+    let seconds: Double  // continuous clock for the sway
+    let elapsed: Double  // since boot/refresh
+    let sway: Double  // amplitude in points
+    let maxRadius: Double
+    let growthDuration: Double
 
-  /// Display-only copy cut to the band; nodes that lost children carry a
-  /// marker so they can whisper that more waits below.
-  private func prune(_ node: Node, depth: Int, maxDepth: Int) -> Node {
-    var pruned = node
-    if depth >= maxDepth, !node.children.isEmpty {
-      pruned.children = []
-      pruned.extras["__ms_pruned"] = .bool(true)
-    } else {
-      pruned.children = node.children.map { prune($0, depth: depth + 1, maxDepth: maxDepth) }
+    init(
+      now: Date, bootStamp: Date, lastDisturbance: Date, maxRadius: Double,
+      growthDuration: Double
+    ) {
+      seconds = now.timeIntervalSinceReferenceDate
+      elapsed = now.timeIntervalSince(bootStamp)
+      let calm = max(0, now.timeIntervalSince(lastDisturbance))
+      sway = 0.8 + exp(-calm * 2.0) * 5.0
+      self.maxRadius = maxRadius
+      self.growthDuration = growthDuration
     }
-    return pruned
+
+    var growing: Bool { elapsed < growthDuration }
+
+    /// 0…1 reveal of an element at the given radius — the growth runs from
+    /// the center to the rim.
+    func reveal(atRadius radius: Double, lag: Double = 0) -> Double {
+      guard growing else { return 1 }
+      let delay = radius / maxRadius * (growthDuration * 0.55) + lag
+      return min(max((elapsed - delay) / 0.4, 0), 1)
+    }
   }
 
   // MARK: - Viewport math (screen = world * zoom + center + pan)
@@ -125,6 +135,10 @@ struct GraphView: View {
       CGPoint(
         x: position.x * scale + offset.width,
         y: position.y * scale + offset.height)
+    }
+
+    func apply(x: Double, y: Double) -> CGPoint {
+      CGPoint(x: x * scale + offset.width, y: y * scale + offset.height)
     }
 
     func unapply(_ point: CGPoint) -> GraphLayout.Position {
@@ -149,6 +163,7 @@ struct GraphView: View {
         state.cancelGlide()
         state.pan.width += value.translation.width
         state.pan.height += value.translation.height
+        state.disturb()
       }
   }
 
@@ -158,6 +173,7 @@ struct GraphView: View {
       .onEnded { value in
         state.cancelGlide()
         state.zoom = min(max(state.zoom * value.magnification, state.minZoom), state.maxZoom)
+        state.disturb()
       }
   }
 
@@ -176,80 +192,144 @@ struct GraphView: View {
     return best?.id
   }
 
+  /// Depth band per zoom: the reorganize-as-you-zoom mechanic.
+  private var visibleDepth: Int {
+    switch effectiveZoom {
+    case ..<0.22: return 1
+    case ..<0.45: return 2
+    case ..<0.8: return 3
+    default: return .max
+    }
+  }
+
+  /// The lit path: with a selection, the trace from the center to it plus
+  /// its children glow; everything else recedes.
+  private func glowSet(in model: Node) -> Set<String>? {
+    guard let id = state.selectedNodeID else { return nil }
+    var lit = Set(AppState.ancestorIDs(of: id))
+    lit.insert(id)
+    if let node = model.node(withID: id) {
+      for child in node.children { lit.insert(child.id) }
+    }
+    return lit
+  }
+
+  /// Display-only copy cut to the band; nodes that lost children carry a
+  /// marker so they can whisper that more waits below.
+  private func prune(_ node: Node, depth: Int, maxDepth: Int) -> Node {
+    var pruned = node
+    if depth >= maxDepth, !node.children.isEmpty {
+      pruned.children = []
+      pruned.extras["__ms_pruned"] = .bool(true)
+    } else {
+      pruned.children = node.children.map { prune($0, depth: depth + 1, maxDepth: maxDepth) }
+    }
+    return pruned
+  }
+
   // MARK: - Controls
 
   private var zoomControls: some View {
     @Bindable var state = state
-    return HStack(spacing: 8) {
-      Text("−").foregroundStyle(Theme.phosphor)
+    return HStack(spacing: 6) {
+      Text("−").foregroundStyle(Theme.phosphorDim)
       Slider(
         value: Binding(
           get: { log(state.zoom) },
           set: {
             state.cancelGlide()
             state.zoom = min(max(exp($0), state.minZoom), state.maxZoom)
+            state.disturb()
           }
         ),
         in: log(state.minZoom)...log(state.maxZoom)
       )
-      .frame(width: 160)
+      .frame(width: 140)
+      .controlSize(.mini)
       .tint(Theme.phosphorDim)
-      Text("+").foregroundStyle(Theme.phosphor)
+      Text("+").foregroundStyle(Theme.phosphorDim)
     }
-    .font(.system(.body, design: .monospaced).weight(.bold))
-    .padding(.horizontal, 10)
-    .padding(.vertical, 6)
-    .background(
-      RoundedRectangle(cornerRadius: 6).fill(Theme.groundRaised.opacity(0.85)))
-    .padding(10)
+    .font(.system(size: 12, design: .monospaced).weight(.bold))
+    .padding(8)
+    .opacity(0.85)
   }
 
   // MARK: - Drawing
 
   private func drawEdges(
     _ root: Node, layout: GraphLayout, transform: CanvasTransform,
-    glow: Set<String>?, in context: inout GraphicsContext
+    glow: Set<String>?, pulse: Pulse, in context: inout GraphicsContext
   ) {
-    context.drawLayer { layer in
-      layer.addFilter(.shadow(color: Theme.phosphor.opacity(0.5), radius: 3))
-      var litPath = Path()
-      var dimPath = Path()
-      var inertPath = Path()
-      walk(root) { node in
-        guard let from = layout.positions[node.id] else { return }
-        for child in node.children {
-          guard let to = layout.positions[child.id] else { continue }
-          let segment = trace(from: from, to: to, childID: child.id, transform: transform)
-          // A trace is lit when it runs along the selected path or fans out
-          // of the selected node.
-          let lit =
-            glow == nil
-            ? false
-            : (glow!.contains(child.id)
-              && (glow!.contains(node.id) || node.id == "root"))
-          if child.status.isInert {
-            inertPath.addPath(segment)
-          } else if lit {
-            litPath.addPath(segment)
-          } else {
-            dimPath.addPath(segment)
-          }
+    // Traces batch per (category, depth) so width can taper with depth
+    // while strokes stay few.
+    var litPaths: [Int: Path] = [:]
+    var dimPaths: [Int: Path] = [:]
+    var inertPaths: [Int: Path] = [:]
+
+    walk(root) { node in
+      guard let from = layout.positions[node.id] else { return }
+      let siblingCount = node.children.count
+      for (index, child) in node.children.enumerated() {
+        guard let to = layout.positions[child.id] else { continue }
+        var segment = trace(
+          from: from, to: to, childID: child.id, index: index,
+          siblings: siblingCount, pulse: pulse, transform: transform)
+
+        let childRadius = hypot(to.x, to.y)
+        let reveal = pulse.reveal(atRadius: childRadius)
+        if reveal <= 0 { continue }
+        if reveal < 1 { segment = segment.trimmedPath(from: 0, to: reveal) }
+
+        let depth = child.id.split(separator: "/").count - 1
+        let lit =
+          glow == nil
+          ? false
+          : (glow!.contains(child.id) && (glow!.contains(node.id) || node.id == "root"))
+        if child.status.isInert {
+          inertPaths[depth, default: Path()].addPath(segment)
+        } else if lit {
+          litPaths[depth, default: Path()].addPath(segment)
+        } else {
+          dimPaths[depth, default: Path()].addPath(segment)
         }
       }
-      let dimOpacity = glow == nil ? 0.75 : 0.28
-      layer.stroke(dimPath, with: .color(Theme.phosphorDim.opacity(dimOpacity)), lineWidth: 1)
-      layer.stroke(inertPath, with: .color(Theme.ash.opacity(glow == nil ? 0.3 : 0.15)), lineWidth: 1)
-      layer.stroke(litPath, with: .color(Theme.phosphor.opacity(0.95)), lineWidth: 1.6)
+    }
+
+    context.drawLayer { layer in
+      layer.addFilter(.shadow(color: Theme.phosphor.opacity(0.5), radius: 3))
+      let dimOpacity = glow == nil ? 0.7 : 0.25
+      for (depth, path) in dimPaths {
+        layer.stroke(
+          path, with: .color(Theme.phosphorDim.opacity(dimOpacity)),
+          lineWidth: taper(depth))
+      }
+      for (depth, path) in inertPaths {
+        layer.stroke(
+          path, with: .color(Theme.ash.opacity(glow == nil ? 0.28 : 0.14)),
+          lineWidth: taper(depth) * 0.9)
+      }
+      for (depth, path) in litPaths {
+        layer.stroke(
+          path, with: .color(Theme.phosphor.opacity(0.95)),
+          lineWidth: taper(depth) * 1.5)
+      }
     }
   }
 
-  /// Circuit-board routing in polar space: out along the spoke, around the
-  /// board on an intermediate ring, out again to the child. The junction
-  /// ring varies a little per trace (stable byte-sum, launch-deterministic)
-  /// so parallel traces layer instead of stacking.
+  /// Trace width thins as the run leaves the center — heavier arteries at
+  /// the first ring, hairlines at the rim.
+  private func taper(_ depth: Int) -> CGFloat {
+    max(0.55, 2.1 - CGFloat(depth) * 0.38)
+  }
+
+  /// One trace, polar-routed without corners: a cubic whose control points
+  /// ride an intermediate junction ring, staggered per sibling so parallel
+  /// runs layer instead of stacking. The junction breathes with the sway —
+  /// vines in water, wired like a circuit.
   private func trace(
     from: GraphLayout.Position, to: GraphLayout.Position,
-    childID: String, transform: CanvasTransform
+    childID: String, index: Int, siblings: Int,
+    pulse: Pulse, transform: CanvasTransform
   ) -> Path {
     var path = Path()
     let r1 = hypot(from.x, from.y)
@@ -257,10 +337,17 @@ struct GraphView: View {
     let a = transform.apply(from)
     let b = transform.apply(to)
 
-    // From the center (or a negligible ring), the trace is a straight spoke.
+    let byteSum = childID.utf8.reduce(0) { $0 &+ Int($1) }
+    let phase = Double(byteSum % 628) / 100.0
+    let wobble = sin(pulse.seconds * 1.7 + phase) * pulse.sway
+
+    // From the center, the trace is a near-straight spoke with a soft lean.
     guard r1 > 5, r2 > r1 + 8 else {
+      let mid = CGPoint(
+        x: (a.x + b.x) / 2 - (b.y - a.y) * 0.03 + wobble * 0.4,
+        y: (a.y + b.y) / 2 + (b.x - a.x) * 0.03 + wobble * 0.4)
       path.move(to: a)
-      path.addLine(to: b)
+      path.addQuadCurve(to: b, control: mid)
       return path
     }
 
@@ -270,34 +357,35 @@ struct GraphView: View {
     while deltaTheta > .pi { deltaTheta -= 2 * .pi }
     while deltaTheta < -.pi { deltaTheta += 2 * .pi }
 
-    let byteSum = childID.utf8.reduce(0) { $0 &+ Int($1) }
-    let junction = r1 + (r2 - r1) * (0.38 + Double(byteSum % 5) * 0.06)
-    let origin = transform.apply(.init(x: 0, y: 0))
-    let junctionOut = transform.apply(
-      .init(x: junction * cos(theta1), y: junction * sin(theta1)))
+    // Sibling-staggered junction ring, swaying a little.
+    let fraction = siblings <= 1 ? 0.5 : 0.34 + 0.32 * Double(index) / Double(siblings - 1)
+    let junction = r1 + (r2 - r1) * fraction + wobble / max(Double(transform.scale), 0.001)
+
+    let control1 = transform.apply(
+      x: junction * cos(theta1 + deltaTheta * 0.3),
+      y: junction * sin(theta1 + deltaTheta * 0.3))
+    let control2 = transform.apply(
+      x: junction * cos(theta1 + deltaTheta * 0.7),
+      y: junction * sin(theta1 + deltaTheta * 0.7))
 
     path.move(to: a)
-    path.addLine(to: junctionOut)
-    if abs(deltaTheta) > 0.004 {
-      path.addArc(
-        center: origin,
-        radius: junction * Double(transform.scale),
-        startAngle: .radians(theta1),
-        endAngle: .radians(theta2),
-        clockwise: deltaTheta < 0)
-    }
-    path.addLine(to: b)
+    path.addCurve(to: b, control1: control1, control2: control2)
     return path
   }
 
   private func drawNodes(
     _ root: Node, layout: GraphLayout, transform: CanvasTransform,
-    glow: Set<String>?, in context: inout GraphicsContext
+    glow: Set<String>?, pulse: Pulse, in context: inout GraphicsContext
   ) {
     let zoom = transform.scale
 
     walk(root) { node in
       guard let position = layout.positions[node.id] else { return }
+
+      // Growth: a node fades in just after its trace arrives.
+      let birth = pulse.reveal(atRadius: hypot(position.x, position.y), lag: 0.12)
+      if birth <= 0 { return }
+
       let center = transform.apply(position)
       let inert = node.status.isInert
       let selected = node.id == state.selectedNodeID
@@ -306,12 +394,12 @@ struct GraphView: View {
       // A pruned node still opens onward — the band just hides it for now.
       let hidesMore = node.extras["__ms_pruned"] != nil
       // Constant screen size: the space zooms, the nodes do not.
-      let radius = node.isDual ? dualRadius : nodeRadius
+      let radius = (node.isDual ? dualRadius : nodeRadius) * (birth < 1 ? birth : 1)
 
       let primary: Color = inert ? Theme.ash : (node.isDual ? Theme.magenta : Theme.phosphor)
 
       context.drawLayer { layer in
-        if recede { layer.opacity = 0.35 }
+        layer.opacity = Double(birth) * (recede ? 0.35 : 1)
         if !inert && !recede {
           layer.addFilter(
             .shadow(
@@ -357,11 +445,13 @@ struct GraphView: View {
         }
       }
 
+      guard birth > 0.6 else { return }
+
       // Key glyph, constant size — the address of the node.
       context.draw(
         Text(node.key ?? "·")
           .font(.system(size: node.isDual ? 14 : 12, design: .monospaced).weight(.bold))
-          .foregroundStyle(glyphColor(for: node).opacity(recede ? 0.35 : 1)),
+          .foregroundStyle(glyphColor(for: node).opacity(recede ? 0.35 : Double(birth))),
         at: center)
 
       // Name/summary appears once there is room for it (and always along
@@ -373,7 +463,7 @@ struct GraphView: View {
             .foregroundStyle(
               recede
                 ? Theme.ash.opacity(0.25)
-                : (inert ? Theme.ash.opacity(0.6) : Theme.ash)),
+                : (inert ? Theme.ash.opacity(0.6) : Theme.ash.opacity(Double(birth)))),
           at: CGPoint(x: center.x, y: center.y + radius + 9))
       }
     }
@@ -390,4 +480,3 @@ struct GraphView: View {
     for child in node.children { walk(child, visit) }
   }
 }
-

@@ -97,6 +97,21 @@ struct ModelTests {
     #expect(serialized == expected)
   }
 
+  @Test func commandDisplayNamesSkipThePlumbing() {
+    #expect(
+      Node.commandDisplayName("~/bin/run-quiet.sh ~/bin/screenshots/ss-menu.sh") == "ss-menu")
+    #expect(
+      Node.commandDisplayName("osascript ~/bin/web-jump.applescript github.com")
+        == "web-jump github.com")
+    #expect(
+      Node.commandDisplayName("~/bin/run-quiet.sh ~/bin/tmux-sheol-open.sh") == "tmux-sheol-open")
+    // Inline osascript bodies fall back to the first token.
+    #expect(
+      Node.commandDisplayName(
+        "~/bin/run-quiet.sh osascript -e 'tell application \"System Events\"'")
+        == "~/bin/run-quiet.sh")
+  }
+
   @Test func graphViewStateRoundTrips() throws {
     let state = GraphViewState(
       zoom: 1.5,
