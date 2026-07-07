@@ -26,6 +26,15 @@ enum IconStore {
     case .folder(let path): return expand(path)
     case .command(let value):
       if let domain = webJumpDomain(in: value) { return "favicon:\(domain)" }
+      // A command that clearly drives an app wears that app's face.
+      let lowered = value.lowercased()
+      if lowered.contains("iterm") || lowered.contains("tmux") {
+        return "/Applications/iTerm.app"
+      }
+      if lowered.contains("browser") || lowered.contains("site-home") {
+        return "/Applications/Safari.app"
+      }
+      if lowered.contains("finder") { return "/System/Library/CoreServices/Finder.app" }
       return terminalAppPath
     case .url, .other: return nil
     }

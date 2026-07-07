@@ -47,17 +47,28 @@ struct LedgerPane: View {
   }
 }
 
-/// AppKit bridge to SwiftTerm's local-process terminal, themed to the board.
+/// AppKit bridge to SwiftTerm's local-process terminal, wearing the
+/// owner's actual iTerm colors (parsed from the repo's .itermcolors) and a
+/// real PATH — GUI apps inherit a bare one, which is why tmux "wasn't
+/// installed" from inside the pane.
 struct LedgerTerminal: NSViewRepresentable {
   func makeNSView(context: Context) -> LocalProcessTerminalView {
     let terminal = LocalProcessTerminalView(frame: .zero)
-    terminal.nativeBackgroundColor = NSColor(Theme.ground)
-    terminal.nativeForegroundColor = NSColor(Theme.phosphor)
+    ITermColors.apply(to: terminal)
     terminal.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+    let home = FileManager.default.homeDirectoryForCurrentUser.path
+    let environment = [
+      "TERM=xterm-256color",
+      "LANG=en_US.UTF-8",
+      "HOME=\(home)",
+      "USER=\(NSUserName())",
+      "SHELL=/bin/zsh",
+      "PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+    ]
     terminal.startProcess(
       executable: "/bin/bash",
       args: [SheolService.helperPath("tmux-sheol.sh")],
-      environment: nil,
+      environment: environment,
       execName: nil)
     return terminal
   }

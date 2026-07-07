@@ -172,23 +172,48 @@ private struct NodeBranch: View {
 }
 
 struct NodeRow: View {
+  @Environment(AppState.self) private var state
   let node: Node
+
+  /// The node's identity color — same coding as the board.
+  private var identity: Color {
+    if node.status.isInert { return Theme.ash }
+    if case .application(let path) = node.action {
+      return IconStore.tint(forPath: (path as NSString).expandingTildeInPath)
+    }
+    if case .command(let value) = node.action,
+      let domain = IconStore.webJumpDomain(in: value)
+    {
+      return IconStore.tint(forPath: "favicon:\(domain)")
+    }
+    return Theme.nodeColor(for: node)
+  }
 
   var body: some View {
     HStack(spacing: 10) {
       Text(node.key ?? "·")
         .font(.system(.body, design: .monospaced).weight(.bold))
-        .foregroundStyle(node.status.isInert ? Theme.ash : Theme.phosphor)
+        .foregroundStyle(node.status.isInert ? Theme.ash : identity)
         .frame(minWidth: 22)
         .padding(.horizontal, 5)
         .padding(.vertical, 1)
         .background(
           RoundedRectangle(cornerRadius: 4)
             .fill(Theme.groundRaised)
-            .strokeBorder(
-              (node.status.isInert ? Theme.ash : Theme.phosphorDim).opacity(0.6),
-              lineWidth: 1)
+            .strokeBorder(identity.opacity(0.65), lineWidth: 1)
         )
+
+      // The node's real face — app icon, folder, terminal, favicon.
+      if let iconPath = IconStore.iconPath(for: node),
+        let icon = IconStore.icon(forPath: iconPath, state: state)
+      {
+        icon
+          .resizable()
+          .scaledToFit()
+          .frame(width: 16, height: 16)
+          .clipShape(RoundedRectangle(cornerRadius: 3))
+          .opacity(node.status.isInert ? 0.4 : 1)
+      }
 
       Text(Theme.badgeText(for: node))
         .font(.system(size: 9, design: .monospaced).weight(.semibold))

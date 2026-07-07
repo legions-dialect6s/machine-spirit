@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		019F7D79E1E876626E11B9A2 /* GraphView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98EAE5FFEBA7D1FAEEF81FAE /* GraphView.swift */; };
 		259C47702BFA8908157D476D /* TreeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DC0B070810C9852F3EE3437 /* TreeView.swift */; };
+		29CA3C829C1BB591EF6C2938 /* ITermColors.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9B9B3AF4EADBCCCF104CC61 /* ITermColors.swift */; };
 		78AD8841C80E6169F5C5772E /* IconStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 271503FD6BBFFFE7B766D1E8 /* IconStore.swift */; };
 		86F32D191CB8DA83C493D46F /* MachineSpiritApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D78116A2645238BBF41D3FF7 /* MachineSpiritApp.swift */; };
 		B73295F72D15BE4A17C570F3 /* LedgerPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1F0834B774E421E8A0CFB21 /* LedgerPane.swift */; };
@@ -34,6 +35,7 @@
 		B1F0834B774E421E8A0CFB21 /* LedgerPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LedgerPane.swift; sourceTree = "<group>"; };
 		D78116A2645238BBF41D3FF7 /* MachineSpiritApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MachineSpiritApp.swift; sourceTree = "<group>"; };
 		E9D11E59FDFE782CBF1FB7B0 /* MachineSpirit.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MachineSpirit.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		F9B9B3AF4EADBCCCF104CC61 /* ITermColors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ITermColors.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -64,6 +66,7 @@
 				41BA055CA9A05CA859DBB7D0 /* ContentView.swift */,
 				98EAE5FFEBA7D1FAEEF81FAE /* GraphView.swift */,
 				271503FD6BBFFFE7B766D1E8 /* IconStore.swift */,
+				F9B9B3AF4EADBCCCF104CC61 /* ITermColors.swift */,
 				B1F0834B774E421E8A0CFB21 /* LedgerPane.swift */,
 				D78116A2645238BBF41D3FF7 /* MachineSpiritApp.swift */,
 				0C61D57EF5E1027553CA1962 /* SheolService.swift */,
@@ -172,6 +175,7 @@
 				EFBAA750BEEE2D52CB8BC739 /* AppState.swift in Sources */,
 				BAFAFC9DCF47C32765544359 /* ContentView.swift in Sources */,
 				019F7D79E1E876626E11B9A2 /* GraphView.swift in Sources */,
+				29CA3C829C1BB591EF6C2938 /* ITermColors.swift in Sources */,
 				78AD8841C80E6169F5C5772E /* IconStore.swift in Sources */,
 				B73295F72D15BE4A17C570F3 /* LedgerPane.swift in Sources */,
 				86F32D191CB8DA83C493D46F /* MachineSpiritApp.swift in Sources */,

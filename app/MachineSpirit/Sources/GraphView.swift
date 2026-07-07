@@ -2,31 +2,22 @@ import AppKit
 import MachineSpiritKit
 import SwiftUI
 
-/// The node graph: the config projected 360° from the center (one center
-/// per leader key; more middles are a Phase-2 concern).
-///
-/// The glyph language:
-///   action  = filled core
-///   group   = halo ring
-///   both    = ring AND core, both lit — group+action duality (magenta)
-///   inert   = ashen ghost
-///
-/// The board is alive: traces grow out of the center on boot/refresh, sway
-/// faintly at rest like vines in water, stir when the viewport moves, and
-/// taper as they run outward. Nodes hold a constant screen size; zoom moves
-/// the space between them. Selection lights the path from the center.
+/// The node graph. Every node renders at every zoom — far out they shrink,
+/// but icons, lines, words and labels never vanish. Drag a node to move it
+/// (roots move their whole tree; ⌘-click gathers a group; ⌘-drag on space
+/// rubber-bands one), drag space to pan. Positions and viewport persist.
 struct GraphView: View {
   @Environment(AppState.self) private var state
 
   @GestureState private var pinchFactor: CGFloat = 1
 
-  /// Drag on a node moves the node; drag on space pans — decided by what
-  /// sits under the cursor when the drag begins. No modifier needed.
   private enum DragMode {
     case pan(applied: CGSize)
-    case node(id: String, origin: GraphLayout.Position)
+    case move(origins: [String: GraphLayout.Position])
+    case select(anchor: CGPoint)
   }
   @State private var dragMode: DragMode?
+  @State private var selectionRect: CGRect?
 
   private let nodeRadius: CGFloat = 13
   private let dualRadius: CGFloat = 18
@@ -35,57 +26,42 @@ struct GraphView: View {
   var body: some View {
     GeometryReader { geometry in
       let model = state.displayModel
-      // Semantic zoom: shallow rings when far out; deeper rings bloom and
-      // the layout reorganizes as you come closer. At label-readable zooms
-      // the layout SPREADS — arcs sized by label width, wider rings — so
-      // everything on screen can actually be read.
-      let drawModel = model.map { prune($0, depth: 0, maxDepth: visibleDepth) }
-      let layout = drawModel.map { boardLayout(for: $0) }
-      let spelledWords = drawModel.map { chainWords(in: $0) } ?? [:]
+      let layout = model.map { combinedLayout(for: $0) }
+      let roots: [Node] = model.map { [$0, AppState.auxLeader] } ?? []
+      let spelledWords = model.map { chainWords(in: $0) } ?? [:]
 
-      // 30fps while anything moves; a calm, settled board PAUSES its clock
-      // — no idle jitter, no idle heat (SESSION-LOG lesson). disturb() is
-      // observed, so the first movement wakes the clock immediately.
       let stillness = Date().timeIntervalSince(state.lastDisturbance)
       let settled = Date().timeIntervalSince(state.bootStamp) > growthDuration + 0.6
       TimelineView(
         .animation(minimumInterval: 1.0 / 30.0, paused: settled && stillness > 3.5)
       ) { timeline in
         Canvas { context, size in
-          guard let drawModel, let layout else { return }
+          guard let model, let layout else { return }
+          _ = state.iconEpoch  // favicons arriving repaint the board
           let transform = canvasTransform(viewport: size)
-          let glow = glowSet(in: drawModel)
+          let glow = glowSet(in: model)
           let pulse = Pulse(
             now: timeline.date,
             bootStamp: state.bootStamp,
-            lastDisturbance: state.lastDisturbance,
-            flow: state.flow,
             maxRadius: max(layout.width / 2, 1),
             growthDuration: growthDuration)
-          drawEdges(
-            drawModel, layout: layout, transform: transform, glow: glow, pulse: pulse,
-            in: &context)
-          drawNodes(
-            drawModel, layout: layout, transform: transform, glow: glow, pulse: pulse,
-            chainWords: spelledWords, in: &context)
-
-          // The second leader: the multi-leader future, honestly unbound.
-          let aux = AppState.auxLeader
-          let auxLayout = RadialLayout.layout(root: aux, ringStep: 130)
-          let auxTransform = CanvasTransform(
-            scale: transform.scale,
-            offset: CGSize(
-              width: transform.offset.width
-                + (layout.width / 2 + Double(auxLayout.width) / 2 + 420) * transform.scale,
-              height: transform.offset.height))
-          context.drawLayer { layer in
-            layer.opacity = 0.75
+          for root in roots {
             drawEdges(
-              aux, layout: auxLayout, transform: auxTransform, glow: nil, pulse: pulse,
-              in: &layer)
+              root, layout: layout, transform: transform, glow: glow, pulse: pulse,
+              in: &context)
+          }
+          for root in roots {
             drawNodes(
-              aux, layout: auxLayout, transform: auxTransform, glow: nil, pulse: pulse,
-              chainWords: [:], in: &layer)
+              root, layout: layout, transform: transform, glow: glow, pulse: pulse,
+              chainWords: spelledWords, in: &context)
+          }
+          if let rect = selectionRect {
+            context.stroke(
+              Rectangle().path(in: rect),
+              with: .color(Theme.phosphorDim.opacity(0.8)), lineWidth: 1)
+            context.fill(
+              Rectangle().path(in: rect),
+              with: .color(Theme.phosphor.opacity(0.06)))
           }
         }
       }
@@ -101,20 +77,30 @@ struct GraphView: View {
       .onTapGesture { location in
         guard let layout else { return }
         let transform = canvasTransform(viewport: geometry.size)
-        if let hitID = hitTest(location, in: layout, transform: transform) {
-          state.selectedNodeID = hitID
-          state.revealSelectionInTree()
-        } else {
-          // Dead space clears the walk — typing starts from the root again.
+        let hitID = hitTest(location, in: layout, transform: transform)
+        let commandHeld = NSApp.currentEvent?.modifierFlags.contains(.command) ?? false
+        if let hitID {
+          if commandHeld {
+            if state.multiSelection.contains(hitID) {
+              state.multiSelection.remove(hitID)
+            } else {
+              state.multiSelection.insert(hitID)
+            }
+          } else {
+            state.multiSelection = []
+            state.selectedNodeID = hitID
+            state.revealSelectionInTree()
+          }
+        } else if !commandHeld {
+          state.multiSelection = []
           state.selectedNodeID = nil
         }
       }
       .onChange(of: state.selectedNodeID) {
-        // The walk: glide the selection to center, both hands on the keys.
-        // Centering targets the FULL layout — deep selections zoom to a
-        // band where they are visible, and there pruned == full.
+        // Center on the TRUE position — stacks, drags and all. (The old
+        // bug: centering against the undragged layout sent you elsewhere.)
         guard let id = state.selectedNodeID, let model,
-          let position = RadialLayout.layout(root: model).positions[id]
+          let position = combinedLayout(for: model).positions[id]
         else { return }
         let zoom = max(state.zoom, 1.0)
         state.glide(
@@ -126,37 +112,21 @@ struct GraphView: View {
     .overlay(alignment: .topTrailing) { zoomControls }
   }
 
-  // MARK: - Time: growth on boot, sway at rest, stir on movement
+  // MARK: - Time (growth only — the sway is retired)
 
   private struct Pulse {
-    let seconds: Double  // continuous clock for the sway
-    let elapsed: Double  // since boot/refresh
-    let sway: Double  // amplitude in points
-    let drift: CGSize  // directional trail against the current movement
+    let elapsed: Double
     let maxRadius: Double
     let growthDuration: Double
 
-    init(
-      now: Date, bootStamp: Date, lastDisturbance: Date, flow: CGSize,
-      maxRadius: Double, growthDuration: Double
-    ) {
-      seconds = now.timeIntervalSinceReferenceDate
+    init(now: Date, bootStamp: Date, maxRadius: Double, growthDuration: Double) {
       elapsed = now.timeIntervalSince(bootStamp)
-      let calm = max(0, now.timeIntervalSince(lastDisturbance))
-      let decay = exp(-calm * 1.3)
-      // DURING movement the board moves rigidly (no shimmer = no jitter);
-      // the directional drift trails the current, and the sine sway rings
-      // only AFTER the movement stops, then dies away.
-      sway = calm < 0.12 ? 0 : exp(-(calm - 0.12) * 1.5) * 6.0
-      drift = CGSize(width: -flow.width * decay * 0.45, height: -flow.height * decay * 0.45)
       self.maxRadius = maxRadius
       self.growthDuration = growthDuration
     }
 
     var growing: Bool { elapsed < growthDuration }
 
-    /// 0…1 reveal of an element at the given radius — the growth runs from
-    /// the center to the rim.
     func reveal(atRadius radius: Double, lag: Double = 0) -> Double {
       guard growing else { return 1 }
       let delay = radius / maxRadius * (growthDuration * 0.5) + lag
@@ -164,9 +134,47 @@ struct GraphView: View {
     }
   }
 
-  // MARK: - Viewport math (screen = world * zoom + center + pan)
+  // MARK: - Layout (main board + the aux leader, one space, overrides last)
+
+  private func combinedLayout(for model: Node) -> GraphLayout {
+    var layout = RadialLayout.layout(
+      root: model, ringStep: 165, chainStep: 80, minSpacing: 48,
+      stackLeafClusters: true, stackRow: 32, stackIndent: 30)
+    let aux = RadialLayout.layout(root: AppState.auxLeader, ringStep: 130)
+    let auxOffsetX = layout.width / 2 + aux.width / 2 + 420
+    for (id, position) in aux.positions {
+      layout.positions[id] = .init(x: position.x + auxOffsetX, y: position.y)
+    }
+    for (id, position) in state.nodeOverrides where layout.positions[id] != nil {
+      layout.positions[id] = position
+    }
+    return layout
+  }
+
+  /// Leaf ends of single-child chains spell their word; the glyph carries
+  /// the first letter and the box trails the rest — q»uit.
+  private func chainWords(in model: Node) -> [String: String] {
+    var words: [String: String] = [:]
+    func descend(_ node: Node, inheritedRun: [String]) {
+      let run = inheritedRun + [node.key ?? ""]
+      if node.children.isEmpty, run.count >= 3 {
+        let word = run.joined()
+        if word.count >= 3 { words[node.id] = word }
+      }
+      for child in node.children {
+        descend(child, inheritedRun: node.children.count == 1 ? run : [node.key ?? ""])
+      }
+    }
+    for child in model.children { descend(child, inheritedRun: []) }
+    return words
+  }
+
+  // MARK: - Viewport math
 
   private var effectiveZoom: CGFloat { state.zoom * pinchFactor }
+
+  /// Far out, nodes shrink — but never vanish.
+  private var nodeScale: CGFloat { min(1, max(0.42, 0.5 + effectiveZoom * 0.55)) }
 
   private struct CanvasTransform {
     var scale: CGFloat
@@ -197,44 +205,74 @@ struct GraphView: View {
         height: viewport.height / 2 + state.pan.height))
   }
 
+  // MARK: - Gestures
+
   private func dragGesture(layout: GraphLayout?, viewport: CGSize) -> some Gesture {
     DragGesture(minimumDistance: 3)
       .onChanged { value in
         if dragMode == nil {
           state.cancelGlide()
+          let commandHeld = NSApp.currentEvent?.modifierFlags.contains(.command) ?? false
+          let transform = canvasTransform(viewport: viewport)
           if let layout,
-            let hitID = hitTest(
-              value.startLocation, in: layout,
-              transform: canvasTransform(viewport: viewport)),
-            hitID != "root"
+            let hitID = hitTest(value.startLocation, in: layout, transform: transform)
           {
-            let origin =
-              state.nodeOverrides[hitID] ?? layout.positions[hitID]
-              ?? .init(x: 0, y: 0)
-            dragMode = .node(id: hitID, origin: origin)
+            var moving: Set<String>
+            if hitID == "root" || hitID == "mb4" {
+              // Dragging a leader carries its whole tree.
+              moving = Set(layout.positions.keys.filter {
+                $0 == hitID || $0.hasPrefix(hitID + "/")
+              })
+            } else if state.multiSelection.contains(hitID) {
+              moving = state.multiSelection
+            } else {
+              moving = [hitID]
+            }
+            var origins: [String: GraphLayout.Position] = [:]
+            for id in moving {
+              origins[id] = state.nodeOverrides[id] ?? layout.positions[id]
+            }
+            dragMode = .move(origins: origins)
+          } else if commandHeld {
+            dragMode = .select(anchor: value.startLocation)
           } else {
             dragMode = .pan(applied: .zero)
           }
         }
         switch dragMode {
         case .pan(let applied):
-          let deltaX = value.translation.width - applied.width
-          let deltaY = value.translation.height - applied.height
-          state.pan.width += deltaX
-          state.pan.height += deltaY
-          state.disturb(CGSize(width: deltaX, height: deltaY))
+          state.pan.width += value.translation.width - applied.width
+          state.pan.height += value.translation.height - applied.height
+          state.disturb()
           dragMode = .pan(applied: value.translation)
-        case .node(let id, let origin):
-          state.nodeOverrides[id] = .init(
-            x: origin.x + value.translation.width / Double(effectiveZoom),
-            y: origin.y + value.translation.height / Double(effectiveZoom))
+        case .move(let origins):
+          for (id, origin) in origins {
+            state.nodeOverrides[id] = .init(
+              x: origin.x + value.translation.width / Double(effectiveZoom),
+              y: origin.y + value.translation.height / Double(effectiveZoom))
+          }
+          state.disturb()
+        case .select(let anchor):
+          selectionRect = CGRect(
+            x: min(anchor.x, value.location.x),
+            y: min(anchor.y, value.location.y),
+            width: abs(value.location.x - anchor.x),
+            height: abs(value.location.y - anchor.y))
           state.disturb()
         case nil:
           break
         }
       }
-      .onEnded { _ in
-        if case .node = dragMode { state.saveSidecar() }
+      .onEnded { value in
+        if case .move = dragMode { state.saveSidecar() }
+        if case .select = dragMode, let rect = selectionRect, let layout {
+          let transform = canvasTransform(viewport: viewport)
+          state.multiSelection = Set(
+            layout.positions.compactMap { id, position in
+              rect.contains(transform.apply(position)) ? id : nil
+            })
+        }
+        selectionRect = nil
         dragMode = nil
         state.disturb()
       }
@@ -265,55 +303,12 @@ struct GraphView: View {
     return best?.id
   }
 
-  /// Depth band per zoom: the reorganize-as-you-zoom mechanic.
-  private var visibleDepth: Int {
-    switch effectiveZoom {
-    case ..<0.22: return 1
-    case ..<0.45: return 2
-    case ..<0.8: return 3
-    default: return .max
-    }
-  }
-
-  /// Leaf clusters stack interlocked — the (*-_) pattern — so labels
-  /// interleave and MORE reads at further zoom-out. User-dragged overrides
-  /// apply on top, at every tier.
-  private func boardLayout(for model: Node) -> GraphLayout {
-    var layout = RadialLayout.layout(
-      root: model, ringStep: 165, chainStep: 80, minSpacing: 48,
-      stackLeafClusters: true, stackRow: 32, stackIndent: 30)
-    for (id, position) in state.nodeOverrides where layout.positions[id] != nil {
-      layout.positions[id] = position
-    }
-    return layout
-  }
-
-  /// Leaf ends of single-child chains spell their word (q-u-i-t → "quit"):
-  /// the walk made visible at the destination. The branching node that
-  /// opens the run contributes its letter, so the word is what you typed.
-  private func chainWords(in model: Node) -> [String: String] {
-    var words: [String: String] = [:]
-    func descend(_ node: Node, inheritedRun: [String]) {
-      let run = inheritedRun + [node.key ?? ""]
-      if node.children.isEmpty, run.count >= 3 {
-        let word = run.joined()
-        if word.count >= 3 { words[node.id] = word }
-      }
-      for child in node.children {
-        descend(child, inheritedRun: node.children.count == 1 ? run : [node.key ?? ""])
-      }
-    }
-    for child in model.children { descend(child, inheritedRun: []) }
-    return words
-  }
-
-  /// The lit path: with a selection, the trace from the center to it plus
-  /// its ENTIRE subtree glow; everything else recedes.
+  /// The lit path: selection's line from the center plus its whole subtree.
   private func glowSet(in model: Node) -> Set<String>? {
     guard let id = state.selectedNodeID else { return nil }
     var lit = Set(AppState.ancestorIDs(of: id))
     lit.insert(id)
-    if let node = model.node(withID: id) {
+    if let node = model.node(withID: id) ?? AppState.auxLeader.node(withID: id) {
       func igniteDescendants(_ node: Node) {
         for child in node.children {
           lit.insert(child.id)
@@ -323,19 +318,6 @@ struct GraphView: View {
       igniteDescendants(node)
     }
     return lit
-  }
-
-  /// Display-only copy cut to the band; nodes that lost children carry a
-  /// marker so they can whisper that more waits below.
-  private func prune(_ node: Node, depth: Int, maxDepth: Int) -> Node {
-    var pruned = node
-    if depth >= maxDepth, !node.children.isEmpty {
-      pruned.children = []
-      pruned.extras["__ms_pruned"] = .bool(true)
-    } else {
-      pruned.children = node.children.map { prune($0, depth: depth + 1, maxDepth: maxDepth) }
-    }
-    return pruned
   }
 
   // MARK: - Controls
@@ -370,6 +352,20 @@ struct GraphView: View {
         .foregroundStyle(Theme.phosphorDim)
         .help("return dragged nodes to the radial order")
       }
+      Button {} label: {
+        Image(systemName: "plus").font(.system(size: 11, weight: .bold))
+      }
+      .buttonStyle(.plain)
+      .foregroundStyle(Theme.ash.opacity(0.4))
+      .disabled(true)
+      .help("adding nodes arrives with config write-back — a later phase, honestly")
+      Button {} label: {
+        Image(systemName: "minus").font(.system(size: 11, weight: .bold))
+      }
+      .buttonStyle(.plain)
+      .foregroundStyle(Theme.ash.opacity(0.4))
+      .disabled(true)
+      .help("removing nodes arrives with config write-back — a later phase, honestly")
     }
     .font(.system(size: 12, design: .monospaced).weight(.bold))
     .padding(8)
@@ -378,8 +374,6 @@ struct GraphView: View {
 
   // MARK: - Drawing
 
-  /// A node's identity color in the graph — app nodes take their icon's
-  /// dominant tint; everything else follows the Theme palette.
   private func color(of node: Node) -> Color {
     if case .application(let path) = node.action, node.status.isInert == false {
       return IconStore.tint(forPath: (path as NSString).expandingTildeInPath)
@@ -396,20 +390,23 @@ struct GraphView: View {
     _ root: Node, layout: GraphLayout, transform: CanvasTransform,
     glow: Set<String>?, pulse: Pulse, in context: inout GraphicsContext
   ) {
+    // Obstacle field for the light avoid-pass: every node position.
+    let obstacles = layout.positions
+
     context.drawLayer { layer in
       layer.addFilter(.shadow(color: Theme.phosphor.opacity(0.45), radius: 3))
       walk(root) { node in
         guard let from = layout.positions[node.id] else { return }
-        let parentColor = node.id == "root" ? Theme.phosphorDim : color(of: node)
+        let parentColor = node.id == root.id ? Theme.phosphorDim : color(of: node)
         let siblingCount = node.children.count
         for (index, child) in node.children.enumerated() {
           guard let to = layout.positions[child.id] else { continue }
           var segment = trace(
             from: from, to: to, childID: child.id, index: index,
-            siblings: siblingCount, pulse: pulse, transform: transform)
+            siblings: siblingCount, obstacles: obstacles,
+            excluding: [node.id, child.id], transform: transform)
 
-          let childRadius = hypot(to.x, to.y)
-          let reveal = pulse.reveal(atRadius: childRadius)
+          let reveal = pulse.reveal(atRadius: hypot(to.x, to.y))
           if reveal <= 0 { continue }
           if reveal < 1 { segment = segment.trimmedPath(from: 0, to: reveal) }
 
@@ -417,10 +414,7 @@ struct GraphView: View {
           let lit =
             glow == nil
             ? false
-            : (glow!.contains(child.id) && (glow!.contains(node.id) || node.id == "root"))
-
-          // Trace color runs parent → child: the wiring itself tells you
-          // what kind of thing it feeds.
+            : (glow!.contains(child.id) && (glow!.contains(node.id) || node.id == root.id))
           let childColor = color(of: child)
           let alpha: Double
           let width: CGFloat
@@ -448,65 +442,54 @@ struct GraphView: View {
     }
   }
 
-  /// Trace width thins as the run leaves the center — but gently, and ever
-  /// more gently the further out it goes (geometric decay, floored).
   private func taper(_ depth: Int) -> CGFloat {
     max(0.85, 2.0 * pow(0.88, CGFloat(max(depth - 1, 0))))
   }
 
-  /// One trace, polar-routed without corners: a cubic whose control points
-  /// ride an intermediate junction ring, staggered per sibling so parallel
-  /// runs layer instead of stacking. The junction breathes with the sway —
-  /// vines in water, wired like a circuit.
+  /// One trace: a smooth cubic riding a sibling-staggered junction, bowed
+  /// away from any node it would otherwise cut through — the lines find
+  /// their way around for visual flow.
   private func trace(
     from: GraphLayout.Position, to: GraphLayout.Position,
     childID: String, index: Int, siblings: Int,
-    pulse: Pulse, transform: CanvasTransform
+    obstacles: [String: GraphLayout.Position], excluding: Set<String>,
+    transform: CanvasTransform
   ) -> Path {
     var path = Path()
-    let r1 = hypot(from.x, from.y)
-    let r2 = hypot(to.x, to.y)
     let a = transform.apply(from)
     let b = transform.apply(to)
 
-    let byteSum = childID.utf8.reduce(0) { $0 &+ Int($1) }
-    let phase = Double(byteSum % 628) / 100.0
-    // Sway lives in SCREEN space so it stays visible at every zoom; two
-    // slightly detuned sines so the drift never looks metronomic.
-    let wobble = sin(pulse.seconds * 1.4 + phase) * pulse.sway
-    let wobble2 = sin(pulse.seconds * 0.9 + phase * 2.3) * pulse.sway * 0.7
-
-    // From the center, the trace is a near-straight spoke with a soft lean.
-    guard r1 > 5, r2 > r1 + 8 else {
-      let mid = CGPoint(
-        x: (a.x + b.x) / 2 - (b.y - a.y) * 0.03 + wobble + pulse.drift.width,
-        y: (a.y + b.y) / 2 + (b.x - a.x) * 0.03 + wobble2 + pulse.drift.height)
-      path.move(to: a)
-      path.addQuadCurve(to: b, control: mid)
-      return path
+    // Obstacle avoidance in world space: strongest violation wins a bow.
+    var bow = 0.0
+    let dx = to.x - from.x
+    let dy = to.y - from.y
+    let length = max(hypot(dx, dy), 0.001)
+    for (id, obstacle) in obstacles where !excluding.contains(id) {
+      let t = ((obstacle.x - from.x) * dx + (obstacle.y - from.y) * dy) / (length * length)
+      guard t > 0.08, t < 0.92 else { continue }
+      let closestX = from.x + t * dx
+      let closestY = from.y + t * dy
+      let distance = hypot(obstacle.x - closestX, obstacle.y - closestY)
+      let clearance = 26.0
+      if distance < clearance {
+        let side: Double = (obstacle.x - closestX) * dy - (obstacle.y - closestY) * dx >= 0 ? -1 : 1
+        let push = (clearance - distance + 8) * side
+        if abs(push) > abs(bow) { bow = push }
+      }
     }
 
-    let theta1 = atan2(from.y, from.x)
-    let theta2 = atan2(to.y, to.x)
-    var deltaTheta = theta2 - theta1
-    while deltaTheta > .pi { deltaTheta -= 2 * .pi }
-    while deltaTheta < -.pi { deltaTheta += 2 * .pi }
-
-    // Sibling-staggered junction ring; the sway rides the control points in
-    // screen space so the vines visibly breathe at any zoom.
+    let byteSum = childID.utf8.reduce(0) { $0 &+ Int($1) }
     let fraction = siblings <= 1 ? 0.5 : 0.34 + 0.32 * Double(index) / Double(siblings - 1)
-    let junction = r1 + (r2 - r1) * fraction
+    let lean = Double(byteSum % 9 - 4) * 2.0
 
-    var control1 = transform.apply(
-      x: junction * cos(theta1 + deltaTheta * 0.3),
-      y: junction * sin(theta1 + deltaTheta * 0.3))
-    var control2 = transform.apply(
-      x: junction * cos(theta1 + deltaTheta * 0.7),
-      y: junction * sin(theta1 + deltaTheta * 0.7))
-    control1.x += wobble + pulse.drift.width
-    control1.y += wobble2 + pulse.drift.height
-    control2.x += -wobble2 + pulse.drift.width * 0.6
-    control2.y += wobble + pulse.drift.height * 0.6
+    let perpX = -dy / length
+    let perpY = dx / length
+    let control1 = transform.apply(
+      x: from.x + dx * fraction * 0.7 + perpX * (bow + lean),
+      y: from.y + dy * fraction * 0.7 + perpY * (bow + lean))
+    let control2 = transform.apply(
+      x: from.x + dx * (0.3 + fraction * 0.7) + perpX * bow,
+      y: from.y + dy * (0.3 + fraction * 0.7) + perpY * bow)
 
     path.move(to: a)
     path.addCurve(to: b, control1: control1, control2: control2)
@@ -518,26 +501,22 @@ struct GraphView: View {
     glow: Set<String>?, pulse: Pulse, chainWords: [String: String],
     in context: inout GraphicsContext
   ) {
-    let zoom = transform.scale
+    let sizeScale = nodeScale
 
     walk(root) { node in
       guard let position = layout.positions[node.id] else { return }
-
-      // Growth: a node fades in just after its trace arrives.
       let birth = pulse.reveal(atRadius: hypot(position.x, position.y), lag: 0.12)
       if birth <= 0 { return }
 
       let center = transform.apply(position)
       let inert = node.status.isInert
-      let selected = node.id == state.selectedNodeID
+      let selected = node.id == state.selectedNodeID || state.multiSelection.contains(node.id)
       let lit = glow?.contains(node.id) ?? true
       let recede = glow != nil && !lit
-      // A pruned node still opens onward — the band just hides it for now.
-      let hidesMore = node.extras["__ms_pruned"] != nil
-      // Constant screen size: the space zooms, the nodes do not.
-      let isRoot = node.id == "root"
-      let baseRadius = isRoot ? dualRadius : (node.isDual ? dualRadius : nodeRadius)
-      let radius = baseRadius * (birth < 1 ? birth : 1)
+      let isLeaderRoot = node.id == root.id
+      let radius =
+        (isLeaderRoot ? dualRadius : (node.isDual ? dualRadius : nodeRadius))
+        * sizeScale * (birth < 1 ? birth : 1)
 
       let primary: Color = inert ? Theme.ash : color(of: node)
 
@@ -555,9 +534,6 @@ struct GraphView: View {
           width: radius * 2, height: radius * 2)
         layer.fill(Circle().path(in: discRect), with: .color(Theme.ground))
 
-        // App / folder / command / website nodes carry their real face —
-        // app icons, folder icons, terminal icons, FAVICONS — prominent,
-        // with the key glyph pinned on top as the address.
         if birth > 0.8, !inert, let iconPath = IconStore.iconPath(for: node),
           let icon = IconStore.icon(forPath: iconPath, state: state)
         {
@@ -568,23 +544,12 @@ struct GraphView: View {
           }
         }
 
-        // Halo ring — this node opens onward (a group, or a band-pruned
-        // branch whose depths wait below).
-        if node.isGroup || hidesMore {
+        if node.isGroup || isLeaderRoot {
           layer.stroke(
             Circle().path(in: discRect),
             with: .color(primary.opacity(inert ? 0.5 : 1)),
             lineWidth: selected ? 2.5 : 1.5)
         }
-        if hidesMore {
-          // A faint outer whisper: more is folded beneath this ring.
-          let hintRect = discRect.insetBy(dx: -4, dy: -4)
-          layer.stroke(
-            Circle().path(in: hintRect),
-            with: .color(primary.opacity(0.25)), lineWidth: 1)
-        }
-
-        // Filled core — this node acts.
         if node.action != nil {
           let coreRadius = radius * 0.55
           let coreRect = CGRect(
@@ -603,35 +568,46 @@ struct GraphView: View {
 
       guard birth > 0.6 else { return }
 
-      // Key glyph, constant size — the address of the node. The root wears
-      // the leader key itself.
+      let word = chainWords[node.id]
+      // The glyph: leaders wear their key; chain ends wear the word's first
+      // letter (the rest trails in the box — q»uit, no doubled letters).
+      let glyphText: String
+      if node.id == "root" {
+        glyphText = "⇪"
+      } else if isLeaderRoot {
+        glyphText = node.key ?? "·"
+      } else if let word {
+        glyphText = String(word.prefix(1))
+      } else {
+        glyphText = node.key ?? "·"
+      }
+      let glyphSize = (node.id == "root" ? 17.0 : (node.isDual ? 14.0 : 12.0)) * sizeScale
       let glyphBack = CGRect(
-        x: center.x - 7, y: center.y - 7.5, width: 14, height: 15)
+        x: center.x - 7 * sizeScale, y: center.y - 7.5 * sizeScale,
+        width: 14 * sizeScale, height: 15 * sizeScale)
       context.fill(
         RoundedRectangle(cornerRadius: 4).path(in: glyphBack),
         with: .color(Theme.ground.opacity(recede ? 0.4 : 0.75)))
       context.draw(
-        Text(isRoot ? "⇪" : (node.key ?? "·"))
-          .font(
-            .system(size: isRoot ? 17 : (node.isDual ? 14 : 12), design: .monospaced)
-              .weight(.bold))
+        Text(glyphText)
+          .font(.system(size: glyphSize, design: .monospaced).weight(.bold))
           .foregroundStyle(glyphColor(for: node).opacity(recede ? 0.35 : Double(birth))),
         at: center)
 
-      // Chain ends spell their word — the typed spell, boxed at the node.
+      // The word box trails the remaining letters off the disc.
       var wordBoxWidth = 0.0
-      if let word = chainWords[node.id], zoom > 0.35 || selected {
+      if let word {
+        let trailing = String(word.dropFirst())
         let wordText = context.resolve(
-          Text(word)
-            .font(.system(size: 11.5, design: .monospaced).weight(.bold))
+          Text(trailing)
+            .font(.system(size: 11.5 * sizeScale, design: .monospaced).weight(.bold))
             .foregroundStyle(
-              (node.status.isInert ? Theme.ash : Theme.phosphor)
-                .opacity(recede ? 0.3 : Double(birth))))
+              (inert ? Theme.ash : Theme.phosphor).opacity(recede ? 0.3 : Double(birth))))
         let wordSize = wordText.measure(in: CGSize(width: 240, height: 30))
         let box = CGRect(
-          x: center.x + radius + 3,
+          x: center.x + radius + 2,
           y: center.y - wordSize.height / 2 - 2,
-          width: wordSize.width + 10,
+          width: wordSize.width + 8,
           height: wordSize.height + 4)
         context.fill(
           RoundedRectangle(cornerRadius: 4).path(in: box),
@@ -643,14 +619,13 @@ struct GraphView: View {
         context.draw(
           wordText,
           in: CGRect(
-            x: box.minX + 5, y: box.minY + 2,
+            x: box.minX + 4, y: box.minY + 2,
             width: wordSize.width, height: wordSize.height))
         wordBoxWidth = box.width + 6
       }
 
-      // Name/summary radiates OUTWARD along the node's own angle — labels
-      // grow into the empty space between spokes instead of onto the board.
-      if !isRoot, zoom > 0.42 || selected || (lit && glow != nil) {
+      // Labels never hide — the board is for reading.
+      if !isLeaderRoot || node.id == "mb4" {
         let angle = atan2(position.y, position.x)
         let anchor: UnitPoint =
           cos(angle) > 0.35 ? .leading : (cos(angle) < -0.35 ? .trailing : .center)
@@ -662,18 +637,16 @@ struct GraphView: View {
           labelPoint.y += sin(angle) > 0 ? 8 : -8
         }
         if anchor == .leading, wordBoxWidth > 0 {
-          labelPoint.x += wordBoxWidth  // clear the spelled-word box
+          labelPoint.x += wordBoxWidth
         }
 
         let label = context.resolve(
           Text(node.displayName)
-            .font(.system(size: 10.5, design: .monospaced))
+            .font(.system(size: 10.5 * max(sizeScale, 0.7), design: .monospaced))
             .foregroundStyle(
               recede
                 ? Theme.ash.opacity(0.25)
-                : (inert
-                  ? Theme.ash.opacity(0.6)
-                  : Color(white: 0.64).opacity(Double(birth)))))
+                : (inert ? Theme.ash.opacity(0.6) : Color(white: 0.64).opacity(Double(birth)))))
         let size = label.measure(in: CGSize(width: 320, height: 40))
         var pill = CGRect(origin: labelPoint, size: size)
         switch anchor {

@@ -49,16 +49,14 @@ final class AppState {
   /// Observed so views wake the clock the instant something moves.
   var lastDisturbance = Date.distantPast
 
-  /// Direction and vigor of the latest movement — the traces trail against
-  /// it like weed in a current, then relax. Blended so bursts feel fluid.
-  var flow: CGSize = .zero
-
+  /// Owner verdict: the sway is gone. disturb() only wakes the render
+  /// clock so the board redraws while the viewport moves.
   func disturb(_ delta: CGSize = .zero) {
     lastDisturbance = Date()
-    flow = CGSize(
-      width: max(-30, min(30, flow.width * 0.6 + delta.width * 0.5)),
-      height: max(-30, min(30, flow.height * 0.6 + delta.height * 0.5)))
   }
+
+  /// ⌘-click multi-selection for group drags; rubber-band select fills it.
+  var multiSelection: Set<String> = []
 
   @ObservationIgnored private var glideTask: Task<Void, Never>?
 
@@ -292,14 +290,26 @@ final class AppState {
   }
 
   func loadSidecar() {
-    guard let data = try? Data(contentsOf: Self.sidecarURL),
+    // The whole graph state survives relaunch: dragged positions AND the
+    // viewport itself.
+    if let data = try? Data(contentsOf: Self.sidecarURL),
       let saved = try? GraphViewState.load(from: data)
-    else { return }
-    nodeOverrides = saved.nodes.mapValues { .init(x: $0.x, y: $0.y) }
+    {
+      nodeOverrides = saved.nodes.mapValues { .init(x: $0.x, y: $0.y) }
+      if saved.zoom > 0 {
+        zoom = min(max(saved.zoom, minZoom), maxZoom)
+        pan = CGSize(width: saved.panX, height: saved.panY)
+      }
+    }
+    NotificationCenter.default.addObserver(
+      forName: NSApplication.willTerminateNotification, object: nil, queue: .main
+    ) { [weak self] _ in
+      MainActor.assumeIsolated { self?.saveSidecar() }
+    }
   }
 
   func saveSidecar() {
-    var saved = GraphViewState()
+    var saved = GraphViewState(zoom: zoom, panX: pan.width, panY: pan.height)
     saved.nodes = nodeOverrides.mapValues { .init(x: $0.x, y: $0.y) }
     if let data = try? saved.data() {
       try? data.write(to: Self.sidecarURL)
