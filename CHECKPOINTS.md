@@ -289,3 +289,21 @@ bodies) and in-app close (pkill; the TUI's traps exit clean).
 **Restore:** `git stash -u && git reset --hard <commit tagged [P1.17]>`
 **Re-verify:** kit tests (26); drag a node, relaunch — it stayed; click
 sheol — the ledger lives in the pane; web nodes wear favicons.
+
+### Nothing hides `[P1.18]`
+
+Pruning gone — every node at every zoom (smaller, never absent; labels,
+icons, lines always). Far-click centering fixed (was centering against the
+undragged layout). Roots drag their whole tree; ⌘-click multi-select,
+⌘-drag rubber band, group drags. Viewport persists with positions (quit
+too). Sway retired by owner verdict. Chain boxes read q»uit. Traces bow
+around nodes. Directory rows wear icons + identity colors. Command→app
+icon intelligence. Ledger pane: real PATH + the owner's hacker.itermcolors
+parsed at runtime. Honest disabled +/− until write-back. Icon re-registered.
+Cached: #34 gate-latch/merge on drag-close; #35 learn the owner's manual
+layout as the auto-organize objective; #36 fire-animation when a bind runs
+(needs the LK fork to ping the app — URL scheme — future).
+
+**Restore:** `git stash -u && git reset --hard <commit tagged [P1.18]>`
+**Re-verify:** zoom way out — everything still there, smaller; ⌘-drag a
+box around a cluster and drag it; open sheol — tmux found, iTerm colors.
