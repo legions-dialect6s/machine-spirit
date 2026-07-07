@@ -97,6 +97,30 @@ struct ModelTests {
     #expect(serialized == expected)
   }
 
+  @Test func displayNamesSayWhatTheNodeDoes() {
+    #expect(
+      Node(id: "x", action: .application(path: "/Applications/Claude.app")).displayName
+        == "open app Claude")
+    #expect(
+      Node(id: "x", action: .folder(path: "__HOME__/projects")).displayName
+        == "open folder projects")
+    #expect(
+      Node(id: "x", action: .folder(path: "__HOME__/Documents/screens")).displayName
+        == "open folder ~/Documents/screens")
+    #expect(
+      Node(id: "x", action: .folder(path: "/Applications")).displayName
+        == "open folder /Applications")
+    #expect(
+      Node(id: "x", action: .command(#"open -g "rectangle://execute-action?name=maximize""#))
+        .displayName == "window maximize")
+    #expect(
+      Node(id: "x", action: .command("~/bin/run-quiet.sh ~/bin/screenshots/ss-menu.sh"))
+        .displayName == "invoke ss-menu")
+    // The username never leaks into a label.
+    #expect(
+      Node.folderDisplayName("/Users/somebody/Desktop/aesthetics ") == "~/Desktop/aesthetics")
+  }
+
   @Test func commandDisplayNamesSkipThePlumbing() {
     #expect(
       Node.commandDisplayName("~/bin/run-quiet.sh ~/bin/screenshots/ss-menu.sh") == "ss-menu")

@@ -74,23 +74,47 @@ public struct Node: Identifiable, Equatable, Sendable {
   /// The both-at-once case the model exists to hold.
   public var isDual: Bool { action != nil && !children.isEmpty }
 
-  /// Display name, mirroring Leader Key's fallback logic loosely.
+  /// Display name: explicit labels win; otherwise the node says what it
+  /// DOES — `open app Claude`, `open folder projects`, `invoke ss-menu`,
+  /// `window maximize` — so the graph explains itself.
   public var displayName: String {
     if let label, !label.isEmpty { return label }
     guard let action else { return "group" }
     switch action {
     case .application(let path):
-      return (path as NSString).lastPathComponent.replacingOccurrences(of: ".app", with: "")
+      let name = (path as NSString).lastPathComponent.replacingOccurrences(of: ".app", with: "")
+      return "open app \(name)"
     case .folder(let path):
-      return (path as NSString).lastPathComponent
+      return "open folder \(Node.folderDisplayName(path))"
     case .command(let value):
-      if let windowAction = action.windowAction { return windowAction }
-      return Node.commandDisplayName(value)
+      if let windowAction = action.windowAction { return "window \(windowAction)" }
+      return "invoke \(Node.commandDisplayName(value))"
     case .url(let value):
-      return value
+      return "open url \(value)"
     case .other(_, let value):
       return value
     }
+  }
+
+  /// Home-anchored folder path for display: a folder directly under home is
+  /// just its name; deeper ones show the home-relative path; system paths
+  /// (`/Applications`) stay absolute. Never shows the username.
+  static func folderDisplayName(_ path: String) -> String {
+    var relative = path.trimmingCharacters(in: .whitespaces)
+    var wasHomeAnchored = false
+    for prefix in ["__HOME__/", "~/"] where relative.hasPrefix(prefix) {
+      relative = String(relative.dropFirst(prefix.count))
+      wasHomeAnchored = true
+    }
+    if relative.hasPrefix("/Users/") {
+      let components = relative.split(separator: "/").map(String.init)
+      relative = components.dropFirst(2).joined(separator: "/")
+      wasHomeAnchored = true
+    }
+    guard wasHomeAnchored else { return relative }  // e.g. /Applications
+    if relative.isEmpty { return "~" }
+    let components = relative.split(separator: "/")
+    return components.count == 1 ? String(components[0]) : "~/" + relative
   }
 
   /// Command display names skip the plumbing (run-quiet.sh, osascript…) and

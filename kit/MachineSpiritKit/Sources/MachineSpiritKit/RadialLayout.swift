@@ -33,10 +33,16 @@ public enum RadialLayout {
       // Pressure is capped so one hyper-crowded pocket can't balloon the
       // whole graph's diameter (it may locally re-crowd; semantic zoom in
       // the app thins those depths before they're ever dense on screen).
-      let pressured =
+      var pressured =
         radius <= 0
         ? radius
         : min(max(radius, minSpacing / max(span, 0.0001)), radius + 3 * ringStep)
+      // Crowded leaves stagger across three shells instead of packing one
+      // rim — deterministic (byte-sum), so labels and nodes get air.
+      if node.children.isEmpty, pressured > 0, span < minSpacing / pressured * 2.2 {
+        let byteSum = node.id.utf8.reduce(0) { $0 &+ Int($1) }
+        pressured += Double(byteSum % 3) * ringStep * 0.34
+      }
       let angle = (from + to) / 2
       positions[node.id] = .init(
         x: pressured * cos(angle), y: pressured * sin(angle))

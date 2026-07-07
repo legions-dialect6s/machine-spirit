@@ -104,10 +104,12 @@ struct ContentView: View {
       HSplitView {
         if !state.directoryCollapsed {
           pane(.directory, title: "directory") { TreeView() }
-            .frame(minWidth: 300, idealWidth: 300, maxWidth: 720)
+            .frame(minWidth: 260, idealWidth: 260, maxWidth: 560)
         }
+        // The huge ideal width makes HSplitView actually honor the
+        // directory's narrow ideal on first layout — the board is the star.
         pane(.graph, title: "node graph") { GraphView() }
-          .frame(minWidth: 480, maxWidth: .infinity)
+          .frame(minWidth: 480, idealWidth: 4000, maxWidth: .infinity)
       }
     } else {
       ProgressView()

@@ -23,7 +23,7 @@ struct GraphView: View {
 
   private let nodeRadius: CGFloat = 13
   private let dualRadius: CGFloat = 18
-  private let growthDuration = 1.5
+  private let growthDuration = 0.85
 
   var body: some View {
     GeometryReader { geometry in
@@ -33,9 +33,14 @@ struct GraphView: View {
       let drawModel = model.map { prune($0, depth: 0, maxDepth: visibleDepth) }
       let layout = drawModel.map { RadialLayout.layout(root: $0) }
 
-      // 20fps: the sway is slow (≈1.7 rad/s) and reads identically, and an
-      // always-running canvas must respect the heat lesson (SESSION-LOG).
-      TimelineView(.animation(minimumInterval: 1.0 / 20.0)) { timeline in
+      // 30fps while anything moves; a calm, settled board PAUSES its clock
+      // — no idle jitter, no idle heat (SESSION-LOG lesson). disturb() is
+      // observed, so the first movement wakes the clock immediately.
+      let stillness = Date().timeIntervalSince(state.lastDisturbance)
+      let settled = Date().timeIntervalSince(state.bootStamp) > growthDuration + 0.6
+      TimelineView(
+        .animation(minimumInterval: 1.0 / 30.0, paused: settled && stillness > 3.5)
+      ) { timeline in
         Canvas { context, size in
           guard let drawModel, let layout else { return }
           let transform = canvasTransform(viewport: size)
@@ -107,7 +112,9 @@ struct GraphView: View {
       seconds = now.timeIntervalSinceReferenceDate
       elapsed = now.timeIntervalSince(bootStamp)
       let calm = max(0, now.timeIntervalSince(lastDisturbance))
-      sway = 2.2 + exp(-calm * 1.6) * 9.0
+      // No baseline: perfectly still at rest (the clock pauses anyway);
+      // movement wakes a smooth, decaying sway.
+      sway = exp(-calm * 1.3) * 8.0
       self.maxRadius = maxRadius
       self.growthDuration = growthDuration
     }
@@ -118,8 +125,8 @@ struct GraphView: View {
     /// the center to the rim.
     func reveal(atRadius radius: Double, lag: Double = 0) -> Double {
       guard growing else { return 1 }
-      let delay = radius / maxRadius * (growthDuration * 0.55) + lag
-      return min(max((elapsed - delay) / 0.4, 0), 1)
+      let delay = radius / maxRadius * (growthDuration * 0.5) + lag
+      return min(max((elapsed - delay) / 0.25, 0), 1)
     }
   }
 
@@ -501,7 +508,7 @@ struct GraphView: View {
         let angle = atan2(position.y, position.x)
         let anchor: UnitPoint =
           cos(angle) > 0.35 ? .leading : (cos(angle) < -0.35 ? .trailing : .center)
-        let labelDistance = Double(radius) + 10
+        let labelDistance = Double(radius) + 6
         var labelPoint = CGPoint(
           x: center.x + CGFloat(cos(angle) * labelDistance),
           y: center.y + CGFloat(sin(angle) * labelDistance))
@@ -517,7 +524,7 @@ struct GraphView: View {
                 ? Theme.ash.opacity(0.25)
                 : (inert
                   ? Theme.ash.opacity(0.6)
-                  : Color(white: 0.86).opacity(Double(birth)))))
+                  : Color(white: 0.64).opacity(Double(birth)))))
         let size = label.measure(in: CGSize(width: 320, height: 40))
         var pill = CGRect(origin: labelPoint, size: size)
         switch anchor {

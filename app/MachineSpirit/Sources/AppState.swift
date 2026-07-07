@@ -42,9 +42,10 @@ final class AppState {
   /// out of the center toward the rim, the directory cascades in.
   var bootStamp = Date()
 
-  /// The lines live: they sway faintly at rest and stir when the viewport
-  /// moves. Views derive the sway amplitude from time-since-disturbance.
-  @ObservationIgnored var lastDisturbance = Date.distantPast
+  /// The lines stir when the viewport moves and settle to perfect stillness
+  /// (no idle jitter — a calm board pauses its render clock entirely).
+  /// Observed so views wake the clock the instant something moves.
+  var lastDisturbance = Date.distantPast
 
   func disturb() { lastDisturbance = Date() }
 
@@ -109,8 +110,9 @@ final class AppState {
       case 48:  // tab
         self.focusedPane = self.focusedPane == .directory ? .graph : .directory
         return nil
-      case 53:  // esc — the walk returns to the root
+      case 53:  // esc — the walk returns home: root centered, default view
         self.selectedNodeID = nil
+        self.glide(toPan: .zero, zoom: 0.4)
         return nil
       case 51:  // delete — one step back up
         self.stepUp()

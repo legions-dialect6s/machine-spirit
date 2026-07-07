@@ -231,3 +231,20 @@ pane recommendation).
 **Restore:** `git stash -u && git reset --hard <commit tagged [P1.14]>`
 **Re-verify:** build & open; colors/icons on the rim; select `t` (whole
 branch glows); collapse/restore the directory.
+
+### Self-explaining labels, still-at-rest board, leaf shells `[P1.15]`
+
+Nodes say what they do (kit displayName + tests): `open app Claude`,
+`open folder projects` / `~/Documents/…` (home-anchored, username never
+shown), `invoke ss-menu`, `window maximize`, `open url …`. The board is
+perfectly STILL at rest — the render clock pauses when calm (no idle
+jitter, no idle heat) and wakes on the first disturbance; sway is
+movement-only and decays. Growth ~45% faster (0.85s). Labels back to grey,
+pills flush with the disc. Crowded leaves stagger across three shells
+(RadialLayout, deterministic). Esc glides home (root centered, default
+zoom). Directory idealWidth narrowed (note: HSplitView divider position
+persists across relaunch via window restoration — drag it once).
+
+**Restore:** `git stash -u && git reset --hard <commit tagged [P1.15]>`
+**Re-verify:** kit `swift test` (25 green); open, wait 4s — board frozen
+still; scroll — it stirs; Esc from deep — glides home.
