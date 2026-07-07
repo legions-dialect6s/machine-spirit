@@ -159,3 +159,73 @@ See the end of the chat / paste this to Codex:
 > the `command "$cmd"` string in `iterm-new-window.sh`, and whether any shell
 > script can leak or mis-handle a session name with spaces/quotes. Suggest
 > minimal, surgical fixes; do not restructure working features.
+
+---
+
+# Session log — the Phase-1 app build (2026-07-06)
+
+One very long day: the machine-spirit APP went from nothing to a running
+SwiftUI tool. Written for the next session (or Claude chat) to pick up.
+
+## What stands (all committed, [P1.1]–[P1.20], pushed)
+
+- **Ratchet infra:** CHECKPOINTS.md ledger; `v0.1-stable-config` tag = the
+  pre-app loved state, restorable in one command.
+- **Forks vendored + building:** LeaderKey + Rectangle as squashed subtrees
+  under `forks/` (MIT recorded in FORK-NOTES.md with working ad-hoc build
+  commands). Fork patches: Mini indicator wears the sigil; letter-accretion
+  wordmark as keys land. NOT the daily driver yet — cask app still runs.
+- **MachineSpiritKit** (`kit/`, 26 headless tests): lossless Leader Key
+  importer (unknown fields survive in `extras`), serializer with canonical
+  round-trip gate (fixture AND live config), group+action duality native,
+  derived inertness via injectable probes, radial + tidy-tree layouts,
+  GraphViewState sidecar type.
+- **MachineSpirit.app** (`app/`, XcodeGen): directory + node-graph panes
+  side by side + embedded sheol terminal pane (SwiftTerm 1.5.0, owner's
+  hacker.itermcolors, real PATH); letter-walk both views (LK grammar), Esc
+  home, ⌫ up, ⌘R refresh w/ regrow animation, Tab cycles all three panes;
+  radial board with interlocked leaf stacks, straight obstacle-bowed
+  traces, identity colors + app icons + favicons, chain-word boxes
+  (q»uit), key chips above icons; drag nodes (roots move trees, ⌘-click
+  multi, rubber band), positions + viewport persist in sidecar; nothing
+  hides at any zoom; growth animation on boot/refresh; typewriter header;
+  directory cascade; sheol footer nag; sigil app icon.
+- **sheol-core** (`bin/`): shared verb layer (list/--json/revive/detach/
+  kill), TUI rewired through it, parity proven on isolated sockets. TUI
+  gained `n` = new living spirit (repo copy only — live ~/bin untouched by
+  Phase-1 law; goes live at next install/sync).
+
+## Owner rulings that now govern (design cache #26–#36)
+
+#26 live process state NEVER in the config graph (commands yes, healthbars
+no — sheol lives in its own pane/terminal). #29 every aesthetic is a future
+user parameter. #35 the owner's hand-dragged layout (persisted in the
+sidecar) is the ground truth for a future learned auto-organizer. #36 bind
+executions should pulse the graph — needs the LK fork to ping the app (a
+big reason the fork exists).
+
+## Honest misses / rough edges this session
+
+- Aesthetic iteration churned: curves and sway went through build→veto→
+  rebuild→simplify cycles (final state: straight lines, bow only where a
+  node must be cleared; sway removed). Lesson: get a visual sign-off on a
+  SKETCH before building motion systems.
+- Directory HSplitView width fights window restoration (drag once).
+- Label overlap at extreme zoom-out remains (label-aware routing = #31;
+  learned layout = #35).
+- v0.3-phase1 tag NOT yet laid — owner verification pending.
+
+## Where we are in the roadmap / what's next
+
+Phase 1 (read-only witness + altar + sheol plumbing) is functionally done
+pending the tag. NEXT PHASE per owner: **stop configuring Leader Key +
+Rectangle and start BEING the thing** — wire machine-spirit up as the
+input layer:
+1. The LK fork becomes the daily driver (supervised swap; the cask app
+   retires) — fork pings the app on fires (#36), owns settings-open (#18).
+2. Write-back: the kit's serializer starts WRITING the config (with backup
+   + reload) — the +/− buttons come alive; the m-a-c-h-i-n-e-s-p-i-r-i-t
+   summon bind lands then too.
+3. Native window engine: Rectangle's actions reimplemented (or the fork
+   driven directly) so `rectangle://` URLs stop being the interface.
+4. Multiple leaders for real (MB4 exhibit → configurable input listeners).

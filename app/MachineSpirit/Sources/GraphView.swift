@@ -495,33 +495,22 @@ struct GraphView: View {
       }
     }
 
-    // The cable's own arc: side by parity, swell by id — the curves that
-    // make the loom read organic (and give the sway something to flex).
-    let byteSum = childID.utf8.reduce(0) { $0 &+ Int($1) }
-    let side: Double = byteSum & 1 == 0 ? 1 : -1
-    let swell = length * (0.10 + Double(byteSum % 5) * 0.02) * side
-    let stagger = siblings <= 1 ? 0.5 : 0.34 + 0.32 * Double(index) / Double(siblings - 1)
-
-    let phase = Double(byteSum % 628) / 100.0
-    let wobble1 = sin(pulse.seconds * 1.5 + phase) * pulse.sway
-    let wobble2 = sin(pulse.seconds * 1.1 + phase * 2.1) * pulse.sway * 0.7
-
+    // Owner ruling: straight, followable lines. The only curvature is the
+    // obstacle bow — a line bends exactly as much as it must to clear a
+    // node, and no more.
+    _ = pulse
+    if abs(bow) < 0.5 {
+      path.move(to: a)
+      path.addLine(to: b)
+      return path
+    }
     let perpX = -dy / length
     let perpY = dx / length
-    let arc1 = swell + bow
-    let arc2 = swell * 0.8 + bow
-    let control1 = transform.apply(
-      x: from.x + dx * (stagger * 0.6) + perpX * arc1,
-      y: from.y + dy * (stagger * 0.6) + perpY * arc1)
-    let control2 = transform.apply(
-      x: from.x + dx * (0.4 + stagger * 0.6) + perpX * arc2,
-      y: from.y + dy * (0.4 + stagger * 0.6) + perpY * arc2)
-
+    let control = transform.apply(
+      x: from.x + dx * 0.5 + perpX * bow * 1.6,
+      y: from.y + dy * 0.5 + perpY * bow * 1.6)
     path.move(to: a)
-    path.addCurve(
-      to: b,
-      control1: CGPoint(x: control1.x + wobble1, y: control1.y + wobble2),
-      control2: CGPoint(x: control2.x - wobble2, y: control2.y + wobble1))
+    path.addQuadCurve(to: b, control: control)
     return path
   }
 
@@ -611,17 +600,29 @@ struct GraphView: View {
         glyphText = node.key ?? "·"
       }
       let glyphSize = (node.id == "root" ? 17.0 : (node.isDual ? 14.0 : 12.0)) * sizeScale
+      // A node wearing an icon keeps its face visible: the key rides in a
+      // chip ABOVE the disc instead of covering the artwork.
+      let hasIcon = !inert && IconStore.iconPath(for: node) != nil
+      let glyphCenter =
+        hasIcon
+        ? CGPoint(x: center.x, y: center.y - radius - 9 * sizeScale)
+        : center
       let glyphBack = CGRect(
-        x: center.x - 7 * sizeScale, y: center.y - 7.5 * sizeScale,
+        x: glyphCenter.x - 7 * sizeScale, y: glyphCenter.y - 7.5 * sizeScale,
         width: 14 * sizeScale, height: 15 * sizeScale)
       context.fill(
         RoundedRectangle(cornerRadius: 4).path(in: glyphBack),
-        with: .color(Theme.ground.opacity(recede ? 0.4 : 0.75)))
+        with: .color(Theme.ground.opacity(recede ? 0.4 : (hasIcon ? 0.9 : 0.75))))
+      if hasIcon {
+        context.stroke(
+          RoundedRectangle(cornerRadius: 4).path(in: glyphBack),
+          with: .color(primary.opacity(recede ? 0.2 : 0.6)), lineWidth: 1)
+      }
       context.draw(
         Text(glyphText)
           .font(.system(size: glyphSize, design: .monospaced).weight(.bold))
           .foregroundStyle(glyphColor(for: node).opacity(recede ? 0.35 : Double(birth))),
-        at: center)
+        at: glyphCenter)
 
       // The word box trails the remaining letters off the disc.
       var wordBoxWidth = 0.0
