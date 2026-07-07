@@ -78,10 +78,13 @@ sig() {
 	# capture everything VISIBLE so any real change (session added/removed,
 	# attach<->detach, the running command changing, a minute ticking on
 	# born/quiet-for) triggers a redraw — but nothing that would churn every tick
-	# (times are minute-bucketed via fmt_ago, not raw epochs).
-	local s="$total|$first_dead|$sel|$arm|$arm_sel" i
+	# (times are minute-bucketed via fmt_ago, not raw epochs). Joints are the
+	# same \x1f unit separator the parse uses — a name carrying '|' or ':'
+	# must not alias two different rosters into one signature (missed redraw).
+	local US=$'\x1f'
+	local s="$total$US$first_dead$US$sel$US$arm$US$arm_sel" i
 	for (( i=0; i<total; i++ )); do
-		s+="|${names[$i]}:${cmds[$i]}:${state[$i]}:$(fmt_ago "${born[$i]}"):$(fmt_ago "${acts[$i]}")"
+		s+="$US${names[$i]}$US${cmds[$i]}$US${state[$i]}$US$(fmt_ago "${born[$i]}")$US$(fmt_ago "${acts[$i]}")"
 	done
 	printf '%s' "$s"
 }
