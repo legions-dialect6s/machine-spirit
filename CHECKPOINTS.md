@@ -212,3 +212,22 @@ Cache: #29 aesthetics-as-parameters 🔒, #30 drag-and-drop design.
 **Restore:** `git stash -u && git reset --hard <commit tagged [P1.13]>`
 **Re-verify:** build & open (growth + typewriter + cascade); ⌘R replays
 them; pan hard and watch the lines stir, then settle.
+
+### Identity colors, icons, legible labels, the leader-key parent `[P1.14]`
+
+Owner palette: window-tiling mint (174,222,203), folder ice (217,241,254),
+command terminal-green, groups phosphor, duality magenta; app nodes tinted
+by their icon's dominant color with the real icon in the disc (folders get
+the folder icon, commands the terminal's — IconStore caches both). Traces
+run parent→child color gradients. Labels: bigger, brighter, backing pill,
+placed radially OUTWARD into the empty space (the anti-overlap 80%; #31
+holds the 20%). Sway made visible (screen-space, detuned sines); subtree
+glow (whole branch lights, not just children); gentler geometric taper.
+Directory: ⇪ leader-key parent row (future: more leaders), children cascade
+too, opens at min width, collapsible from the header; title centered; root
+node wears ⇪. Cached #31 (label-aware rerouting) + #32 (SwiftTerm ledger
+pane recommendation).
+
+**Restore:** `git stash -u && git reset --hard <commit tagged [P1.14]>`
+**Re-verify:** build & open; colors/icons on the rim; select `t` (whole
+branch glows); collapse/restore the directory.

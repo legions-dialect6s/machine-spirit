@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		019F7D79E1E876626E11B9A2 /* GraphView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98EAE5FFEBA7D1FAEEF81FAE /* GraphView.swift */; };
 		259C47702BFA8908157D476D /* TreeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DC0B070810C9852F3EE3437 /* TreeView.swift */; };
+		78AD8841C80E6169F5C5772E /* IconStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 271503FD6BBFFFE7B766D1E8 /* IconStore.swift */; };
 		86F32D191CB8DA83C493D46F /* MachineSpiritApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D78116A2645238BBF41D3FF7 /* MachineSpiritApp.swift */; };
 		B759736072FF493ADEB723E2 /* MachineSpiritKit in Frameworks */ = {isa = PBXBuildFile; productRef = 5BCD9078BC72C5F027120B5B /* MachineSpiritKit */; };
 		BAFAFC9DCF47C32765544359 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41BA055CA9A05CA859DBB7D0 /* ContentView.swift */; };
@@ -20,6 +21,7 @@
 
 /* Begin PBXFileReference section */
 		0C61D57EF5E1027553CA1962 /* SheolService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SheolService.swift; sourceTree = "<group>"; };
+		271503FD6BBFFFE7B766D1E8 /* IconStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IconStore.swift; sourceTree = "<group>"; };
 		32D65BB0E4B6A0D0BB110E46 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		41BA055CA9A05CA859DBB7D0 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		5D03F1A0DE367DED4735C5E1 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
@@ -57,6 +59,7 @@
 				5D03F1A0DE367DED4735C5E1 /* AppState.swift */,
 				41BA055CA9A05CA859DBB7D0 /* ContentView.swift */,
 				98EAE5FFEBA7D1FAEEF81FAE /* GraphView.swift */,
+				271503FD6BBFFFE7B766D1E8 /* IconStore.swift */,
 				D78116A2645238BBF41D3FF7 /* MachineSpiritApp.swift */,
 				0C61D57EF5E1027553CA1962 /* SheolService.swift */,
 				AE260BAD489CB9D25CE5394B /* Theme.swift */,
@@ -162,6 +165,7 @@
 				EFBAA750BEEE2D52CB8BC739 /* AppState.swift in Sources */,
 				BAFAFC9DCF47C32765544359 /* ContentView.swift in Sources */,
 				019F7D79E1E876626E11B9A2 /* GraphView.swift in Sources */,
+				78AD8841C80E6169F5C5772E /* IconStore.swift in Sources */,
 				86F32D191CB8DA83C493D46F /* MachineSpiritApp.swift in Sources */,
 				FF7001114F0F6CE852FA0578 /* SheolService.swift in Sources */,
 				F38442DA220CA4A379FAFC8B /* Theme.swift in Sources */,

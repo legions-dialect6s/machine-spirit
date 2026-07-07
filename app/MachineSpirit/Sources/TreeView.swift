@@ -14,12 +14,44 @@ struct TreeView: View {
     ScrollViewReader { proxy in
       List(selection: $state.selectedNodeID) {
         if let model = state.displayModel {
-          // Rows cascade in on boot/refresh — the retro terminal build.
-          // List identity keys on bootStamp so refresh replays the reveal.
-          ForEach(Array(model.children.enumerated()), id: \.element.id) { index, child in
-            NodeBranch(node: child)
-              .modifier(CascadeIn(delay: Double(index) * 0.035))
+          // The leader-key parent: every bind hangs off one hotkey today;
+          // more leaders (more middles) are a future concern.
+          DisclosureGroup(
+            isExpanded: Binding(
+              get: { state.expandedIDs.contains("root") },
+              set: { expanded in
+                if expanded {
+                  state.expandedIDs.insert("root")
+                } else {
+                  state.expandedIDs.remove("root")
+                }
+              }
+            )
+          ) {
+            // Rows cascade in on boot/refresh — the retro terminal build.
+            // List identity keys on bootStamp so refresh replays the reveal.
+            ForEach(Array(model.children.enumerated()), id: \.element.id) { index, child in
+              NodeBranch(node: child)
+                .modifier(CascadeIn(delay: Double(index) * 0.035))
+            }
+          } label: {
+            HStack(spacing: 10) {
+              Text("⇪")
+                .font(.system(.body, design: .monospaced).weight(.bold))
+                .foregroundStyle(Theme.phosphor)
+              Text("leader key")
+                .font(.system(.body, design: .monospaced).weight(.semibold))
+                .foregroundStyle(Theme.phosphor)
+              Text("F19 · caps lock")
+                .font(.system(.caption, design: .monospaced))
+                .foregroundStyle(Theme.ash)
+              Spacer()
+              Text("\(model.children.count)")
+                .font(.system(.caption, design: .monospaced))
+                .foregroundStyle(Theme.phosphorDim)
+            }
           }
+          .listRowBackground(Color.clear)
         }
       }
       .id(state.bootStamp)
@@ -88,8 +120,11 @@ private struct NodeBranch: View {
           }
         )
       ) {
-        ForEach(node.children) { child in
+        // Children cascade on unfold too — the build never stops being
+        // a terminal.
+        ForEach(Array(node.children.enumerated()), id: \.element.id) { index, child in
           NodeBranch(node: child)
+            .modifier(CascadeIn(delay: Double(index) * 0.022))
         }
       } label: {
         NodeRow(node: node)

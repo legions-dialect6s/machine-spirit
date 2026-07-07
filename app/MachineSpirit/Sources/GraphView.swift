@@ -107,7 +107,7 @@ struct GraphView: View {
       seconds = now.timeIntervalSinceReferenceDate
       elapsed = now.timeIntervalSince(bootStamp)
       let calm = max(0, now.timeIntervalSince(lastDisturbance))
-      sway = 0.8 + exp(-calm * 2.0) * 5.0
+      sway = 2.2 + exp(-calm * 1.6) * 9.0
       self.maxRadius = maxRadius
       self.growthDuration = growthDuration
     }
@@ -203,13 +203,19 @@ struct GraphView: View {
   }
 
   /// The lit path: with a selection, the trace from the center to it plus
-  /// its children glow; everything else recedes.
+  /// its ENTIRE subtree glow; everything else recedes.
   private func glowSet(in model: Node) -> Set<String>? {
     guard let id = state.selectedNodeID else { return nil }
     var lit = Set(AppState.ancestorIDs(of: id))
     lit.insert(id)
     if let node = model.node(withID: id) {
-      for child in node.children { lit.insert(child.id) }
+      func igniteDescendants(_ node: Node) {
+        for child in node.children {
+          lit.insert(child.id)
+          igniteDescendants(child)
+        }
+      }
+      igniteDescendants(node)
     }
     return lit
   }
@@ -256,70 +262,75 @@ struct GraphView: View {
 
   // MARK: - Drawing
 
+  /// A node's identity color in the graph — app nodes take their icon's
+  /// dominant tint; everything else follows the Theme palette.
+  private func color(of node: Node) -> Color {
+    if case .application(let path) = node.action, node.status.isInert == false {
+      return IconStore.tint(forPath: (path as NSString).expandingTildeInPath)
+    }
+    return Theme.nodeColor(for: node)
+  }
+
   private func drawEdges(
     _ root: Node, layout: GraphLayout, transform: CanvasTransform,
     glow: Set<String>?, pulse: Pulse, in context: inout GraphicsContext
   ) {
-    // Traces batch per (category, depth) so width can taper with depth
-    // while strokes stay few.
-    var litPaths: [Int: Path] = [:]
-    var dimPaths: [Int: Path] = [:]
-    var inertPaths: [Int: Path] = [:]
-
-    walk(root) { node in
-      guard let from = layout.positions[node.id] else { return }
-      let siblingCount = node.children.count
-      for (index, child) in node.children.enumerated() {
-        guard let to = layout.positions[child.id] else { continue }
-        var segment = trace(
-          from: from, to: to, childID: child.id, index: index,
-          siblings: siblingCount, pulse: pulse, transform: transform)
-
-        let childRadius = hypot(to.x, to.y)
-        let reveal = pulse.reveal(atRadius: childRadius)
-        if reveal <= 0 { continue }
-        if reveal < 1 { segment = segment.trimmedPath(from: 0, to: reveal) }
-
-        let depth = child.id.split(separator: "/").count - 1
-        let lit =
-          glow == nil
-          ? false
-          : (glow!.contains(child.id) && (glow!.contains(node.id) || node.id == "root"))
-        if child.status.isInert {
-          inertPaths[depth, default: Path()].addPath(segment)
-        } else if lit {
-          litPaths[depth, default: Path()].addPath(segment)
-        } else {
-          dimPaths[depth, default: Path()].addPath(segment)
-        }
-      }
-    }
-
     context.drawLayer { layer in
-      layer.addFilter(.shadow(color: Theme.phosphor.opacity(0.5), radius: 3))
-      let dimOpacity = glow == nil ? 0.7 : 0.25
-      for (depth, path) in dimPaths {
-        layer.stroke(
-          path, with: .color(Theme.phosphorDim.opacity(dimOpacity)),
-          lineWidth: taper(depth))
-      }
-      for (depth, path) in inertPaths {
-        layer.stroke(
-          path, with: .color(Theme.ash.opacity(glow == nil ? 0.28 : 0.14)),
-          lineWidth: taper(depth) * 0.9)
-      }
-      for (depth, path) in litPaths {
-        layer.stroke(
-          path, with: .color(Theme.phosphor.opacity(0.95)),
-          lineWidth: taper(depth) * 1.5)
+      layer.addFilter(.shadow(color: Theme.phosphor.opacity(0.45), radius: 3))
+      walk(root) { node in
+        guard let from = layout.positions[node.id] else { return }
+        let parentColor = node.id == "root" ? Theme.phosphorDim : color(of: node)
+        let siblingCount = node.children.count
+        for (index, child) in node.children.enumerated() {
+          guard let to = layout.positions[child.id] else { continue }
+          var segment = trace(
+            from: from, to: to, childID: child.id, index: index,
+            siblings: siblingCount, pulse: pulse, transform: transform)
+
+          let childRadius = hypot(to.x, to.y)
+          let reveal = pulse.reveal(atRadius: childRadius)
+          if reveal <= 0 { continue }
+          if reveal < 1 { segment = segment.trimmedPath(from: 0, to: reveal) }
+
+          let depth = child.id.split(separator: "/").count - 1
+          let lit =
+            glow == nil
+            ? false
+            : (glow!.contains(child.id) && (glow!.contains(node.id) || node.id == "root"))
+
+          // Trace color runs parent → child: the wiring itself tells you
+          // what kind of thing it feeds.
+          let childColor = color(of: child)
+          let alpha: Double
+          let width: CGFloat
+          if child.status.isInert {
+            alpha = glow == nil ? 0.25 : 0.12
+            width = taper(depth) * 0.9
+          } else if lit {
+            alpha = 0.95
+            width = taper(depth) * 1.5
+          } else {
+            alpha = glow == nil ? 0.6 : 0.2
+            width = taper(depth)
+          }
+          layer.stroke(
+            segment,
+            with: .linearGradient(
+              Gradient(colors: [
+                parentColor.opacity(alpha * 0.8), childColor.opacity(alpha),
+              ]),
+              startPoint: transform.apply(from),
+              endPoint: transform.apply(to)),
+            lineWidth: width)
+        }
       }
     }
   }
 
-  /// Trace width thins as the run leaves the center — heavier arteries at
-  /// the first ring, hairlines at the rim.
+  /// Trace width thins as the run leaves the center — but gently, and ever
+  /// more gently the further out it goes (geometric decay, floored).
   private func taper(_ depth: Int) -> CGFloat {
-    max(0.55, 2.1 - CGFloat(depth) * 0.38)
+    max(0.85, 2.0 * pow(0.88, CGFloat(max(depth - 1, 0))))
   }
 
   /// One trace, polar-routed without corners: a cubic whose control points
@@ -339,13 +350,16 @@ struct GraphView: View {
 
     let byteSum = childID.utf8.reduce(0) { $0 &+ Int($1) }
     let phase = Double(byteSum % 628) / 100.0
-    let wobble = sin(pulse.seconds * 1.7 + phase) * pulse.sway
+    // Sway lives in SCREEN space so it stays visible at every zoom; two
+    // slightly detuned sines so the drift never looks metronomic.
+    let wobble = sin(pulse.seconds * 1.4 + phase) * pulse.sway
+    let wobble2 = sin(pulse.seconds * 0.9 + phase * 2.3) * pulse.sway * 0.7
 
     // From the center, the trace is a near-straight spoke with a soft lean.
     guard r1 > 5, r2 > r1 + 8 else {
       let mid = CGPoint(
-        x: (a.x + b.x) / 2 - (b.y - a.y) * 0.03 + wobble * 0.4,
-        y: (a.y + b.y) / 2 + (b.x - a.x) * 0.03 + wobble * 0.4)
+        x: (a.x + b.x) / 2 - (b.y - a.y) * 0.03 + wobble,
+        y: (a.y + b.y) / 2 + (b.x - a.x) * 0.03 + wobble2)
       path.move(to: a)
       path.addQuadCurve(to: b, control: mid)
       return path
@@ -357,16 +371,21 @@ struct GraphView: View {
     while deltaTheta > .pi { deltaTheta -= 2 * .pi }
     while deltaTheta < -.pi { deltaTheta += 2 * .pi }
 
-    // Sibling-staggered junction ring, swaying a little.
+    // Sibling-staggered junction ring; the sway rides the control points in
+    // screen space so the vines visibly breathe at any zoom.
     let fraction = siblings <= 1 ? 0.5 : 0.34 + 0.32 * Double(index) / Double(siblings - 1)
-    let junction = r1 + (r2 - r1) * fraction + wobble / max(Double(transform.scale), 0.001)
+    let junction = r1 + (r2 - r1) * fraction
 
-    let control1 = transform.apply(
+    var control1 = transform.apply(
       x: junction * cos(theta1 + deltaTheta * 0.3),
       y: junction * sin(theta1 + deltaTheta * 0.3))
-    let control2 = transform.apply(
+    var control2 = transform.apply(
       x: junction * cos(theta1 + deltaTheta * 0.7),
       y: junction * sin(theta1 + deltaTheta * 0.7))
+    control1.x += wobble
+    control1.y += wobble2
+    control2.x -= wobble2
+    control2.y += wobble
 
     path.move(to: a)
     path.addCurve(to: b, control1: control1, control2: control2)
@@ -394,9 +413,11 @@ struct GraphView: View {
       // A pruned node still opens onward — the band just hides it for now.
       let hidesMore = node.extras["__ms_pruned"] != nil
       // Constant screen size: the space zooms, the nodes do not.
-      let radius = (node.isDual ? dualRadius : nodeRadius) * (birth < 1 ? birth : 1)
+      let isRoot = node.id == "root"
+      let baseRadius = isRoot ? dualRadius : (node.isDual ? dualRadius : nodeRadius)
+      let radius = baseRadius * (birth < 1 ? birth : 1)
 
-      let primary: Color = inert ? Theme.ash : (node.isDual ? Theme.magenta : Theme.phosphor)
+      let primary: Color = inert ? Theme.ash : color(of: node)
 
       context.drawLayer { layer in
         layer.opacity = Double(birth) * (recede ? 0.35 : 1)
@@ -411,6 +432,18 @@ struct GraphView: View {
           x: center.x - radius, y: center.y - radius,
           width: radius * 2, height: radius * 2)
         layer.fill(Circle().path(in: discRect), with: .color(Theme.ground))
+
+        // App / folder / command nodes carry their real icon, clipped into
+        // the disc and dimmed so the key glyph stays the address.
+        if birth > 0.8, !inert, let iconPath = IconStore.iconPath(for: node) {
+          layer.drawLayer { iconLayer in
+            iconLayer.clip(to: Circle().path(in: discRect.insetBy(dx: 1.5, dy: 1.5)))
+            iconLayer.opacity = recede ? 0.25 : 0.55
+            iconLayer.draw(
+              IconStore.icon(forPath: iconPath),
+              in: discRect.insetBy(dx: 1.5, dy: 1.5))
+          }
+        }
 
         // Halo ring — this node opens onward (a group, or a band-pruned
         // branch whose depths wait below).
@@ -447,24 +480,57 @@ struct GraphView: View {
 
       guard birth > 0.6 else { return }
 
-      // Key glyph, constant size — the address of the node.
+      // Key glyph, constant size — the address of the node. The root wears
+      // the leader key itself.
+      let glyphBack = CGRect(
+        x: center.x - 7, y: center.y - 7.5, width: 14, height: 15)
+      context.fill(
+        RoundedRectangle(cornerRadius: 4).path(in: glyphBack),
+        with: .color(Theme.ground.opacity(recede ? 0.4 : 0.75)))
       context.draw(
-        Text(node.key ?? "·")
-          .font(.system(size: node.isDual ? 14 : 12, design: .monospaced).weight(.bold))
+        Text(isRoot ? "⇪" : (node.key ?? "·"))
+          .font(
+            .system(size: isRoot ? 17 : (node.isDual ? 14 : 12), design: .monospaced)
+              .weight(.bold))
           .foregroundStyle(glyphColor(for: node).opacity(recede ? 0.35 : Double(birth))),
         at: center)
 
-      // Name/summary appears once there is room for it (and always along
-      // the lit path).
-      if zoom > 0.5 || selected || (lit && glow != nil) {
-        context.draw(
+      // Name/summary radiates OUTWARD along the node's own angle — labels
+      // grow into the empty space between spokes instead of onto the board.
+      if !isRoot, zoom > 0.5 || selected || (lit && glow != nil) {
+        let angle = atan2(position.y, position.x)
+        let anchor: UnitPoint =
+          cos(angle) > 0.35 ? .leading : (cos(angle) < -0.35 ? .trailing : .center)
+        let labelDistance = Double(radius) + 10
+        var labelPoint = CGPoint(
+          x: center.x + CGFloat(cos(angle) * labelDistance),
+          y: center.y + CGFloat(sin(angle) * labelDistance))
+        if anchor == .center {
+          labelPoint.y += sin(angle) > 0 ? 8 : -8
+        }
+
+        let label = context.resolve(
           Text(node.displayName)
-            .font(.system(size: 9, design: .monospaced))
+            .font(.system(size: 10.5, design: .monospaced))
             .foregroundStyle(
               recede
                 ? Theme.ash.opacity(0.25)
-                : (inert ? Theme.ash.opacity(0.6) : Theme.ash.opacity(Double(birth)))),
-          at: CGPoint(x: center.x, y: center.y + radius + 9))
+                : (inert
+                  ? Theme.ash.opacity(0.6)
+                  : Color(white: 0.86).opacity(Double(birth)))))
+        let size = label.measure(in: CGSize(width: 320, height: 40))
+        var pill = CGRect(origin: labelPoint, size: size)
+        switch anchor {
+        case .leading: pill.origin.y -= size.height / 2
+        case .trailing: pill.origin.x -= size.width; pill.origin.y -= size.height / 2
+        default: pill.origin.x -= size.width / 2; pill.origin.y -= size.height / 2
+        }
+        if !recede {
+          context.fill(
+            RoundedRectangle(cornerRadius: 4).path(in: pill.insetBy(dx: -4, dy: -1.5)),
+            with: .color(Theme.ground.opacity(0.72)))
+        }
+        context.draw(label, in: pill)
       }
     }
   }

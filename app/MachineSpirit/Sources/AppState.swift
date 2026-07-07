@@ -20,8 +20,12 @@ final class AppState {
   var importError: String?
 
   /// Disclosure state for the directory — programmatic so navigation can
-  /// unfold the path to the selection.
-  var expandedIDs: Set<String> = []
+  /// unfold the path to the selection. "root" is the leader-key parent row
+  /// (one per hotkey; more leaders are a future concern), open by default.
+  var expandedIDs: Set<String> = ["root"]
+
+  /// The directory pane collapses to give the board the whole window.
+  var directoryCollapsed = false
 
   // MARK: - Graph viewport (shared so keys, slider, and gestures agree)
 
@@ -244,6 +248,7 @@ final class AppState {
   func revealSelectionInTree() {
     guard let selectedNodeID else { return }
     expandedIDs.formUnion(Self.ancestorIDs(of: selectedNodeID))
+    expandedIDs.insert("root")
   }
 
   /// Import the live Leader Key config — the runtime source of truth,

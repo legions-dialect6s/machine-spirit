@@ -37,13 +37,27 @@ struct ContentView: View {
   }
 
   private var header: some View {
-    HStack(spacing: 10) {
+    ZStack {
+      // The wordmark holds the center of the machine.
       ZStack(alignment: .leading) {
         Text(Self.fullTitle).hidden()  // reserve the full width
         Text(typedTitle)
       }
       .font(.system(.title3, design: .monospaced).weight(.bold))
       .foregroundStyle(Theme.phosphor)
+
+      HStack(spacing: 10) {
+      Button {
+        state.directoryCollapsed.toggle()
+      } label: {
+        Label(
+          "directory", systemImage: state.directoryCollapsed ? "chevron.right" : "chevron.left"
+        )
+        .font(.system(.callout, design: .monospaced))
+      }
+      .buttonStyle(.plain)
+      .foregroundStyle(state.directoryCollapsed ? Theme.ash : Theme.phosphorDim)
+      .help(state.directoryCollapsed ? "show the directory" : "collapse the directory")
       Spacer()
       Button {
         SheolService.openLedger()
@@ -67,6 +81,7 @@ struct ContentView: View {
       .foregroundStyle(state.refreshFlashing ? Theme.phosphor : Theme.phosphorDim)
       .animation(.easeOut(duration: 0.2), value: state.refreshFlashing)
       .help("re-import the live Leader Key config (read-only) — ⌘R")
+      }
     }
     .padding(.horizontal, 14)
     .padding(.vertical, 10)
@@ -84,9 +99,13 @@ struct ContentView: View {
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity)
     } else if state.model != nil {
+      // The board gets the window; the directory opens at its narrowest and
+      // collapses entirely (the header button brings it back).
       HSplitView {
-        pane(.directory, title: "directory") { TreeView() }
-          .frame(minWidth: 340, idealWidth: 460, maxWidth: 720)
+        if !state.directoryCollapsed {
+          pane(.directory, title: "directory") { TreeView() }
+            .frame(minWidth: 300, idealWidth: 300, maxWidth: 720)
+        }
         pane(.graph, title: "node graph") { GraphView() }
           .frame(minWidth: 480, maxWidth: .infinity)
       }
