@@ -16,20 +16,41 @@ enum IconStore {
       ? iterm : "/System/Applications/Utilities/Terminal.app"
   }()
 
-  /// The filesystem path whose icon should front this node, if any.
+  /// The icon reference for this node: a filesystem path, or
+  /// `favicon:<domain>` for web-jump binds (the site's own face).
   static func iconPath(for node: Node) -> String? {
     guard let action = node.action else { return nil }
     if action.windowAction != nil { return nil }  // tiling keeps pure mint
     switch action {
     case .application(let path): return expand(path)
     case .folder(let path): return expand(path)
-    case .command: return terminalAppPath
+    case .command(let value):
+      if let domain = webJumpDomain(in: value) { return "favicon:\(domain)" }
+      return terminalAppPath
     case .url, .other: return nil
     }
   }
 
-  static func icon(forPath path: String) -> Image {
+  /// First domain of a web-jump bind: `osascript ~/bin/web-jump.applescript
+  /// github.com` → `github.com`; comma lists take the first.
+  static func webJumpDomain(in command: String) -> String? {
+    guard command.contains("web-jump") else { return nil }
+    let tokens = command.components(separatedBy: " ").filter { !$0.isEmpty }
+    guard let scriptIndex = tokens.firstIndex(where: { $0.contains("web-jump") }),
+      tokens.count > scriptIndex + 1
+    else { return nil }
+    let domain = tokens[scriptIndex + 1].components(separatedBy: ",")[0]
+    return domain.components(separatedBy: "/")[0]
+  }
+
+  /// nil while a favicon is still in flight (the fetch bumps iconEpoch so
+  /// the canvas redraws when it lands).
+  static func icon(forPath path: String, state: AppState? = nil) -> Image? {
     if let cached = icons[path] { return cached }
+    if path.hasPrefix("favicon:") {
+      fetchFavicon(String(path.dropFirst("favicon:".count)), key: path, state: state)
+      return nil
+    }
     let nsImage = NSWorkspace.shared.icon(forFile: path)
     nsImage.size = NSSize(width: 64, height: 64)
     let image = Image(nsImage: nsImage)
@@ -37,17 +58,36 @@ enum IconStore {
     return image
   }
 
+  private static var faviconFetches: Set<String> = []
+
+  private static func fetchFavicon(_ domain: String, key: String, state: AppState?) {
+    guard !faviconFetches.contains(key),
+      let url = URL(string: "https://www.google.com/s2/favicons?domain=\(domain)&sz=64")
+    else { return }
+    faviconFetches.insert(key)
+    Task {
+      guard let (data, _) = try? await URLSession.shared.data(from: url),
+        let nsImage = NSImage(data: data)
+      else { return }
+      nsImage.size = NSSize(width: 64, height: 64)
+      icons[key] = Image(nsImage: nsImage)
+      tints[key] = tint(ofImage: nsImage)
+      state?.iconEpoch += 1
+      state?.disturb()
+    }
+  }
+
   /// Dominant (average) color of the file's icon, brightened so it reads on
   /// the near-black ground. Apps tint their node and its inbound trace.
   static func tint(forPath path: String) -> Color {
     if let cached = tints[path] { return cached }
-    let color = computeTint(path: path)
+    if path.hasPrefix("favicon:") { return Theme.terminal }  // until it lands
+    let color = tint(ofImage: NSWorkspace.shared.icon(forFile: path))
     tints[path] = color
     return color
   }
 
-  private static func computeTint(path: String) -> Color {
-    let icon = NSWorkspace.shared.icon(forFile: path)
+  private static func tint(ofImage icon: NSImage) -> Color {
     guard
       let bitmap = NSBitmapImageRep(
         bitmapDataPlanes: nil, pixelsWide: 8, pixelsHigh: 8, bitsPerSample: 8,
@@ -90,4 +130,6 @@ enum IconStore {
   private static func expand(_ path: String) -> String {
     (path as NSString).expandingTildeInPath
   }
+
+  static func hasCachedIcon(_ path: String) -> Bool { icons[path] != nil }
 }

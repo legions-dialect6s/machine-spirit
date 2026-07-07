@@ -13,6 +13,7 @@ struct MachineSpiritApp: App {
         .preferredColorScheme(.dark)
         .task {
           state.communeWithLiveConfig()
+          state.loadSidecar()
           state.installKeyMonitor()
           state.installScrollMonitor()
           state.startSheolPolling()

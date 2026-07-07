@@ -263,11 +263,53 @@ final class AppState {
     return (2..<parts.count).map { parts[0..<$0].joined(separator: "/") }
   }
 
-  /// Unfold the path to the current selection so its row is visible.
+  /// Unfold the path to the current selection — and the selection itself,
+  /// so a selected parent shows its children without another click.
   func revealSelectionInTree() {
     guard let selectedNodeID else { return }
     expandedIDs.formUnion(Self.ancestorIDs(of: selectedNodeID))
+    expandedIDs.insert(selectedNodeID)
     expandedIDs.insert("root")
+  }
+
+  // MARK: - Dragged node positions (the sidecar earns its keep)
+
+  /// World-space overrides for user-dragged nodes, persisted via the
+  /// GraphViewState sidecar in Application Support. "Sort" clears them.
+  var nodeOverrides: [String: GraphLayout.Position] = [:]
+
+  /// Wakes the canvas when an async icon/favicon arrives.
+  var iconEpoch = 0
+
+  /// The in-app sheol ledger pane (SwiftTerm).
+  var ledgerOpen = false
+
+  private static var sidecarURL: URL {
+    let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+      .appendingPathComponent("MachineSpirit", isDirectory: true)
+    try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    return dir.appendingPathComponent("graph-view.json")
+  }
+
+  func loadSidecar() {
+    guard let data = try? Data(contentsOf: Self.sidecarURL),
+      let saved = try? GraphViewState.load(from: data)
+    else { return }
+    nodeOverrides = saved.nodes.mapValues { .init(x: $0.x, y: $0.y) }
+  }
+
+  func saveSidecar() {
+    var saved = GraphViewState()
+    saved.nodes = nodeOverrides.mapValues { .init(x: $0.x, y: $0.y) }
+    if let data = try? saved.data() {
+      try? data.write(to: Self.sidecarURL)
+    }
+  }
+
+  func clearOverrides() {
+    nodeOverrides = [:]
+    saveSidecar()
+    disturb()
   }
 
   /// Import the live Leader Key config — the runtime source of truth,

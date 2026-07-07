@@ -61,6 +61,19 @@ struct RadialLayoutTests {
     #expect(t - i >= 66 - 0.0001)
   }
 
+  @Test func leafClustersStackInterlocked() throws {
+    let root = try fixtureRoot()
+    let layout = RadialLayout.layout(root: root, stackLeafClusters: true)
+    #expect(layout.positions.count == root.totalCount)
+
+    // ⇪ p → { h photos, s photoshop }: an all-leaf cluster stacks in an
+    // offset column — same-ish outward axis, alternating indent, row gap.
+    let h = try #require(layout.positions["root/p/h"])
+    let s = try #require(layout.positions["root/p/s"])
+    #expect(abs(h.y - s.y) >= 29)
+    #expect(abs(h.x - s.x) >= 20)
+  }
+
   @Test func siblingsNeverCollideAnywhere() throws {
     let root = try fixtureRoot()
     let layout = RadialLayout.layout(root: root, minSpacing: 40)

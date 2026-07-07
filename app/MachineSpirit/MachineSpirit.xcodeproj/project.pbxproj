@@ -11,8 +11,10 @@
 		259C47702BFA8908157D476D /* TreeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DC0B070810C9852F3EE3437 /* TreeView.swift */; };
 		78AD8841C80E6169F5C5772E /* IconStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 271503FD6BBFFFE7B766D1E8 /* IconStore.swift */; };
 		86F32D191CB8DA83C493D46F /* MachineSpiritApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D78116A2645238BBF41D3FF7 /* MachineSpiritApp.swift */; };
+		B73295F72D15BE4A17C570F3 /* LedgerPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1F0834B774E421E8A0CFB21 /* LedgerPane.swift */; };
 		B759736072FF493ADEB723E2 /* MachineSpiritKit in Frameworks */ = {isa = PBXBuildFile; productRef = 5BCD9078BC72C5F027120B5B /* MachineSpiritKit */; };
 		BAFAFC9DCF47C32765544359 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41BA055CA9A05CA859DBB7D0 /* ContentView.swift */; };
+		BE57E0EF7193D2A3D2729107 /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = 383308A772C0DF9986165544 /* SwiftTerm */; };
 		E0E3D8FE2EF7DA38AFF1B4C0 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 32D65BB0E4B6A0D0BB110E46 /* Assets.xcassets */; };
 		EFBAA750BEEE2D52CB8BC739 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D03F1A0DE367DED4735C5E1 /* AppState.swift */; };
 		F38442DA220CA4A379FAFC8B /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE260BAD489CB9D25CE5394B /* Theme.swift */; };
@@ -29,6 +31,7 @@
 		8DC0B070810C9852F3EE3437 /* TreeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TreeView.swift; sourceTree = "<group>"; };
 		98EAE5FFEBA7D1FAEEF81FAE /* GraphView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphView.swift; sourceTree = "<group>"; };
 		AE260BAD489CB9D25CE5394B /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+		B1F0834B774E421E8A0CFB21 /* LedgerPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LedgerPane.swift; sourceTree = "<group>"; };
 		D78116A2645238BBF41D3FF7 /* MachineSpiritApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MachineSpiritApp.swift; sourceTree = "<group>"; };
 		E9D11E59FDFE782CBF1FB7B0 /* MachineSpirit.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MachineSpirit.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -39,6 +42,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				B759736072FF493ADEB723E2 /* MachineSpiritKit in Frameworks */,
+				BE57E0EF7193D2A3D2729107 /* SwiftTerm in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -60,6 +64,7 @@
 				41BA055CA9A05CA859DBB7D0 /* ContentView.swift */,
 				98EAE5FFEBA7D1FAEEF81FAE /* GraphView.swift */,
 				271503FD6BBFFFE7B766D1E8 /* IconStore.swift */,
+				B1F0834B774E421E8A0CFB21 /* LedgerPane.swift */,
 				D78116A2645238BBF41D3FF7 /* MachineSpiritApp.swift */,
 				0C61D57EF5E1027553CA1962 /* SheolService.swift */,
 				AE260BAD489CB9D25CE5394B /* Theme.swift */,
@@ -104,6 +109,7 @@
 			name = MachineSpirit;
 			packageProductDependencies = (
 				5BCD9078BC72C5F027120B5B /* MachineSpiritKit */,
+				383308A772C0DF9986165544 /* SwiftTerm */,
 			);
 			productName = MachineSpirit;
 			productReference = E9D11E59FDFE782CBF1FB7B0 /* MachineSpirit.app */;
@@ -134,6 +140,7 @@
 			mainGroup = 9EF7AA6FDFC3F2302106A398;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
+				9B05C8FA7CB2D51F3683EBE6 /* XCRemoteSwiftPackageReference "SwiftTerm" */,
 				DC9ACD6BF1D38C2A40D2F845 /* XCLocalSwiftPackageReference "../../kit/MachineSpiritKit" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -166,6 +173,7 @@
 				BAFAFC9DCF47C32765544359 /* ContentView.swift in Sources */,
 				019F7D79E1E876626E11B9A2 /* GraphView.swift in Sources */,
 				78AD8841C80E6169F5C5772E /* IconStore.swift in Sources */,
+				B73295F72D15BE4A17C570F3 /* LedgerPane.swift in Sources */,
 				86F32D191CB8DA83C493D46F /* MachineSpiritApp.swift in Sources */,
 				FF7001114F0F6CE852FA0578 /* SheolService.swift in Sources */,
 				F38442DA220CA4A379FAFC8B /* Theme.swift in Sources */,
@@ -375,7 +383,23 @@
 		};
 /* End XCLocalSwiftPackageReference section */
 
+/* Begin XCRemoteSwiftPackageReference section */
+		9B05C8FA7CB2D51F3683EBE6 /* XCRemoteSwiftPackageReference "SwiftTerm" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/migueldeicaza/SwiftTerm";
+			requirement = {
+				kind = exactVersion;
+				version = 1.5.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
 /* Begin XCSwiftPackageProductDependency section */
+		383308A772C0DF9986165544 /* SwiftTerm */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 9B05C8FA7CB2D51F3683EBE6 /* XCRemoteSwiftPackageReference "SwiftTerm" */;
+			productName = SwiftTerm;
+		};
 		5BCD9078BC72C5F027120B5B /* MachineSpiritKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = MachineSpiritKit;

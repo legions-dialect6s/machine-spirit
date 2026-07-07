@@ -18,8 +18,15 @@ import SwiftUI
 struct GraphView: View {
   @Environment(AppState.self) private var state
 
-  @GestureState private var dragDelta: CGSize = .zero
   @GestureState private var pinchFactor: CGFloat = 1
+
+  /// Drag on a node moves the node; drag on space pans — decided by what
+  /// sits under the cursor when the drag begins. No modifier needed.
+  private enum DragMode {
+    case pan(applied: CGSize)
+    case node(id: String, origin: GraphLayout.Position)
+  }
+  @State private var dragMode: DragMode?
 
   private let nodeRadius: CGFloat = 13
   private let dualRadius: CGFloat = 18
@@ -89,7 +96,7 @@ struct GraphView: View {
         state.graphFrame = frame
       }
       .contentShape(Rectangle())
-      .gesture(panGesture)
+      .gesture(dragGesture(layout: layout, viewport: geometry.size))
       .simultaneousGesture(zoomGesture)
       .onTapGesture { location in
         guard let layout else { return }
@@ -137,10 +144,10 @@ struct GraphView: View {
       elapsed = now.timeIntervalSince(bootStamp)
       let calm = max(0, now.timeIntervalSince(lastDisturbance))
       let decay = exp(-calm * 1.3)
-      // No baseline: perfectly still at rest (the clock pauses anyway).
-      // Movement wakes a decaying sway PLUS a directional drift — the
-      // traces trail against the current like weed in water.
-      sway = decay * 6.0
+      // DURING movement the board moves rigidly (no shimmer = no jitter);
+      // the directional drift trails the current, and the sine sway rings
+      // only AFTER the movement stops, then dies away.
+      sway = calm < 0.12 ? 0 : exp(-(calm - 0.12) * 1.5) * 6.0
       drift = CGSize(width: -flow.width * decay * 0.45, height: -flow.height * decay * 0.45)
       self.maxRadius = maxRadius
       self.growthDuration = growthDuration
@@ -186,17 +193,49 @@ struct GraphView: View {
     CanvasTransform(
       scale: effectiveZoom,
       offset: CGSize(
-        width: viewport.width / 2 + state.pan.width + dragDelta.width,
-        height: viewport.height / 2 + state.pan.height + dragDelta.height))
+        width: viewport.width / 2 + state.pan.width,
+        height: viewport.height / 2 + state.pan.height))
   }
 
-  private var panGesture: some Gesture {
+  private func dragGesture(layout: GraphLayout?, viewport: CGSize) -> some Gesture {
     DragGesture(minimumDistance: 3)
-      .updating($dragDelta) { value, delta, _ in delta = value.translation }
-      .onEnded { value in
-        state.cancelGlide()
-        state.pan.width += value.translation.width
-        state.pan.height += value.translation.height
+      .onChanged { value in
+        if dragMode == nil {
+          state.cancelGlide()
+          if let layout,
+            let hitID = hitTest(
+              value.startLocation, in: layout,
+              transform: canvasTransform(viewport: viewport)),
+            hitID != "root"
+          {
+            let origin =
+              state.nodeOverrides[hitID] ?? layout.positions[hitID]
+              ?? .init(x: 0, y: 0)
+            dragMode = .node(id: hitID, origin: origin)
+          } else {
+            dragMode = .pan(applied: .zero)
+          }
+        }
+        switch dragMode {
+        case .pan(let applied):
+          let deltaX = value.translation.width - applied.width
+          let deltaY = value.translation.height - applied.height
+          state.pan.width += deltaX
+          state.pan.height += deltaY
+          state.disturb(CGSize(width: deltaX, height: deltaY))
+          dragMode = .pan(applied: value.translation)
+        case .node(let id, let origin):
+          state.nodeOverrides[id] = .init(
+            x: origin.x + value.translation.width / Double(effectiveZoom),
+            y: origin.y + value.translation.height / Double(effectiveZoom))
+          state.disturb()
+        case nil:
+          break
+        }
+      }
+      .onEnded { _ in
+        if case .node = dragMode { state.saveSidecar() }
+        dragMode = nil
         state.disturb()
       }
   }
@@ -236,16 +275,17 @@ struct GraphView: View {
     }
   }
 
-  /// Two layout tiers: compact when labels are hidden; SPREAD when labels
-  /// show — arcs sized by label width, wider rings — so what's on screen is
-  /// readable, not merely present.
+  /// Leaf clusters stack interlocked — the (*-_) pattern — so labels
+  /// interleave and MORE reads at further zoom-out. User-dragged overrides
+  /// apply on top, at every tier.
   private func boardLayout(for model: Node) -> GraphLayout {
-    if effectiveZoom > 0.5 {
-      return RadialLayout.layout(
-        root: model, ringStep: 215, chainStep: 105, minSpacing: 74,
-        leafWeight: { node in Double(max(8, min(node.displayName.count, 34))) })
+    var layout = RadialLayout.layout(
+      root: model, ringStep: 165, chainStep: 80, minSpacing: 48,
+      stackLeafClusters: true, stackRow: 32, stackIndent: 30)
+    for (id, position) in state.nodeOverrides where layout.positions[id] != nil {
+      layout.positions[id] = position
     }
-    return RadialLayout.layout(root: model)
+    return layout
   }
 
   /// Leaf ends of single-child chains spell their word (q-u-i-t → "quit"):
@@ -319,6 +359,17 @@ struct GraphView: View {
       .controlSize(.mini)
       .tint(Theme.phosphorDim)
       Text("+").foregroundStyle(Theme.phosphorDim)
+      if !state.nodeOverrides.isEmpty {
+        Button {
+          state.clearOverrides()
+        } label: {
+          Label("sort", systemImage: "arrow.triangle.2.circlepath")
+            .font(.system(size: 11, design: .monospaced))
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(Theme.phosphorDim)
+        .help("return dragged nodes to the radial order")
+      }
     }
     .font(.system(size: 12, design: .monospaced).weight(.bold))
     .padding(8)
@@ -332,6 +383,11 @@ struct GraphView: View {
   private func color(of node: Node) -> Color {
     if case .application(let path) = node.action, node.status.isInert == false {
       return IconStore.tint(forPath: (path as NSString).expandingTildeInPath)
+    }
+    if case .command(let value) = node.action, node.status.isInert == false,
+      let domain = IconStore.webJumpDomain(in: value)
+    {
+      return IconStore.tint(forPath: "favicon:\(domain)")
     }
     return Theme.nodeColor(for: node)
   }
@@ -499,15 +555,16 @@ struct GraphView: View {
           width: radius * 2, height: radius * 2)
         layer.fill(Circle().path(in: discRect), with: .color(Theme.ground))
 
-        // App / folder / command nodes carry their real icon, clipped into
-        // the disc and dimmed so the key glyph stays the address.
-        if birth > 0.8, !inert, let iconPath = IconStore.iconPath(for: node) {
+        // App / folder / command / website nodes carry their real face —
+        // app icons, folder icons, terminal icons, FAVICONS — prominent,
+        // with the key glyph pinned on top as the address.
+        if birth > 0.8, !inert, let iconPath = IconStore.iconPath(for: node),
+          let icon = IconStore.icon(forPath: iconPath, state: state)
+        {
           layer.drawLayer { iconLayer in
             iconLayer.clip(to: Circle().path(in: discRect.insetBy(dx: 1.5, dy: 1.5)))
-            iconLayer.opacity = recede ? 0.25 : 0.55
-            iconLayer.draw(
-              IconStore.icon(forPath: iconPath),
-              in: discRect.insetBy(dx: 1.5, dy: 1.5))
+            iconLayer.opacity = recede ? 0.3 : 0.85
+            iconLayer.draw(icon, in: discRect.insetBy(dx: 1.5, dy: 1.5))
           }
         }
 
@@ -593,7 +650,7 @@ struct GraphView: View {
 
       // Name/summary radiates OUTWARD along the node's own angle — labels
       // grow into the empty space between spokes instead of onto the board.
-      if !isRoot, zoom > 0.5 || selected || (lit && glow != nil) {
+      if !isRoot, zoom > 0.42 || selected || (lit && glow != nil) {
         let angle = atan2(position.y, position.x)
         let anchor: UnitPoint =
           cos(angle) > 0.35 ? .leading : (cos(angle) < -0.35 ? .trailing : .center)

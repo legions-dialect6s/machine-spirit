@@ -267,3 +267,25 @@ HONESTLY-UNBOUND exhibit of the multi-leader future (#33).
 **Re-verify:** kit tests (25); fling the board and watch traces trail the
 motion; zoom past 0.5 — layout spreads; find «quit»/«tmux» boxes; the MB4
 exhibit sits east of the rim.
+
+### Interlocked stagger, drag-and-drop, favicons, the embedded ledger `[P1.17]`
+
+The (*-_) stagger understood and shipped: all-leaf clusters pack into
+offset columns (kit `stackLeafClusters`) so labels interleave — more reads
+at further zoom-out (label threshold lowered to 0.42). Jitter killed the
+right way: ZERO shimmer during viewport motion (board moves rigidly, drift
+trails the current), the sine rings only after motion stops. DRAG AND DROP:
+drag a node to move it (drag space to pan — decided by what's under the
+cursor), positions persist via the GraphViewState sidecar in App Support,
+a "sort" button restores the radial order. FAVICONS: web-jump nodes fetch
+and wear their site's favicon (google s2, cached) and tint their node +
+trace by it; app/folder/terminal icons now prominent (0.85). MB4 exhibit
+listed in the directory; selecting a parent auto-opens its children.
+SWIFTTERM LANDED (SPM, pinned 1.5.0; vendor when we patch — #32): the
+sheol button now opens the REAL TUI in an embedded right-hand pane —
+commune/ward and all — with pop-out-to-iTerm (tmux lets spirits change
+bodies) and in-app close (pkill; the TUI's traps exit clean).
+
+**Restore:** `git stash -u && git reset --hard <commit tagged [P1.17]>`
+**Re-verify:** kit tests (26); drag a node, relaunch — it stayed; click
+sheol — the ledger lives in the pane; web nodes wear favicons.

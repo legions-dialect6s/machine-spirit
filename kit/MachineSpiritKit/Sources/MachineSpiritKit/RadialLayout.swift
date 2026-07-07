@@ -15,6 +15,9 @@ public enum RadialLayout {
     chainStep: Double = 66,
     minSpacing: Double = 40,
     startAngle: Double = -Double.pi / 2,
+    stackLeafClusters: Bool = false,
+    stackRow: Double = 30,
+    stackIndent: Double = 26,
     leafWeight weigh: (Node) -> Double = { _ in 1 }
   ) -> GraphLayout {
     var positions: [String: GraphLayout.Position] = [:]
@@ -55,6 +58,28 @@ public enum RadialLayout {
       maxRadius = max(maxRadius, pressured)
 
       guard !node.children.isEmpty else { return }
+
+      // Interlocked stagger: a parent whose children are ALL leaves packs
+      // them into an offset column outward of itself — the (*-_) pattern —
+      // so labels interleave instead of fighting for one arc.
+      if stackLeafClusters, node.children.count >= 2,
+        node.children.allSatisfy({ $0.children.isEmpty })
+      {
+        let angle = (from + to) / 2
+        let stackRadius = pressured + ringStep
+        let centerX = stackRadius * cos(angle)
+        let centerY = stackRadius * sin(angle)
+        let outwardSign: Double = cos(angle) >= 0 ? 1 : -1
+        for (index, child) in node.children.enumerated() {
+          let row = Double(index) - Double(node.children.count - 1) / 2
+          let x = centerX + (index % 2 == 1 ? stackIndent * outwardSign : 0)
+          let y = centerY + row * stackRow
+          positions[child.id] = .init(x: x, y: y)
+          maxRadius = max(maxRadius, (x * x + y * y).squareRoot())
+        }
+        return
+      }
+
       let step = node.children.count == 1 ? chainStep : ringStep
       let total = leafWeight(node)
       var cursor = from

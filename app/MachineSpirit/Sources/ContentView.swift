@@ -60,14 +60,19 @@ struct ContentView: View {
       .help(state.directoryCollapsed ? "show the directory" : "collapse the directory")
       Spacer()
       Button {
-        SheolService.openLedger()
+        if state.ledgerOpen {
+          LedgerTerminal.endTUI()
+          state.ledgerOpen = false
+        } else {
+          state.ledgerOpen = true
+        }
       } label: {
         Label("sheol", systemImage: "moon.haze")
           .font(.system(.callout, design: .monospaced))
       }
       .buttonStyle(.plain)
-      .foregroundStyle(Theme.magenta.opacity(0.8))
-      .help("open the ledger — sheol is a terminal; only its commands live here")
+      .foregroundStyle(state.ledgerOpen ? Theme.magenta : Theme.magenta.opacity(0.7))
+      .help("the ledger, embedded — sheol stays a terminal; this just gives it a pane")
       Button {
         state.refresh()
       } label: {
@@ -110,6 +115,10 @@ struct ContentView: View {
         // directory's narrow ideal on first layout — the board is the star.
         pane(.graph, title: "node graph") { GraphView() }
           .frame(minWidth: 480, idealWidth: 4000, maxWidth: .infinity)
+        if state.ledgerOpen {
+          LedgerPane()
+            .frame(minWidth: 380, idealWidth: 440, maxWidth: 640)
+        }
       }
     } else {
       ProgressView()

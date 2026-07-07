@@ -10,6 +10,11 @@ options:
 packages:
   MachineSpiritKit:
     path: ../../kit/MachineSpiritKit
+  # The in-app sheol ledger terminal. MIT; pinned exact so updates are
+  # deliberate. Vendor/fork the moment we need to patch it (#32).
+  SwiftTerm:
+    url: https://github.com/migueldeicaza/SwiftTerm
+    exactVersion: 1.5.0
 targets:
   MachineSpirit:
     type: application
@@ -19,6 +24,7 @@ targets:
       - Assets.xcassets
     dependencies:
       - package: MachineSpiritKit
+      - package: SwiftTerm
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.machinespirit.MachineSpirit

@@ -52,6 +52,41 @@ struct TreeView: View {
             }
           }
           .listRowBackground(Color.clear)
+
+          // The second leader — honestly unbound, but on the ledger.
+          DisclosureGroup(
+            isExpanded: Binding(
+              get: { state.expandedIDs.contains("mb4") },
+              set: { expanded in
+                if expanded {
+                  state.expandedIDs.insert("mb4")
+                } else {
+                  state.expandedIDs.remove("mb4")
+                }
+              }
+            )
+          ) {
+            ForEach(AppState.auxLeader.children) { child in
+              NodeRow(node: child)
+                .tag(child.id)
+                .id(child.id)
+                .listRowBackground(Color.clear)
+            }
+          } label: {
+            HStack(spacing: 10) {
+              Text("M4")
+                .font(.system(.caption, design: .monospaced).weight(.bold))
+                .foregroundStyle(Theme.ash)
+              Text("mouse button 4")
+                .font(.system(.body, design: .monospaced))
+                .foregroundStyle(Theme.ash)
+              Text("unbound example")
+                .font(.system(.caption, design: .monospaced))
+                .foregroundStyle(Theme.ash.opacity(0.6))
+              Spacer()
+            }
+          }
+          .listRowBackground(Color.clear)
         }
       }
       .id(state.bootStamp)
