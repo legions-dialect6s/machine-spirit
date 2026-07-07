@@ -252,3 +252,20 @@ input layer:
 > (bash-3.2-clean? read-loop unaffected?). Suggest minimal, surgical fixes;
 > do NOT restructure working features; the round-trip test gate
 > (`cd kit/MachineSpiritKit && swift test`, 26 tests) must stay green.
+
+## Session close addendum ([P1.21]–[P1.23], 2026-07-06 ~21:30)
+
+- Keystroke chips ride whole and true: `[l-s-n-m]`, bracketed/dashed, above
+  icon faces (the chain-walk that dropped branch prefixes is gone — chips
+  read the structural id).
+- The 7:09pm board restored as the resting design: [P1.15] radial layout +
+  junction-ring cubic traces (minor curves), sway retired, obstacle bow
+  kept. All later features layered on top untouched.
+- Owner's hand layout (156 positions) persisted in the sidecar AND backed
+  up to `graph-view.hand-layout-2026-07-06.json` — the ground truth for the
+  learned auto-layout (#35).
+- ⚠️ First task next session: make "sort" NON-destructive (named layouts,
+  toggle radial ⇄ hand) — today it clears the hand layout (backup exists).
+- `v0.3-phase1` tagged at session close: Phase 1 done — the witness, the
+  altar, sheol's pane and core, both forks building, the loved state one
+  command away.
