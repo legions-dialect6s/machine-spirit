@@ -354,6 +354,87 @@ class UserConfig: ObservableObject {
   }
 }
 
+// MARK: - Config file monitor (machine-spirit fork)
+
+/// Watches the live config file and fires when it changes, so edits land
+/// without an app restart — the receiving half of machine-spirit's
+/// write-back. Debounced; handles replace-by-rename (the atomic-swap write
+/// ritual) by re-arming on the path after every event burst.
+final class ConfigFileMonitor {
+  private let queue = DispatchQueue(label: "ConfigFileMonitor")
+  private var source: DispatchSourceFileSystemObject?
+  private var debounce: DispatchWorkItem?
+  private var pathProvider: (() -> String)?
+  private var onChange: (() -> Void)?
+  private var generation = 0
+
+  /// `path` is re-evaluated on every (re-)arm, so a changed config
+  /// directory is picked up on the next watch cycle.
+  func watch(path: @escaping () -> String, onChange: @escaping () -> Void) {
+    queue.async { [weak self] in
+      guard let self = self else { return }
+      self.pathProvider = path
+      self.onChange = onChange
+      self.generation += 1
+      self.disarm()
+      self.arm(self.generation)
+    }
+  }
+
+  func stop() {
+    queue.async { [weak self] in
+      guard let self = self else { return }
+      self.generation += 1
+      self.debounce?.cancel()
+      self.disarm()
+    }
+  }
+
+  // MARK: internals — everything below runs on `queue`
+
+  private func disarm() {
+    source?.cancel()  // cancel handler closes the fd
+    source = nil
+  }
+
+  private func arm(_ gen: Int) {
+    guard gen == generation, let path = pathProvider?() else { return }
+    let fd = open(path, O_EVTONLY)
+    guard fd >= 0 else {
+      // Mid-swap or missing file: retry until it exists again.
+      queue.asyncAfter(deadline: .now() + 1.0) { [weak self] in self?.arm(gen) }
+      return
+    }
+    let src = DispatchSource.makeFileSystemObjectSource(
+      fileDescriptor: fd,
+      eventMask: [.write, .extend, .rename, .delete],
+      queue: queue
+    )
+    src.setCancelHandler { close(fd) }
+    src.setEventHandler { [weak self] in
+      self?.scheduleReload(gen)
+    }
+    source = src
+    src.resume()
+  }
+
+  private func scheduleReload(_ gen: Int) {
+    debounce?.cancel()
+    let work = DispatchWorkItem { [weak self] in
+      guard let self = self, gen == self.generation else { return }
+      // Re-arm from the path: after an atomic rename the old fd points at
+      // a dead inode, so a fresh open is the only correct move.
+      self.disarm()
+      self.arm(gen)
+      if let onChange = self.onChange {
+        DispatchQueue.main.async { onChange() }
+      }
+    }
+    debounce = work
+    queue.asyncAfter(deadline: .now() + .milliseconds(300), execute: work)
+  }
+}
+
 // MARK: - Validation helpers
 extension UserConfig {
   private func pathKey(_ path: [Int]) -> String { path.map(String.init).joined(separator: "/") }

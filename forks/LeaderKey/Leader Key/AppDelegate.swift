@@ -18,6 +18,8 @@ class AppDelegate: NSObject, NSApplicationDelegate,
 
   let statusItem = StatusItem()
   let config = UserConfig()
+  // machine-spirit fork: hot-reload — config edits land without a restart.
+  let configMonitor = ConfigFileMonitor()
 
   var state: UserState!
   @IBOutlet var updaterController: SPUStandardUpdaterController!
@@ -53,6 +55,21 @@ class AppDelegate: NSObject, NSApplicationDelegate,
     config.ensureAndLoad()
     state = UserState(userConfig: config)
     controller = Controller(userState: state, userConfig: config)
+
+    // machine-spirit fork: watch the config file and reload bindings on
+    // change (debounced, rename-safe). The path closure re-reads the
+    // current config location on every re-arm; the Defaults task below
+    // re-watches when the config directory itself moves.
+    configMonitor.watch(path: { self.config.path }) { [weak self] in
+      self?.config.reloadFromFile()
+    }
+    Task {
+      for await _ in Defaults.updates(.configDir, initial: false) {
+        self.configMonitor.watch(path: { self.config.path }) { [weak self] in
+          self?.config.reloadFromFile()
+        }
+      }
+    }
 
     statusItem.handlePreferences = {
       self.showSettings()

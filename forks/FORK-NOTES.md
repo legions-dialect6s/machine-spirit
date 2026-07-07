@@ -51,6 +51,16 @@ carried; the SHAs below are the exact upstream commits captured.
 - **LeaderKey — summon sigil indicator** (`[P1.7]`): `Themes/Mini.swift` renders
   `SummonSigil` (new imageset from `assets/icon_transparent.png`, 256px) when
   idle instead of the plain `●`; typed keys still take over mid-sequence.
+- **LeaderKey — config hot-reload** (`[P2.4]`): `ConfigFileMonitor` (in
+  `UserConfig.swift` — no new compile unit for the app target) watches the
+  live config via a DispatchSource file-system object source, 300ms debounce,
+  re-arms on the path after every event burst so replace-by-rename (the
+  atomic-swap write ritual) can't kill the watch. Wired in
+  `AppDelegate.applicationDidFinishLaunching`; re-watches when the config
+  directory preference changes. Unit tests in
+  `Leader KeyTests/ConfigFileMonitorTests.swift` (pbxproj hand-patched with
+  `FADE0001…`/`FADE0002…` ids). `reload-leaderkey.sh` becomes legacy once the
+  fork drives.
 
 ## Signing
 
