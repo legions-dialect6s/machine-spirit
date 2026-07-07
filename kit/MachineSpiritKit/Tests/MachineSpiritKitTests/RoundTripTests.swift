@@ -133,6 +133,36 @@ struct RoundTripTests {
     }
   }
 
+  // The losslessness boundary: JSONDecoder keeps the first of duplicate
+  // keys and silently drops the rest — the importer must refuse instead.
+  @Test func duplicateKeyInOneObjectRefusesLoudly() {
+    let importer = LeaderKeyImporter(probe: FakeProbe(everythingPresent: false))
+    #expect(throws: ImportError.duplicateKey("key")) {
+      _ = try importer.importConfig(
+        from: Data(#"{"key":"a","key":"b"}"#.utf8))
+    }
+    // Nested duplicates are caught too.
+    #expect(throws: ImportError.duplicateKey("type")) {
+      _ = try importer.importConfig(
+        from: Data(#"{"actions":[{"key":"x","type":"group","type":"command"}]}"#.utf8))
+    }
+  }
+
+  @Test func repeatedKeysAcrossSiblingObjectsAreFine() throws {
+    // Every LK child object carries "key"/"type" — same names in DIFFERENT
+    // objects must never trip the duplicate guard; nor may quotes, braces,
+    // or colons inside string VALUES confuse the scanner.
+    let importer = LeaderKeyImporter(probe: FakeProbe(everythingPresent: false))
+    let config = #"""
+      {"actions":[
+        {"key":"a","type":"command","value":"echo \"{ , : }\""},
+        {"key":"b","type":"command","value":"say }]{["}
+      ]}
+      """#
+    let root = try importer.importConfig(from: Data(config.utf8))
+    #expect(root.children.count == 2)
+  }
+
   func walk(_ node: Node, _ visit: (Node) -> Void) {
     visit(node)
     for child in node.children { walk(child, visit) }

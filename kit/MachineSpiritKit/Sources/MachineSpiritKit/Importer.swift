@@ -3,6 +3,7 @@ import Foundation
 public enum ImportError: Error, Equatable, CustomStringConvertible {
   case rootIsNotAnObject
   case malformedChild(path: String)
+  case duplicateKey(String)
 
   public var description: String {
     switch self {
@@ -10,6 +11,8 @@ public enum ImportError: Error, Equatable, CustomStringConvertible {
       return "Config root must be a JSON object"
     case .malformedChild(let path):
       return "Non-object entry in actions array at \(path)"
+    case .duplicateKey(let key):
+      return "Duplicate key \"\(key)\" inside a single JSON object — refusing to import"
     }
   }
 }
@@ -23,6 +26,11 @@ public enum ImportError: Error, Equatable, CustomStringConvertible {
 /// - Values are opaque strings: `__HOME__` templating and tildes are never
 ///   expanded; the model executes nothing in Phase 1.
 /// - Empty configs (`{}`, empty `actions`) import as an empty graph.
+/// - **Losslessness boundary:** duplicate keys inside a single JSON object
+///   are not representable through the JSONDecoder/dictionary path — the
+///   decoder would silently keep one value and drop the rest. Leader Key's
+///   own writer never emits duplicates; if one ever appears, import fails
+///   loudly (`ImportError.duplicateKey`) rather than silently dropping.
 /// - The runtime source of truth is the live config at
 ///   `~/Library/Application Support/Leader Key/config.json` — read-only.
 public struct LeaderKeyImporter {
@@ -39,11 +47,62 @@ public struct LeaderKeyImporter {
   }
 
   public func importConfig(from data: Data) throws -> Node {
+    if let duplicate = Self.firstDuplicateObjectKey(in: data) {
+      throw ImportError.duplicateKey(duplicate)
+    }
     let json = try JSONDecoder().decode(JSONValue.self, from: data)
     guard let rootObject = json.objectValue else {
       throw ImportError.rootIsNotAnObject
     }
     return try node(from: rootObject, id: "root")
+  }
+
+  /// JSONDecoder keeps the FIRST of duplicate keys in an object and drops
+  /// the rest — silently. A lossless importer can't allow that, so the raw
+  /// bytes are scanned for within-one-object duplicates before decoding.
+  /// Best-effort on malformed JSON (returns nil; the decoder then throws
+  /// its own error). Keys are compared as written — `"\u{5C}u0061"` vs
+  /// `"a"` would slip past, but nothing that writes configs escapes so.
+  static func firstDuplicateObjectKey(in data: Data) -> String? {
+    struct Frame {
+      var isObject: Bool
+      var seen: Set<String> = []
+      var expectKey: Bool
+    }
+    let bytes = [UInt8](data)
+    var frames: [Frame] = []
+    var i = 0
+    while i < bytes.count {
+      switch bytes[i] {
+      case UInt8(ascii: "{"):
+        frames.append(Frame(isObject: true, expectKey: true))
+      case UInt8(ascii: "["):
+        frames.append(Frame(isObject: false, expectKey: false))
+      case UInt8(ascii: "}"), UInt8(ascii: "]"):
+        guard !frames.isEmpty else { return nil }
+        frames.removeLast()
+      case UInt8(ascii: ","):
+        if frames.last?.isObject == true { frames[frames.count - 1].expectKey = true }
+      case UInt8(ascii: ":"):
+        if frames.last?.isObject == true { frames[frames.count - 1].expectKey = false }
+      case UInt8(ascii: "\""):
+        let start = i + 1
+        var j = start
+        while j < bytes.count, bytes[j] != UInt8(ascii: "\"") {
+          j += bytes[j] == UInt8(ascii: "\\") ? 2 : 1
+        }
+        guard j < bytes.count else { return nil }
+        if let frame = frames.last, frame.isObject, frame.expectKey {
+          let key = String(decoding: bytes[start..<j], as: UTF8.self)
+          if !frames[frames.count - 1].seen.insert(key).inserted { return key }
+        }
+        i = j
+      default:
+        break
+      }
+      i += 1
+    }
+    return nil
   }
 
   public func importConfig(at url: URL) throws -> Node {
