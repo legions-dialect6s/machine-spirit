@@ -12,6 +12,15 @@ Karabiner, never `sync.sh`. So "restore the loved state" is purely a git
 operation; the live Mac never needs undoing. Each entry below records the exact
 command to return to that state.
 
+**Phase 2 amends the boundary deliberately** (owner's Phase-2 charter): live
+writes are permitted through exactly two doors — the write-back machinery
+(gate-green precondition, backup, validate, atomic swap) and supervised swaps
+with the owner present and a one-line rollback documented BEFORE the swap.
+Ad-hoc live edits stay forbidden; after any supervised live change, `sync.sh`
+keeps the repo mirror true. Karabiner's live config stays untouched entirely.
+Phase-2 restore entries therefore record BOTH the git command and, where a
+live surface was touched, the live rollback.
+
 If pushed history must also rewind: `git push --force-with-lease` — **after
 owner confirmation only**.
 
@@ -325,3 +334,34 @@ resigns. The TUI gained `n` — birth a new spirit in the land of the living
 **Re-verify:** fling → release → lines flex then still; Tab thrice cycles
 all three panes; walk the ledger with j/k, press n — a new window with a
 living spirit.
+
+---
+
+## Phase 2 — the wiring
+
+### Codex hardening adopted; the boundary made true `[P2.1]`
+
+Four commits ([P2.1b]–[P2.1d]; [P2.1a]'s shell hardening turned out to be
+already committed pre-phase as `6d77ef2` — quoted-form injection fixes,
+pidfile over pkill, \x1f parse delimiter — nothing to re-adopt):
+- **[P2.1b]** app lifecycle: `AppState.shutdown()` (monitors, observer,
+  glide/poll tasks), atomic sidecar writes, pidfile-guarded
+  `LedgerTerminal.endTUI()` (broad pkill only as stale-file fallback),
+  nonisolated `glyphColor`.
+- **[P2.1c]** the losslessness boundary: JSONDecoder silently keeps the
+  first of duplicate keys (empirically proven — the plan assumed it threw).
+  Made true, then documented: escape-aware raw-byte pre-scan refuses with
+  `ImportError.duplicateKey`; kit gate 26 → 28 tests; kit README born.
+- **[P2.1d]** sheol `sig()` joints ride \x1f (a name carrying `|`/`:` can no
+  longer suppress a redraw); proven on a throwaway socket with spirits named
+  `pipe|spirit` and `colon:ghost`. Both Codex non-blockers thereby resolved.
+
+⚠ **Standing hazard:** repo `bin/tmux-sheol.sh` + `bin/sheol-core` are AHEAD
+of live `~/bin` (this fix + P1.19's `n` key). Refresh live from repo in the
+Step 3 supervised window BEFORE any `sync.sh`, or sync clobbers the repo copy.
+
+**Restore:** `git stash -u && git reset --hard <commit [P2.1d]>` (repo only —
+nothing live touched this step).
+**Re-verify:** kit `swift test` (28 green); app builds
+(`xcodegen generate && xcodebuild … build` per [P1.4]); sheol smoke on an
+isolated `TMUX_TMPDIR` socket with `$TMUX` unset.
