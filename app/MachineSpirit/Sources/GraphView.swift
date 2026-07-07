@@ -587,71 +587,78 @@ struct GraphView: View {
       guard birth > 0.6 else { return }
 
       let word = chainWords[node.id]
-      // The glyph: leaders wear their key; chain ends wear the word's first
-      // letter (the rest trails in the box — q»uit, no doubled letters).
-      let glyphText: String
-      if node.id == "root" {
-        glyphText = "⇪"
-      } else if isLeaderRoot {
-        glyphText = node.key ?? "·"
-      } else if let word {
-        glyphText = String(word.prefix(1))
-      } else {
-        glyphText = node.key ?? "·"
-      }
-      let glyphSize = (node.id == "root" ? 17.0 : (node.isDual ? 14.0 : 12.0)) * sizeScale
-      // A node wearing an icon keeps its face visible: the key rides in a
-      // chip ABOVE the disc instead of covering the artwork.
       let hasIcon = !inert && IconStore.iconPath(for: node) != nil
-      let glyphCenter =
-        hasIcon
-        ? CGPoint(x: center.x, y: center.y - radius - 9 * sizeScale)
-        : center
-      let glyphBack = CGRect(
-        x: glyphCenter.x - 7 * sizeScale, y: glyphCenter.y - 7.5 * sizeScale,
-        width: 14 * sizeScale, height: 15 * sizeScale)
-      context.fill(
-        RoundedRectangle(cornerRadius: 4).path(in: glyphBack),
-        with: .color(Theme.ground.opacity(recede ? 0.4 : (hasIcon ? 0.9 : 0.75))))
-      if hasIcon {
-        context.stroke(
-          RoundedRectangle(cornerRadius: 4).path(in: glyphBack),
-          with: .color(primary.opacity(recede ? 0.2 : 0.6)), lineWidth: 1)
-      }
-      context.draw(
-        Text(glyphText)
-          .font(.system(size: glyphSize, design: .monospaced).weight(.bold))
-          .foregroundStyle(glyphColor(for: node).opacity(recede ? 0.35 : Double(birth))),
-        at: glyphCenter)
+      // The full keystroke order, one font, bracketed and dashed — [c-s-s]
+      // — legible at a glance.
+      let sequence = word.map { "[" + $0.map(String.init).joined(separator: "-") + "]" }
 
-      // The word box trails the remaining letters off the disc.
-      var wordBoxWidth = 0.0
-      if let word {
-        let trailing = String(word.dropFirst())
-        let wordText = context.resolve(
-          Text(trailing)
+      /// One chip: measured background pill + text, reused for the raised
+      /// key and the sequence.
+      func drawChip(_ text: String, at chipCenter: CGPoint, emphasized: Bool) -> CGSize {
+        let resolved = context.resolve(
+          Text(text)
             .font(.system(size: 11.5 * sizeScale, design: .monospaced).weight(.bold))
             .foregroundStyle(
-              (inert ? Theme.ash : Theme.phosphor).opacity(recede ? 0.3 : Double(birth))))
-        let wordSize = wordText.measure(in: CGSize(width: 240, height: 30))
+              (inert ? Theme.ash : (emphasized ? Theme.phosphor : glyphColor(for: node)))
+                .opacity(recede ? 0.35 : Double(birth))))
+        let size = resolved.measure(in: CGSize(width: 280, height: 30))
         let box = CGRect(
-          x: center.x + radius + 2,
-          y: center.y - wordSize.height / 2 - 2,
-          width: wordSize.width + 8,
-          height: wordSize.height + 4)
+          x: chipCenter.x - size.width / 2 - 4,
+          y: chipCenter.y - size.height / 2 - 2,
+          width: size.width + 8,
+          height: size.height + 4)
         context.fill(
           RoundedRectangle(cornerRadius: 4).path(in: box),
-          with: .color(Theme.groundRaised.opacity(recede ? 0.3 : 0.9)))
+          with: .color(Theme.ground.opacity(recede ? 0.4 : 0.9)))
         context.stroke(
           RoundedRectangle(cornerRadius: 4).path(in: box),
-          with: .color(Theme.phosphorDim.opacity(recede ? 0.2 : 0.7)),
-          lineWidth: 1)
+          with: .color(primary.opacity(recede ? 0.2 : 0.55)), lineWidth: 1)
+        context.draw(resolved, at: chipCenter)
+        return box.size
+      }
+
+      var wordBoxWidth = 0.0
+      if node.id == "root" || isLeaderRoot || (!hasIcon && sequence == nil) {
+        // Plain nodes and leaders: the key glyph holds the center.
+        let glyphText = node.id == "root" ? "⇪" : (node.key ?? "·")
+        let glyphSize = (node.id == "root" ? 17.0 : (node.isDual ? 14.0 : 12.0)) * sizeScale
+        let glyphBack = CGRect(
+          x: center.x - 7 * sizeScale, y: center.y - 7.5 * sizeScale,
+          width: 14 * sizeScale, height: 15 * sizeScale)
+        context.fill(
+          RoundedRectangle(cornerRadius: 4).path(in: glyphBack),
+          with: .color(Theme.ground.opacity(recede ? 0.4 : 0.75)))
         context.draw(
-          wordText,
-          in: CGRect(
-            x: box.minX + 4, y: box.minY + 2,
-            width: wordSize.width, height: wordSize.height))
-        wordBoxWidth = box.width + 6
+          Text(glyphText)
+            .font(.system(size: glyphSize, design: .monospaced).weight(.bold))
+            .foregroundStyle(glyphColor(for: node).opacity(recede ? 0.35 : Double(birth))),
+          at: center)
+      } else if let sequence {
+        // The whole order rides together — above the disc when an icon
+        // needs its face, beside it otherwise.
+        if hasIcon {
+          _ = drawChip(
+            sequence,
+            at: CGPoint(x: center.x, y: center.y - radius - 10 * sizeScale),
+            emphasized: true)
+        } else {
+          let resolved = context.resolve(
+            Text(sequence)
+              .font(.system(size: 11.5 * sizeScale, design: .monospaced).weight(.bold))
+              .foregroundStyle(
+                (inert ? Theme.ash : Theme.phosphor).opacity(recede ? 0.3 : Double(birth))))
+          let size = resolved.measure(in: CGSize(width: 280, height: 30))
+          let chipCenter = CGPoint(
+            x: center.x + radius + 6 + size.width / 2, y: center.y)
+          let boxSize = drawChip(sequence, at: chipCenter, emphasized: true)
+          wordBoxWidth = boxSize.width + 8
+        }
+      } else {
+        // Icon app without a spelled chain: its key rides above the face.
+        _ = drawChip(
+          node.key ?? "·",
+          at: CGPoint(x: center.x, y: center.y - radius - 9 * sizeScale),
+          emphasized: false)
       }
 
       // Labels never hide — the board is for reading.
