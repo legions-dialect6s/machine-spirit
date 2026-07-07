@@ -6,6 +6,7 @@ import Observation
 enum FocusedPane: Hashable {
   case directory
   case graph
+  case ledger
 }
 
 /// The one source of truth. Selection lives here and ONLY here — the
@@ -49,10 +50,14 @@ final class AppState {
   /// Observed so views wake the clock the instant something moves.
   var lastDisturbance = Date.distantPast
 
-  /// Owner verdict: the sway is gone. disturb() only wakes the render
-  /// clock so the board redraws while the viewport moves.
+  /// Movement energy: rigid while the hand moves, then the lines flex in
+  /// proportion to how hard the board was flung — smooth, never stepping.
+  var flowEnergy: Double = 0
+
   func disturb(_ delta: CGSize = .zero) {
     lastDisturbance = Date()
+    let magnitude = Double(hypot(delta.width, delta.height))
+    flowEnergy = min(1, flowEnergy * 0.75 + magnitude / 60)
   }
 
   /// ⌘-click multi-selection for group drags; rubber-band select fills it.
@@ -109,6 +114,31 @@ final class AppState {
       guard let self else { return event }
       let modifiers = event.modifierFlags.intersection([.command, .option, .control, .shift])
 
+      // Tab cycles panes FIRST — even out of the terminal, or sheol would
+      // trap the keyboard forever.
+      if event.keyCode == 48, modifiers.isEmpty {
+        switch self.focusedPane {
+        case .directory: self.focusedPane = .graph
+        case .graph: self.focusedPane = self.ledgerOpen ? .ledger : .directory
+        case .ledger: self.focusedPane = .directory
+        }
+        if self.focusedPane != .ledger,
+          let responder = NSApp.keyWindow?.firstResponder,
+          String(describing: type(of: responder)).contains("TerminalView")
+        {
+          NSApp.keyWindow?.makeFirstResponder(nil)
+        }
+        return nil
+      }
+
+      // The embedded ledger is a real terminal: when it holds focus, every
+      // other key belongs to IT (walking would otherwise eat j/k/r/d/q).
+      if let responder = NSApp.keyWindow?.firstResponder,
+        String(describing: type(of: responder)).contains("TerminalView")
+      {
+        return event
+      }
+
       if modifiers == .command {
         switch event.charactersIgnoringModifiers {
         case "r": self.refresh(); return nil
@@ -120,9 +150,6 @@ final class AppState {
       guard modifiers.isEmpty else { return event }
 
       switch event.keyCode {
-      case 48:  // tab
-        self.focusedPane = self.focusedPane == .directory ? .graph : .directory
-        return nil
       case 53:  // esc — the walk returns home: root centered, default view
         self.selectedNodeID = nil
         self.glide(toPan: .zero, zoom: 0.4)

@@ -10,11 +10,15 @@ struct LedgerPane: View {
   @Environment(AppState.self) private var state
 
   var body: some View {
+    let focused = state.focusedPane == .ledger
     VStack(spacing: 0) {
       HStack(spacing: 10) {
         Text("⌁ sheol")
-          .font(.system(.caption, design: .monospaced).weight(.bold))
+          .font(.system(.caption, design: .monospaced).weight(focused ? .bold : .regular))
           .foregroundStyle(Theme.magenta)
+        if focused {
+          Circle().fill(Theme.magenta).frame(width: 5, height: 5)
+        }
         Spacer()
         Button {
           LedgerTerminal.endTUI()
@@ -40,10 +44,26 @@ struct LedgerPane: View {
       }
       .padding(.horizontal, 12)
       .padding(.vertical, 5)
-      .background(Theme.groundRaised.opacity(0.9))
+      .background(Theme.groundRaised.opacity(focused ? 0.95 : 0.5))
       LedgerTerminal()
     }
     .background(Theme.ground)
+    .overlay(
+      Rectangle()
+        .strokeBorder(focused ? Theme.magenta.opacity(0.5) : Color.clear, lineWidth: 1)
+    )
+    .contentShape(Rectangle())
+    .simultaneousGesture(TapGesture().onEnded { state.focusedPane = .ledger })
+    .onChange(of: state.focusedPane) {
+      if state.focusedPane == .ledger { LedgerTerminal.claimKeyboard() }
+    }
+    .onAppear {
+      state.focusedPane = .ledger
+      LedgerTerminal.claimKeyboard()
+    }
+    .onDisappear {
+      if state.focusedPane == .ledger { state.focusedPane = .graph }
+    }
   }
 }
 
@@ -52,8 +72,19 @@ struct LedgerPane: View {
 /// real PATH — GUI apps inherit a bare one, which is why tmux "wasn't
 /// installed" from inside the pane.
 struct LedgerTerminal: NSViewRepresentable {
+  /// The live terminal view, so pane focus can hand it the keyboard.
+  @MainActor static weak var current: LocalProcessTerminalView?
+
+  static func claimKeyboard() {
+    DispatchQueue.main.async {
+      guard let terminal = current else { return }
+      terminal.window?.makeFirstResponder(terminal)
+    }
+  }
+
   func makeNSView(context: Context) -> LocalProcessTerminalView {
     let terminal = LocalProcessTerminalView(frame: .zero)
+    Self.current = terminal
     ITermColors.apply(to: terminal)
     terminal.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
     let home = FileManager.default.homeDirectoryForCurrentUser.path

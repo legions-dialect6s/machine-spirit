@@ -33,6 +33,7 @@ PIDFILE="$HOME/.cache/machine-spirit/sheol.pid"   # single-instance marker
 # All tmux operations go through sheol-core (shared with MachineSpirit.app) —
 # resolved beside this script so the pair works from ~/bin and from the repo.
 CORE="$(cd "$(dirname "$0")" && pwd)/sheol-core"
+LAUNCHER="$(cd "$(dirname "$0")" && pwd)/tmux-launch.sh"   # n: a new living spirit
 
 BOLD=$'\e[1m'; DIM=$'\e[2m'; INV=$'\e[7m'; RST=$'\e[0m'
 GRN=$'\e[32m'; RED=$'\e[31m'; YEL=$'\e[33m'; CYN=$'\e[36m'; MAG=$'\e[35m'
@@ -106,7 +107,7 @@ draw() {
 	printf '\e[H'
 	printf '  %s+++  S H E O L  +++%s  %sthe necromancer'\''s ledger of tmux spirits%s\e[K\n' \
 		"$BOLD$MAG" "$RST" "$DIM" "$RST"
-	printf '  %s↑/↓·k/j walk    r revive (new window)    c commune (peek)    d·d·d banish%s\e[K\n' "$DIM" "$RST"
+	printf '  %s↑/↓·k/j walk   r revive   c commune   n new spirit   d·d·d banish%s\e[K\n' "$DIM" "$RST"
 	if ! have_tmux; then printf '\e[K\n  %stmux is not installed.%s  brew install tmux\e[K\n\e[J' "$YEL" "$RST"; return; fi
 	if (( total == 0 )); then
 		printf '\e[K\n  %sthe ledger is empty — no tmux spirits walk, living or dead.%s\e[K\n\e[J' "$DIM" "$RST"; return; fi
@@ -190,6 +191,7 @@ while :; do
 		j|J) move 1 ;;
 		r|R) revive ;;
 		c|C) commune ;;
+		n|N) "$LAUNCHER" >/dev/null 2>&1; load ;;   # birth a spirit in the land of the living
 		d|D) banish_step ;;
 		q|Q) break ;;
 	esac

@@ -32,8 +32,10 @@ struct GraphView: View {
 
       let stillness = Date().timeIntervalSince(state.lastDisturbance)
       let settled = Date().timeIntervalSince(state.bootStamp) > growthDuration + 0.6
+      // 60fps while anything moves or rings (smooth, never stepping); a
+      // calm board pauses its clock entirely.
       TimelineView(
-        .animation(minimumInterval: 1.0 / 30.0, paused: settled && stillness > 3.5)
+        .animation(minimumInterval: 1.0 / 60.0, paused: settled && stillness > 5)
       ) { timeline in
         Canvas { context, size in
           guard let model, let layout else { return }
@@ -43,6 +45,8 @@ struct GraphView: View {
           let pulse = Pulse(
             now: timeline.date,
             bootStamp: state.bootStamp,
+            lastDisturbance: state.lastDisturbance,
+            energy: state.flowEnergy,
             maxRadius: max(layout.width / 2, 1),
             growthDuration: growthDuration)
           for root in roots {
@@ -112,15 +116,27 @@ struct GraphView: View {
     .overlay(alignment: .topTrailing) { zoomControls }
   }
 
-  // MARK: - Time (growth only — the sway is retired)
+  // MARK: - Time: growth on boot; sway that rings AFTER movement, smooth
 
   private struct Pulse {
+    let seconds: Double
     let elapsed: Double
+    let sway: Double
     let maxRadius: Double
     let growthDuration: Double
 
-    init(now: Date, bootStamp: Date, maxRadius: Double, growthDuration: Double) {
+    init(
+      now: Date, bootStamp: Date, lastDisturbance: Date, energy: Double,
+      maxRadius: Double, growthDuration: Double
+    ) {
+      seconds = now.timeIntervalSinceReferenceDate
       elapsed = now.timeIntervalSince(bootStamp)
+      let calm = max(0, now.timeIntervalSince(lastDisturbance))
+      // Rigid while the hand moves; on release the lines flex with the
+      // throw's energy, ring for a couple of seconds, and settle.
+      let attack = min(max((calm - 0.08) / 0.2, 0), 1)
+      let ring = exp(-max(0, calm - 0.08) * 1.1)
+      sway = energy * attack * ring * 10.0
       self.maxRadius = maxRadius
       self.growthDuration = growthDuration
     }
@@ -404,7 +420,7 @@ struct GraphView: View {
           var segment = trace(
             from: from, to: to, childID: child.id, index: index,
             siblings: siblingCount, obstacles: obstacles,
-            excluding: [node.id, child.id], transform: transform)
+            excluding: [node.id, child.id], pulse: pulse, transform: transform)
 
           let reveal = pulse.reveal(atRadius: hypot(to.x, to.y))
           if reveal <= 0 { continue }
@@ -446,24 +462,25 @@ struct GraphView: View {
     max(0.85, 2.0 * pow(0.88, CGFloat(max(depth - 1, 0))))
   }
 
-  /// One trace: a smooth cubic riding a sibling-staggered junction, bowed
-  /// away from any node it would otherwise cut through — the lines find
-  /// their way around for visual flow.
+  /// One trace: a genuinely CURVED cable — per-trace arc (side and swell
+  /// varied deterministically), bowed harder around any node it would cut
+  /// through, flexing with the after-throw sway. Circuitry, organic.
   private func trace(
     from: GraphLayout.Position, to: GraphLayout.Position,
     childID: String, index: Int, siblings: Int,
     obstacles: [String: GraphLayout.Position], excluding: Set<String>,
-    transform: CanvasTransform
+    pulse: Pulse, transform: CanvasTransform
   ) -> Path {
     var path = Path()
     let a = transform.apply(from)
     let b = transform.apply(to)
 
-    // Obstacle avoidance in world space: strongest violation wins a bow.
-    var bow = 0.0
     let dx = to.x - from.x
     let dy = to.y - from.y
     let length = max(hypot(dx, dy), 0.001)
+
+    // Obstacle avoidance in world space: strongest violation wins the bow.
+    var bow = 0.0
     for (id, obstacle) in obstacles where !excluding.contains(id) {
       let t = ((obstacle.x - from.x) * dx + (obstacle.y - from.y) * dy) / (length * length)
       guard t > 0.08, t < 0.92 else { continue }
@@ -478,21 +495,33 @@ struct GraphView: View {
       }
     }
 
+    // The cable's own arc: side by parity, swell by id — the curves that
+    // make the loom read organic (and give the sway something to flex).
     let byteSum = childID.utf8.reduce(0) { $0 &+ Int($1) }
-    let fraction = siblings <= 1 ? 0.5 : 0.34 + 0.32 * Double(index) / Double(siblings - 1)
-    let lean = Double(byteSum % 9 - 4) * 2.0
+    let side: Double = byteSum & 1 == 0 ? 1 : -1
+    let swell = length * (0.10 + Double(byteSum % 5) * 0.02) * side
+    let stagger = siblings <= 1 ? 0.5 : 0.34 + 0.32 * Double(index) / Double(siblings - 1)
+
+    let phase = Double(byteSum % 628) / 100.0
+    let wobble1 = sin(pulse.seconds * 1.5 + phase) * pulse.sway
+    let wobble2 = sin(pulse.seconds * 1.1 + phase * 2.1) * pulse.sway * 0.7
 
     let perpX = -dy / length
     let perpY = dx / length
+    let arc1 = swell + bow
+    let arc2 = swell * 0.8 + bow
     let control1 = transform.apply(
-      x: from.x + dx * fraction * 0.7 + perpX * (bow + lean),
-      y: from.y + dy * fraction * 0.7 + perpY * (bow + lean))
+      x: from.x + dx * (stagger * 0.6) + perpX * arc1,
+      y: from.y + dy * (stagger * 0.6) + perpY * arc1)
     let control2 = transform.apply(
-      x: from.x + dx * (0.3 + fraction * 0.7) + perpX * bow,
-      y: from.y + dy * (0.3 + fraction * 0.7) + perpY * bow)
+      x: from.x + dx * (0.4 + stagger * 0.6) + perpX * arc2,
+      y: from.y + dy * (0.4 + stagger * 0.6) + perpY * arc2)
 
     path.move(to: a)
-    path.addCurve(to: b, control1: control1, control2: control2)
+    path.addCurve(
+      to: b,
+      control1: CGPoint(x: control1.x + wobble1, y: control1.y + wobble2),
+      control2: CGPoint(x: control2.x - wobble2, y: control2.y + wobble1))
     return path
   }
 

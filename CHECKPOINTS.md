@@ -307,3 +307,21 @@ layout as the auto-organize objective; #36 fire-animation when a bind runs
 **Restore:** `git stash -u && git reset --hard <commit tagged [P1.18]>`
 **Re-verify:** zoom way out — everything still there, smaller; ⌘-drag a
 box around a cluster and drag it; open sheol — tmux found, iTerm colors.
+
+### Corrections: curves back, sway done RIGHT, sheol is a pane `[P1.19]`
+
+Two over-rotations undone: the cables ARC again (per-trace side/swell +
+obstacle bow + sway flex), and the sway is restored the way it was asked
+for — rigid while the hand moves, then the lines flex with the throw's
+energy at 60fps (no stepping, no jitter), ringing down to true stillness
+(clock pauses). Sheol is now a first-class pane: Tab cycles directory →
+graph → sheol (Tab handled BEFORE terminal passthrough so it can't trap),
+focusing it hands the keyboard to the TUI (keys finally register — the
+app-wide walk monitor was eating j/k/r/d/q), clicking it focuses, leaving
+resigns. The TUI gained `n` — birth a new spirit in the land of the living
+(tmux-launch via script-dir resolution, bash-3.2-clean).
+
+**Restore:** `git stash -u && git reset --hard <commit tagged [P1.19]>`
+**Re-verify:** fling → release → lines flex then still; Tab thrice cycles
+all three panes; walk the ledger with j/k, press n — a new window with a
+living spirit.
