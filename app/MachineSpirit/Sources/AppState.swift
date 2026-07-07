@@ -300,8 +300,36 @@ final class AppState {
   // MARK: - Dragged node positions (the sidecar earns its keep)
 
   /// World-space overrides for user-dragged nodes, persisted via the
-  /// GraphViewState sidecar in Application Support. "Sort" clears them.
+  /// GraphViewState sidecar in Application Support. These are the ACTIVE
+  /// layout's overrides — which named layout they belong to is `layoutMode`.
   var nodeOverrides: [String: GraphLayout.Position] = [:]
+
+  /// The two named layouts. `hand` is the owner's arrangement, persisted in
+  /// the sidecar as its own entry; `radial` is the computed mandala — never
+  /// stored, always recomputable. Switching never destroys either.
+  enum LayoutMode: String {
+    case radial, hand
+  }
+
+  var layoutMode: LayoutMode = .radial
+
+  /// The persisted hand arrangement (kept even while radial is active).
+  @ObservationIgnored private var handLayout: [String: GraphLayout.Position] = [:]
+
+  /// Whether a hand layout exists to toggle to.
+  var hasHandLayout: Bool { !handLayout.isEmpty || (layoutMode == .hand && !nodeOverrides.isEmpty) }
+
+  /// Switch layouts without destroying either: leaving hand captures its
+  /// edits; leaving radial discards its scratch drags (radial's defining
+  /// property is that it is recomputable — "sort" clears the same scratch).
+  func setLayoutMode(_ mode: LayoutMode) {
+    guard mode != layoutMode else { return }
+    if layoutMode == .hand { handLayout = nodeOverrides }
+    layoutMode = mode
+    nodeOverrides = mode == .hand ? handLayout : [:]
+    saveSidecar()
+    disturb()
+  }
 
   /// Wakes the canvas when an async icon/favicon arrives.
   var iconEpoch = 0
@@ -323,6 +351,17 @@ final class AppState {
       let saved = try? GraphViewState.load(from: data)
     {
       nodeOverrides = saved.nodes.mapValues { .init(x: $0.x, y: $0.y) }
+      if let stored = saved.layouts?["hand"] {
+        handLayout = stored.mapValues { .init(x: $0.x, y: $0.y) }
+        layoutMode = LayoutMode(rawValue: saved.activeLayout ?? "") ?? .hand
+      } else if saved.activeLayout == nil, !saved.nodes.isEmpty {
+        // Pre-layout sidecar: its overrides ARE the owner's arrangement.
+        // Migrate them to the named hand layout; nothing is lost.
+        handLayout = nodeOverrides
+        layoutMode = .hand
+      } else {
+        layoutMode = LayoutMode(rawValue: saved.activeLayout ?? "") ?? .radial
+      }
       if saved.zoom > 0 {
         zoom = min(max(saved.zoom, minZoom), maxZoom)
         pan = CGSize(width: saved.panX, height: saved.panY)
@@ -350,14 +389,27 @@ final class AppState {
   }
 
   func saveSidecar() {
+    // Editing the active hand layout keeps the named entry current.
+    if layoutMode == .hand { handLayout = nodeOverrides }
     var saved = GraphViewState(zoom: zoom, panX: pan.width, panY: pan.height)
     saved.nodes = nodeOverrides.mapValues { .init(x: $0.x, y: $0.y) }
+    saved.activeLayout = layoutMode.rawValue
+    if !handLayout.isEmpty {
+      saved.layouts = ["hand": handLayout.mapValues { .init(x: $0.x, y: $0.y) }]
+    }
     if let data = try? saved.data() {
       try? data.write(to: Self.sidecarURL, options: .atomic)
     }
   }
 
+  /// "sort" — return to the computed radial order. In hand mode this is
+  /// just a mode switch (the hand arrangement is captured, never wiped);
+  /// in radial mode it clears the scratch drags.
   func clearOverrides() {
+    if layoutMode == .hand {
+      handLayout = nodeOverrides
+      layoutMode = .radial
+    }
     nodeOverrides = [:]
     saveSidecar()
     disturb()

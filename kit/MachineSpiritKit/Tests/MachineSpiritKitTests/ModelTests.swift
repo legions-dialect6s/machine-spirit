@@ -150,6 +150,28 @@ struct ModelTests {
     #expect(decoded == state)
   }
 
+  @Test func namedLayoutsRoundTripAndOldSidecarsStillLoad() throws {
+    // The new shape: active overrides + a persisted named "hand" layout.
+    let state = GraphViewState(
+      zoom: 1.0,
+      nodes: [:],
+      layouts: ["hand": ["root/q": .init(x: -30, y: 0)]],
+      activeLayout: "radial"
+    )
+    let decoded = try GraphViewState.load(from: try state.data())
+    #expect(decoded == state)
+
+    // A pre-layout sidecar (no layouts/activeLayout keys) must keep loading;
+    // nil activeLayout is the migration signal: its nodes ARE the hand layout.
+    let old = Data(
+      #"{"zoom":1.2,"panX":5,"panY":-9,"nodes":{"root/q":{"x":1,"y":2,"collapsed":false}}}"#
+        .utf8)
+    let migrated = try GraphViewState.load(from: old)
+    #expect(migrated.activeLayout == nil)
+    #expect(migrated.layouts == nil)
+    #expect(migrated.nodes["root/q"]?.x == 1)
+  }
+
   func walk(_ node: Node, _ visit: (Node) -> Void) {
     visit(node)
     for child in node.children { walk(child, visit) }

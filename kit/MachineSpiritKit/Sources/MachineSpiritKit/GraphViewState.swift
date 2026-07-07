@@ -23,18 +23,31 @@ public struct GraphViewState: Codable, Equatable, Sendable {
   public var zoom: Double
   public var panX: Double
   public var panY: Double
+  /// The ACTIVE position overrides (what the canvas renders right now).
   public var nodes: [String: NodeViewState]
+  /// Named layouts that persist regardless of which one is active —
+  /// switching layouts must never destroy an arrangement ("hand" holds the
+  /// owner's; "radial" is never stored, it's always recomputable). Optional
+  /// so pre-layout sidecars keep decoding.
+  public var layouts: [String: [String: NodeViewState]]?
+  /// Which named layout `nodes` was projected from ("radial" / "hand").
+  /// nil = a pre-layout sidecar: its `nodes` ARE the hand layout (migration).
+  public var activeLayout: String?
 
   public init(
     zoom: Double = 1.0,
     panX: Double = 0,
     panY: Double = 0,
-    nodes: [String: NodeViewState] = [:]
+    nodes: [String: NodeViewState] = [:],
+    layouts: [String: [String: NodeViewState]]? = nil,
+    activeLayout: String? = nil
   ) {
     self.zoom = zoom
     self.panX = panX
     self.panY = panY
     self.nodes = nodes
+    self.layouts = layouts
+    self.activeLayout = activeLayout
   }
 
   public func data() throws -> Data {

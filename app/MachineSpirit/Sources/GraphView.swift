@@ -354,7 +354,22 @@ struct GraphView: View {
       .controlSize(.mini)
       .tint(Theme.phosphorDim)
       Text("+").foregroundStyle(Theme.phosphorDim)
-      if !state.nodeOverrides.isEmpty {
+      if state.hasHandLayout {
+        HStack(spacing: 4) {
+          Button("radial") { state.setLayoutMode(.radial) }
+            .foregroundStyle(
+              state.layoutMode == .radial ? Theme.phosphor : Theme.phosphorDim.opacity(0.6))
+            .help("the computed layout — always recomputable, never stored")
+          Text("⇄").foregroundStyle(Theme.phosphorDim.opacity(0.4))
+          Button("hand") { state.setLayoutMode(.hand) }
+            .foregroundStyle(
+              state.layoutMode == .hand ? Theme.phosphor : Theme.phosphorDim.opacity(0.6))
+            .help("your arrangement — kept in the sidecar, never destroyed by switching")
+        }
+        .buttonStyle(.plain)
+        .font(.system(size: 11, design: .monospaced))
+      }
+      if state.layoutMode == .radial, !state.nodeOverrides.isEmpty {
         Button {
           state.clearOverrides()
         } label: {
