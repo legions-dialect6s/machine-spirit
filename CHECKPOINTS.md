@@ -384,3 +384,46 @@ app-owned state; the dated backup above is its own safety net).
 **Re-verify:** kit `swift test` (29 green); build & open; toggle radial ⇄
 hand — the arrangement survives round trips; drag in radial → "sort" appears
 and clears only the scratch.
+
+### Hot-reload lands in the fork (implementation) `[P2.4]`
+
+`ConfigFileMonitor` in the LeaderKey fork: DispatchSource watch on the live
+config, 300ms debounce, re-arms on the path after every event burst so the
+atomic-swap write ritual can't kill the watch. Wired at launch; re-watches on
+configDir changes. Proven headlessly (3 XCTests incl. rename-survival); the
+supervised live demo happens in the Step-3/4 owner window, and
+`reload-leaderkey.sh` goes legacy only then.
+
+**Restore:** `git stash -u && git reset --hard <commit [P2.4]>`
+**Re-verify:** fork test plan green (`xcodebuild … -testPlan TestPlan test`).
+
+### ⚠ Incident: fork tests ate the live config — sandboxed + restored `[P2.4x]`
+
+Upstream's own test suite deletes the REAL config home; one full-plan run
+destroyed the live config. Restored from the repo mirror (151 nodes, atomic);
+fork patched so `defaultDirectory()` sandboxes itself under XCTest; full plan
+re-run green with the live config byte-identical. Full story: SESSION-LOG.
+
+**⚠ OWNER WINDOW ACTION (staged):** the live config had drifted ~2 nodes
+ahead of the repo and they exist now ONLY in the running cask app's memory.
+Any LK settings edit pops the "changed on disk" conflict alert — choose
+**Overwrite** (memory → disk), then `./scripts/sync.sh`. If LK restarts
+first, the 151-node repo state is the floor.
+
+**Restore:** repo-side `git reset` as usual; live-side restore command (the
+one used): `sed "s|__HOME__|$HOME|g" config/leader-key/config.json > /tmp/lk
+&& mv /tmp/lk "$HOME/Library/Application Support/Leader Key/config.json"`.
+
+### Write-back machinery, proven against temp targets `[P2.6a]`
+
+`ConfigWriter` in the kit: gate-green precondition (refuses with divergence
+paths), timestamped backup outside the repo, temp-write + re-import
+validation (the artifact is proven before it exists at the real path),
+rename(2) atomic swap, node-level change report. Serializer/backup-dir
+injectable; target path parameterized — nothing live is ever a default.
+Kit gate 36 green, including fault-injected corrupted serializes and the
+full ritual on a copy of the real live config. Stands alone: if 6b dies,
+the machinery exists and nothing live was touched.
+
+**Restore:** `git stash -u && git reset --hard <commit [P2.6a]>`
+**Re-verify:** `cd kit/MachineSpiritKit && swift test` (36 green).
