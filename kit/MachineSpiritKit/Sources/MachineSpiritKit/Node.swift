@@ -79,7 +79,9 @@ public struct Node: Identifiable, Equatable, Sendable {
   /// `window maximize` — so the graph explains itself.
   public var displayName: String {
     if let label, !label.isEmpty { return label }
-    guard let action else { return "group" }
+    // A keyed waypoint with exactly one way onward isn't a group — it's a
+    // gate (logic gate / the way through), and both views say so.
+    guard let action else { return children.count == 1 ? "gate" : "group" }
     switch action {
     case .application(let path):
       let name = (path as NSString).lastPathComponent.replacingOccurrences(of: ".app", with: "")

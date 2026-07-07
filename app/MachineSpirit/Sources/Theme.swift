@@ -39,7 +39,9 @@ enum Theme {
   }
 
   static func badgeText(for node: Node) -> String {
-    guard let action = node.action else { return "GRP" }
+    guard let action = node.action else {
+      return node.children.count == 1 ? "GTE" : "GRP"
+    }
     if action.windowAction != nil { return "WIN" }
     switch action {
     case .application: return "APP"

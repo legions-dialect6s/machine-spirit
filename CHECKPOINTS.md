@@ -248,3 +248,22 @@ persists across relaunch via window restoration — drag it once).
 **Restore:** `git stash -u && git reset --hard <commit tagged [P1.15]>`
 **Re-verify:** kit `swift test` (25 green); open, wait 4s — board frozen
 still; scroll — it stirs; Esc from deep — glides home.
+
+### Directional flow, readable spread, gates, spelled words, MB4 `[P1.16]`
+
+The lines react to the MOVEMENT itself: pan velocity feeds a flow vector
+(blended, capped) and traces trail against the current, then relax — no
+plugin, just physics-flavored state. At label-readable zooms the layout
+SPREADS: leaf arcs sized by label width (kit RadialLayout gained a
+leafWeight closure), wider rings — read everything on screen. Single-child
+waypoints are now "gates" (GTE badge) — distinguished from true groups in
+both views. Chain-end leaves wear their spelled word in a box off the disc
+(q-u-i-t → «quit»; the radial label clears it). Max zoom-out floored at
+0.08 so the first graph stays findable. A second leader graph (mouse
+button 4: q→Spotlight, e→wallpaper) renders beside the board as an
+HONESTLY-UNBOUND exhibit of the multi-leader future (#33).
+
+**Restore:** `git stash -u && git reset --hard <commit tagged [P1.16]>`
+**Re-verify:** kit tests (25); fling the board and watch traces trail the
+motion; zoom past 0.5 — layout spreads; find «quit»/«tmux» boxes; the MB4
+exhibit sits east of the rim.

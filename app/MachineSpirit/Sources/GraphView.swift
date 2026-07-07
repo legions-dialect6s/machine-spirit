@@ -29,9 +29,12 @@ struct GraphView: View {
     GeometryReader { geometry in
       let model = state.displayModel
       // Semantic zoom: shallow rings when far out; deeper rings bloom and
-      // the layout reorganizes as you come closer.
+      // the layout reorganizes as you come closer. At label-readable zooms
+      // the layout SPREADS — arcs sized by label width, wider rings — so
+      // everything on screen can actually be read.
       let drawModel = model.map { prune($0, depth: 0, maxDepth: visibleDepth) }
-      let layout = drawModel.map { RadialLayout.layout(root: $0) }
+      let layout = drawModel.map { boardLayout(for: $0) }
+      let spelledWords = drawModel.map { chainWords(in: $0) } ?? [:]
 
       // 30fps while anything moves; a calm, settled board PAUSES its clock
       // — no idle jitter, no idle heat (SESSION-LOG lesson). disturb() is
@@ -49,6 +52,7 @@ struct GraphView: View {
             now: timeline.date,
             bootStamp: state.bootStamp,
             lastDisturbance: state.lastDisturbance,
+            flow: state.flow,
             maxRadius: max(layout.width / 2, 1),
             growthDuration: growthDuration)
           drawEdges(
@@ -56,7 +60,26 @@ struct GraphView: View {
             in: &context)
           drawNodes(
             drawModel, layout: layout, transform: transform, glow: glow, pulse: pulse,
-            in: &context)
+            chainWords: spelledWords, in: &context)
+
+          // The second leader: the multi-leader future, honestly unbound.
+          let aux = AppState.auxLeader
+          let auxLayout = RadialLayout.layout(root: aux, ringStep: 130)
+          let auxTransform = CanvasTransform(
+            scale: transform.scale,
+            offset: CGSize(
+              width: transform.offset.width
+                + (layout.width / 2 + Double(auxLayout.width) / 2 + 420) * transform.scale,
+              height: transform.offset.height))
+          context.drawLayer { layer in
+            layer.opacity = 0.75
+            drawEdges(
+              aux, layout: auxLayout, transform: auxTransform, glow: nil, pulse: pulse,
+              in: &layer)
+            drawNodes(
+              aux, layout: auxLayout, transform: auxTransform, glow: nil, pulse: pulse,
+              chainWords: [:], in: &layer)
+          }
         }
       }
       .background(Theme.ground)
@@ -102,19 +125,23 @@ struct GraphView: View {
     let seconds: Double  // continuous clock for the sway
     let elapsed: Double  // since boot/refresh
     let sway: Double  // amplitude in points
+    let drift: CGSize  // directional trail against the current movement
     let maxRadius: Double
     let growthDuration: Double
 
     init(
-      now: Date, bootStamp: Date, lastDisturbance: Date, maxRadius: Double,
-      growthDuration: Double
+      now: Date, bootStamp: Date, lastDisturbance: Date, flow: CGSize,
+      maxRadius: Double, growthDuration: Double
     ) {
       seconds = now.timeIntervalSinceReferenceDate
       elapsed = now.timeIntervalSince(bootStamp)
       let calm = max(0, now.timeIntervalSince(lastDisturbance))
-      // No baseline: perfectly still at rest (the clock pauses anyway);
-      // movement wakes a smooth, decaying sway.
-      sway = exp(-calm * 1.3) * 8.0
+      let decay = exp(-calm * 1.3)
+      // No baseline: perfectly still at rest (the clock pauses anyway).
+      // Movement wakes a decaying sway PLUS a directional drift — the
+      // traces trail against the current like weed in water.
+      sway = decay * 6.0
+      drift = CGSize(width: -flow.width * decay * 0.45, height: -flow.height * decay * 0.45)
       self.maxRadius = maxRadius
       self.growthDuration = growthDuration
     }
@@ -207,6 +234,37 @@ struct GraphView: View {
     case ..<0.8: return 3
     default: return .max
     }
+  }
+
+  /// Two layout tiers: compact when labels are hidden; SPREAD when labels
+  /// show — arcs sized by label width, wider rings — so what's on screen is
+  /// readable, not merely present.
+  private func boardLayout(for model: Node) -> GraphLayout {
+    if effectiveZoom > 0.5 {
+      return RadialLayout.layout(
+        root: model, ringStep: 215, chainStep: 105, minSpacing: 74,
+        leafWeight: { node in Double(max(8, min(node.displayName.count, 34))) })
+    }
+    return RadialLayout.layout(root: model)
+  }
+
+  /// Leaf ends of single-child chains spell their word (q-u-i-t → "quit"):
+  /// the walk made visible at the destination. The branching node that
+  /// opens the run contributes its letter, so the word is what you typed.
+  private func chainWords(in model: Node) -> [String: String] {
+    var words: [String: String] = [:]
+    func descend(_ node: Node, inheritedRun: [String]) {
+      let run = inheritedRun + [node.key ?? ""]
+      if node.children.isEmpty, run.count >= 3 {
+        let word = run.joined()
+        if word.count >= 3 { words[node.id] = word }
+      }
+      for child in node.children {
+        descend(child, inheritedRun: node.children.count == 1 ? run : [node.key ?? ""])
+      }
+    }
+    for child in model.children { descend(child, inheritedRun: []) }
+    return words
   }
 
   /// The lit path: with a selection, the trace from the center to it plus
@@ -365,8 +423,8 @@ struct GraphView: View {
     // From the center, the trace is a near-straight spoke with a soft lean.
     guard r1 > 5, r2 > r1 + 8 else {
       let mid = CGPoint(
-        x: (a.x + b.x) / 2 - (b.y - a.y) * 0.03 + wobble,
-        y: (a.y + b.y) / 2 + (b.x - a.x) * 0.03 + wobble2)
+        x: (a.x + b.x) / 2 - (b.y - a.y) * 0.03 + wobble + pulse.drift.width,
+        y: (a.y + b.y) / 2 + (b.x - a.x) * 0.03 + wobble2 + pulse.drift.height)
       path.move(to: a)
       path.addQuadCurve(to: b, control: mid)
       return path
@@ -389,10 +447,10 @@ struct GraphView: View {
     var control2 = transform.apply(
       x: junction * cos(theta1 + deltaTheta * 0.7),
       y: junction * sin(theta1 + deltaTheta * 0.7))
-    control1.x += wobble
-    control1.y += wobble2
-    control2.x -= wobble2
-    control2.y += wobble
+    control1.x += wobble + pulse.drift.width
+    control1.y += wobble2 + pulse.drift.height
+    control2.x += -wobble2 + pulse.drift.width * 0.6
+    control2.y += wobble + pulse.drift.height * 0.6
 
     path.move(to: a)
     path.addCurve(to: b, control1: control1, control2: control2)
@@ -401,7 +459,8 @@ struct GraphView: View {
 
   private func drawNodes(
     _ root: Node, layout: GraphLayout, transform: CanvasTransform,
-    glow: Set<String>?, pulse: Pulse, in context: inout GraphicsContext
+    glow: Set<String>?, pulse: Pulse, chainWords: [String: String],
+    in context: inout GraphicsContext
   ) {
     let zoom = transform.scale
 
@@ -502,6 +561,36 @@ struct GraphView: View {
           .foregroundStyle(glyphColor(for: node).opacity(recede ? 0.35 : Double(birth))),
         at: center)
 
+      // Chain ends spell their word — the typed spell, boxed at the node.
+      var wordBoxWidth = 0.0
+      if let word = chainWords[node.id], zoom > 0.35 || selected {
+        let wordText = context.resolve(
+          Text(word)
+            .font(.system(size: 11.5, design: .monospaced).weight(.bold))
+            .foregroundStyle(
+              (node.status.isInert ? Theme.ash : Theme.phosphor)
+                .opacity(recede ? 0.3 : Double(birth))))
+        let wordSize = wordText.measure(in: CGSize(width: 240, height: 30))
+        let box = CGRect(
+          x: center.x + radius + 3,
+          y: center.y - wordSize.height / 2 - 2,
+          width: wordSize.width + 10,
+          height: wordSize.height + 4)
+        context.fill(
+          RoundedRectangle(cornerRadius: 4).path(in: box),
+          with: .color(Theme.groundRaised.opacity(recede ? 0.3 : 0.9)))
+        context.stroke(
+          RoundedRectangle(cornerRadius: 4).path(in: box),
+          with: .color(Theme.phosphorDim.opacity(recede ? 0.2 : 0.7)),
+          lineWidth: 1)
+        context.draw(
+          wordText,
+          in: CGRect(
+            x: box.minX + 5, y: box.minY + 2,
+            width: wordSize.width, height: wordSize.height))
+        wordBoxWidth = box.width + 6
+      }
+
       // Name/summary radiates OUTWARD along the node's own angle — labels
       // grow into the empty space between spokes instead of onto the board.
       if !isRoot, zoom > 0.5 || selected || (lit && glow != nil) {
@@ -514,6 +603,9 @@ struct GraphView: View {
           y: center.y + CGFloat(sin(angle) * labelDistance))
         if anchor == .center {
           labelPoint.y += sin(angle) > 0 ? 8 : -8
+        }
+        if anchor == .leading, wordBoxWidth > 0 {
+          labelPoint.x += wordBoxWidth  // clear the spelled-word box
         }
 
         let label = context.resolve(

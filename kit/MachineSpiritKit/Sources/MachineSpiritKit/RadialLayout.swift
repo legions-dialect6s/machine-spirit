@@ -14,13 +14,19 @@ public enum RadialLayout {
     ringStep: Double = 150,
     chainStep: Double = 66,
     minSpacing: Double = 40,
-    startAngle: Double = -Double.pi / 2
+    startAngle: Double = -Double.pi / 2,
+    leafWeight weigh: (Node) -> Double = { _ in 1 }
   ) -> GraphLayout {
     var positions: [String: GraphLayout.Position] = [:]
     var maxRadius = 0.0
 
-    func leafWeight(_ node: Node) -> Int {
-      node.children.isEmpty ? 1 : node.children.reduce(0) { $0 + leafWeight($1) }
+    // Leaf weight drives angular allocation. The default treats every leaf
+    // equally; the app passes label width at readable zooms so wide labels
+    // get wide arcs — spread where the information actually is.
+    func leafWeight(_ node: Node) -> Double {
+      node.children.isEmpty
+        ? max(weigh(node), 0.1)
+        : node.children.reduce(0) { $0 + leafWeight($1) }
     }
 
     // Place a node at (radius, mid-angle of its span), then divide the span
@@ -50,10 +56,10 @@ public enum RadialLayout {
 
       guard !node.children.isEmpty else { return }
       let step = node.children.count == 1 ? chainStep : ringStep
-      let total = Double(leafWeight(node))
+      let total = leafWeight(node)
       var cursor = from
       for child in node.children {
-        let share = span * Double(leafWeight(child)) / total
+        let share = span * leafWeight(child) / total
         place(child, radius: pressured + step, from: cursor, to: cursor + share)
         cursor += share
       }

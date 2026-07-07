@@ -31,7 +31,9 @@ final class AppState {
 
   var zoom: CGFloat = 0.4  // opens on the skeleton bands; walking zooms in
   var pan: CGSize = .zero
-  let minZoom: CGFloat = 0.03
+  // The floor keeps the first graph findable at extreme zoom-out while
+  // leaving room for a workspace of future leader graphs.
+  let minZoom: CGFloat = 0.08
   let maxZoom: CGFloat = 6
 
   /// The graph pane's frame in window coordinates (top-left origin), kept
@@ -47,7 +49,16 @@ final class AppState {
   /// Observed so views wake the clock the instant something moves.
   var lastDisturbance = Date.distantPast
 
-  func disturb() { lastDisturbance = Date() }
+  /// Direction and vigor of the latest movement — the traces trail against
+  /// it like weed in a current, then relax. Blended so bursts feel fluid.
+  var flow: CGSize = .zero
+
+  func disturb(_ delta: CGSize = .zero) {
+    lastDisturbance = Date()
+    flow = CGSize(
+      width: max(-30, min(30, flow.width * 0.6 + delta.width * 0.5)),
+      height: max(-30, min(30, flow.height * 0.6 + delta.height * 0.5)))
+  }
 
   @ObservationIgnored private var glideTask: Task<Void, Never>?
 
@@ -64,11 +75,15 @@ final class AppState {
         guard let self, !Task.isCancelled else { return }
         let t = Double(step) / Double(steps)
         let eased = t * t * (3 - 2 * t)  // smoothstep
+        let previous = self.pan
         self.pan = CGSize(
           width: fromPan.width + (target.width - fromPan.width) * eased,
           height: fromPan.height + (target.height - fromPan.height) * eased)
         self.zoom = fromZoom + (toZoom - fromZoom) * eased
-        self.disturb()
+        self.disturb(
+          CGSize(
+            width: self.pan.width - previous.width,
+            height: self.pan.height - previous.height))
         try? await Task.sleep(for: .milliseconds(15))
       }
     }
@@ -217,11 +232,13 @@ final class AppState {
         // Zoom, anchored so the world point under the cursor stays put.
         let factor = 1 + (isTrackpad ? 0.01 : 0.06) * event.scrollingDeltaY
         self.zoom(at: cursorOffset, by: factor)
+        self.disturb()
       } else {
         self.pan.width += event.scrollingDeltaX
         self.pan.height += event.scrollingDeltaY
+        self.disturb(
+          CGSize(width: event.scrollingDeltaX, height: event.scrollingDeltaY))
       }
-      self.disturb()
       return nil
     }
   }
@@ -283,6 +300,28 @@ final class AppState {
   /// spirits out of the config graph; kept as the views' single entry
   /// point for whatever display-only layers come later.)
   var displayModel: Node? { model }
+
+  /// A second leader graph beside the first — the multi-leader future made
+  /// visible. HONESTLY UNBOUND: mouse button 4 triggers nothing yet; the
+  /// exhibit says so on its face. Configurable leaders are a later step.
+  static let auxLeader = Node(
+    id: "mb4",
+    key: "M4",
+    label: "mouse button 4 · unbound example",
+    children: [
+      Node(
+        id: "mb4/q",
+        key: "q",
+        label: "open Spotlight search",
+        action: .other(type: "unbound", value: "spotlight")),
+      Node(
+        id: "mb4/e",
+        key: "e",
+        label: "open wallpaper settings",
+        action: .other(type: "unbound", value: "wallpaper")),
+    ],
+    hadChildrenArray: true
+  )
 
   func startSheolPolling() {
     guard sheolPollTask == nil else { return }
