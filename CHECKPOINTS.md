@@ -427,3 +427,64 @@ the machinery exists and nothing live was touched.
 
 **Restore:** `git stash -u && git reset --hard <commit [P2.6a]>`
 **Re-verify:** `cd kit/MachineSpiritKit && swift test` (36 green).
+
+### The fired ping, app side — scheme registered, wave staged `[P2.5a]`
+
+`machinespirit://` registered and proven resolvable (LaunchServices accepts
+`open -g "machinespirit://fired?path=q/u/i/t"`); `fireBind` resolves the key
+route silently (unknown paths are no-ops), and the wave rides the real
+traces: bright front center → node, fading trail, arrival flash ring — all
+knobs in `FirePulseKnobs` (#29, off switch included). Fork-side firing is
+deliberately unbuilt: §2 preview-before-motion — the owner sees the one-node
+demo first, then the scheme gets wired end-to-end.
+
+**Restore:** `git stash -u && git reset --hard <commit [P2.5a]>`
+**Re-verify:** build & open the app; `open -g "machinespirit://fired?path=q/u/i/t"`
+— the q-u-i-t route pulses once.
+
+---
+
+## THE OWNER WINDOW — supervised runbook (Phase 2, staged in order)
+
+Everything below needs the owner at the keyboard. Nothing here is started
+without them; each item names its rollback BEFORE it runs.
+
+**0. Recover the drifted binds ([P2.4x] aftermath).** The live config on
+disk is the 151-node repo restore; the cask app's memory holds ~2 newer
+binds. Open Leader Key's settings, make ANY trivial edit — its "config
+changed on disk" alert appears — choose **Overwrite**, undo the trivial
+edit, then `./scripts/sync.sh` and commit. (If LK restarted since 22:49,
+skip: memory is gone, 151 is the truth.)
+
+**1. Refresh live ~/bin from the repo.** `cp bin/tmux-sheol.sh bin/sheol-core ~/bin/`
+— repo is ahead (P1.19's `n` key + P2.1d's sig fix). Do this BEFORE any
+future sync.sh so sync can't clobber the repo copies.
+
+**2. The pulse preview (§2 nod).** Open MachineSpirit.app, run
+`open -g "machinespirit://fired?path=q/u/i/t"` — the board answers. Owner
+nod → fork-side firing gets built (machinespirit://fired on every executed
+action, non-blocking, silent-failing). Veto → knobs/redesign, no fork work.
+
+**3. The swap ([P2.3]).** Pre-swap verification already done (fork rebuilt
+from FORK-NOTES incantation; sigil + wordmark patches intact and the fork's
+ONLY divergence besides hot-reload + test sandbox; kit round-trip green on
+the live config). **Rollback, documented first:** quit the fork; `open -a
+"Leader Key"` — the cask app stays installed all session. Sequence: quit
+cask LK → launch `forks/LeaderKey/DerivedData/Build/Products/Debug/Leader
+Key.app` → grant Accessibility/Input Monitoring if macOS asks (ad-hoc
+signature differs from the cask's — expect TCC to treat it as new; guide,
+never auto-flip) → disable cask launch-at-login, enable the fork's → live
+smoke test, owner driving: browser cycle, spatial grid, q-u-i-t,
+screenshots, t m u x. Any regression → rollback immediately, record the
+wall. Clean pass → tag `v0.4-sovereign-driver`.
+
+**4. Hot-reload live verify ([P2.4] close).** With the fork driving: hand-edit
+the live config (add a trivial bind), watch the fork pick it up WITHOUT
+restart; remove it; `sync.sh`. Mark `reload-leaderkey.sh` legacy in README.
+
+**5. Write-back 6b + the ceremony (7).** Only after 3+4 stand: the +/−
+buttons come alive over ConfigWriter ([P2.6a], already armored and tested);
+first live write witnessed end-to-end (app → config → fork hot-reload →
+keyboard → board pulse), tag `v0.5-the-pen`; then the
+m-a-c-h-i-n-e-s-p-i-r-i-t bind through the app's own editing, tag
+`v0.6-summoned`.
