@@ -25,6 +25,14 @@ targets:
     dependencies:
       - package: MachineSpiritKit
       - package: SwiftTerm
+    # The fired ping (#36): the fork calls machinespirit://fired?path=…
+    # when a bind executes; the board answers with a pulse.
+    info:
+      path: Info.plist
+      properties:
+        CFBundleURLTypes:
+          - CFBundleURLName: com.machinespirit.MachineSpirit
+            CFBundleURLSchemes: [machinespirit]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.machinespirit.MachineSpirit

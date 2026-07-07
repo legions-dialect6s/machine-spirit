@@ -334,6 +334,59 @@ final class AppState {
   /// Wakes the canvas when an async icon/favicon arrives.
   var iconEpoch = 0
 
+  // MARK: - The fired ping (#36): the board answers the keyboard
+
+  /// #29 — every effect is a parameter set with an off switch, so the
+  /// future settings pane is mechanical.
+  struct FirePulseKnobs {
+    var enabled = true
+    /// Seconds for the wave front to travel center → fired node.
+    var duration: Double = 0.9
+    /// Seconds the arrival flash and trace linger take to fade.
+    var tail: Double = 0.6
+    /// Peak added brightness of the wave (0…1).
+    var brightness: Double = 1.0
+  }
+
+  /// One bind execution, as the board renders it: the lit route from the
+  /// center to the fired node, and when it fired.
+  struct BindFire {
+    let route: [String]
+    let stamp: Date
+  }
+
+  var fireKnobs = FirePulseKnobs()
+  var bindFire: BindFire?
+  @ObservationIgnored private var bindFireCleanup: Task<Void, Never>?
+
+  /// Receives the fork's `machinespirit://fired?path=s/s/w/s` ping.
+  /// `path` is the slash-joined key sequence from the leader. Unknown or
+  /// stale paths are ignored in silence — the ping must never break
+  /// anything, on either side of the wire.
+  func fireBind(atPath path: String) {
+    guard fireKnobs.enabled, let model = displayModel else { return }
+    let keys = path.hasPrefix("root")
+      ? path.split(separator: "/").dropFirst()
+      : path.split(separator: "/")[...]
+    guard !keys.isEmpty else { return }
+    var route = [model.id]
+    var current = model
+    for key in keys {
+      guard let child = current.children.first(where: { $0.key == String(key) }) else { return }
+      route.append(child.id)
+      current = child
+    }
+    bindFire = BindFire(route: route, stamp: Date())
+    disturb()
+    bindFireCleanup?.cancel()
+    let lifetime = fireKnobs.duration + fireKnobs.tail + 0.1
+    bindFireCleanup = Task { [weak self] in
+      try? await Task.sleep(for: .seconds(lifetime))
+      guard let self, !Task.isCancelled else { return }
+      self.bindFire = nil
+    }
+  }
+
   /// The in-app sheol ledger pane (SwiftTerm).
   var ledgerOpen = false
 
@@ -386,6 +439,7 @@ final class AppState {
     }
     glideTask?.cancel()
     sheolPollTask?.cancel()
+    bindFireCleanup?.cancel()
   }
 
   func saveSidecar() {

@@ -49,15 +49,29 @@ struct GraphView: View {
             energy: state.flowEnergy,
             maxRadius: max(layout.width / 2, 1),
             growthDuration: growthDuration)
+          let fire = FireWave(state.bindFire, now: timeline.date, knobs: state.fireKnobs)
           for root in roots {
             drawEdges(
               root, layout: layout, transform: transform, glow: glow, pulse: pulse,
-              in: &context)
+              fire: fire, in: &context)
           }
           for root in roots {
             drawNodes(
               root, layout: layout, transform: transform, glow: glow, pulse: pulse,
               chainWords: spelledWords, in: &context)
+          }
+          // The fired node's arrival flash rides above everything.
+          if let fire, fire.targetFlash > 0, let position = layout.positions[fire.target] {
+            let flash = fire.targetFlash
+            let center = transform.apply(position)
+            let radius = 16.0 + 14.0 * (1 - flash)
+            let ring = Path(
+              ellipseIn: CGRect(
+                x: center.x - radius, y: center.y - radius,
+                width: radius * 2, height: radius * 2))
+            context.stroke(
+              ring, with: .color(.white.opacity(0.9 * flash)), lineWidth: 1.5 + 1.5 * flash)
+            context.fill(ring, with: .color(Theme.phosphor.opacity(0.18 * flash)))
           }
           if let rect = selectionRect {
             context.stroke(
@@ -147,6 +161,51 @@ struct GraphView: View {
       guard growing else { return 1 }
       let delay = radius / maxRadius * (growthDuration * 0.5) + lag
       return min(max((elapsed - delay) / 0.25, 0), 1)
+    }
+  }
+
+  /// #36 — a fired bind's wave: one bright front travels the lit route
+  /// from the center to the node that ran, a fading trail behind it, a
+  /// flash on arrival. All timing rides AppState.FirePulseKnobs (#29).
+  private struct FireWave {
+    let edges: [(parent: String, child: String)]
+    let target: String
+    let elapsed: Double
+    let knobs: AppState.FirePulseKnobs
+
+    init?(_ fire: AppState.BindFire?, now: Date, knobs: AppState.FirePulseKnobs) {
+      guard knobs.enabled, let fire, fire.route.count >= 2 else { return nil }
+      let elapsed = now.timeIntervalSince(fire.stamp)
+      guard elapsed >= 0, elapsed <= knobs.duration + knobs.tail else { return nil }
+      edges = Array(zip(fire.route, fire.route.dropFirst()))
+      target = fire.route.last!
+      self.elapsed = elapsed
+      self.knobs = knobs
+    }
+
+    /// The bright segment (trim window + alpha) for one route edge, nil
+    /// when the wave hasn't reached it or its trail has faded.
+    func window(parent: String, child: String) -> (from: Double, to: Double, alpha: Double)? {
+      guard
+        let index = edges.firstIndex(where: { $0.parent == parent && $0.child == child })
+      else { return nil }
+      let count = Double(edges.count)
+      let position = elapsed / knobs.duration * count - Double(index)
+      if position <= 0 { return nil }
+      if position < 1 {
+        return (max(0, position - 0.45), position, knobs.brightness)
+      }
+      // The front has passed: the whole edge lingers, fading out.
+      let since = elapsed - (Double(index) + 1) / count * knobs.duration
+      let fade = 1 - since / knobs.tail
+      guard fade > 0 else { return nil }
+      return (0, 1, knobs.brightness * fade * 0.55)
+    }
+
+    /// Arrival flash on the fired node, 1 → 0 across the tail.
+    var targetFlash: Double {
+      guard elapsed >= knobs.duration else { return 0 }
+      return max(0, 1 - (elapsed - knobs.duration) / knobs.tail)
     }
   }
 
@@ -416,7 +475,8 @@ struct GraphView: View {
 
   private func drawEdges(
     _ root: Node, layout: GraphLayout, transform: CanvasTransform,
-    glow: Set<String>?, pulse: Pulse, in context: inout GraphicsContext
+    glow: Set<String>?, pulse: Pulse, fire: FireWave? = nil,
+    in context: inout GraphicsContext
   ) {
     // Obstacle field for the light avoid-pass: every node position.
     let obstacles = layout.positions
@@ -465,6 +525,14 @@ struct GraphView: View {
               startPoint: transform.apply(from),
               endPoint: transform.apply(to)),
             lineWidth: width)
+
+          // #36: the fired wave rides the same trace, brighter and ahead.
+          if let window = fire?.window(parent: node.id, child: child.id) {
+            layer.stroke(
+              segment.trimmedPath(from: window.from, to: window.to),
+              with: .color(.white.opacity(window.alpha)),
+              lineWidth: width + 1.6)
+          }
         }
       }
     }

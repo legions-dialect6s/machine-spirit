@@ -18,6 +18,15 @@ struct MachineSpiritApp: App {
           state.installScrollMonitor()
           state.startSheolPolling()
         }
+        // The fired ping (#36): machinespirit://fired?path=s/s/w/s —
+        // the board pulses the route of the bind that just ran.
+        .onOpenURL { url in
+          guard url.host() == "fired",
+            let path = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+              .queryItems?.first(where: { $0.name == "path" })?.value
+          else { return }
+          state.fireBind(atPath: path)
+        }
     }
     .defaultSize(width: 1440, height: 900)
   }
