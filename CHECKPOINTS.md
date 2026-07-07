@@ -365,3 +365,22 @@ nothing live touched this step).
 **Re-verify:** kit `swift test` (28 green); app builds
 (`xcodegen generate && xcodebuild … build` per [P1.4]); sheol smoke on an
 isolated `TMUX_TMPDIR` socket with `$TMUX` unset.
+
+### Sort made non-destructive — named layouts, radial ⇄ hand `[P2.2]`
+
+Two named layouts replace the destructive sort: **hand** (the owner's
+arrangement, persisted as `layouts.hand` in the sidecar, edited by drags in
+hand mode) ⇄ **radial** (the computed mandala — never stored, always
+recomputable; drags there are a scratch that "sort" clears). Toggle lives in
+the zoom-controls strip. Kit schema v2 (optional `layouts`/`activeLayout`)
+loads old sidecars gracefully; nil `activeLayout` migrates `nodes` into
+`layouts.hand`. Proven against the owner's real 156-position sidecar:
+migrated, projected to radial, hand entry survived, restored hand-active.
+Recovery source if anything was ever lost:
+`~/Library/Application Support/MachineSpirit/graph-view.hand-layout-2026-07-06.json`.
+
+**Restore:** `git stash -u && git reset --hard <commit [P2.2]>` (sidecar is
+app-owned state; the dated backup above is its own safety net).
+**Re-verify:** kit `swift test` (29 green); build & open; toggle radial ⇄
+hand — the arrangement survives round trips; drag in radial → "sort" appears
+and clears only the scratch.
