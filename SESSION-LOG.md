@@ -229,3 +229,26 @@ input layer:
 3. Native window engine: Rectangle's actions reimplemented (or the fork
    driven directly) so `rectangle://` URLs stop being the interface.
 4. Multiple leaders for real (MB4 exhibit → configurable input listeners).
+
+## Codex second-opinion prompt (Phase-1 app build)
+
+> Review the machine-spirit Phase-1 app work for correctness, performance,
+> portability (public repo, zero secrets, no hardcoded usernames), and Swift
+> hygiene. Focus: `kit/MachineSpiritKit/Sources/**` (is the round-trip truly
+> lossless for adversarial configs — duplicate keys, non-string knowns,
+> deep nesting? is `folderDisplayName` username-safe for edge paths?),
+> `app/MachineSpirit/Sources/GraphView.swift` (per-frame allocation in the
+> Canvas closure; the O(E×N) obstacle scan; gesture state machine — can
+> dragMode wedge?; hitTest at low zoom), `AppState.swift` (the NSEvent key
+> and scroll monitors: retention, event consumption correctness, the
+> TerminalView passthrough-by-class-name check, walk semantics),
+> `SheolService.swift` + `LedgerPane.swift` (Process spawning, SwiftTerm
+> process lifetime on pane close — is pkill -f safe enough?, first-responder
+> handling, the #filePath repo-path resolution's behavior in a
+> non-dev-machine build), `IconStore.swift` (favicon fetch: network failure
+> paths, cache growth, MainActor discipline), sidecar JSON read/write
+> (corruption tolerance). Shell: `bin/sheol-core` (zsh; quoting, =exact
+> target matching) and the `n` key addition in `bin/tmux-sheol.sh`
+> (bash-3.2-clean? read-loop unaffected?). Suggest minimal, surgical fixes;
+> do NOT restructure working features; the round-trip test gate
+> (`cd kit/MachineSpiritKit && swift test`, 26 tests) must stay green.

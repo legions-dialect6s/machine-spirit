@@ -167,21 +167,19 @@ struct GraphView: View {
     return layout
   }
 
-  /// Leaf ends of single-child chains spell their word; the glyph carries
-  /// the first letter and the box trails the rest — q»uit.
+  /// The FULL keystroke order from the leader — which is simply the node's
+  /// structural path (root/l/s/n/m → l-s-n-m). The old chain-walk restarted
+  /// at branches and dropped prefixes; the id never lies.
   private func chainWords(in model: Node) -> [String: String] {
     var words: [String: String] = [:]
-    func descend(_ node: Node, inheritedRun: [String]) {
-      let run = inheritedRun + [node.key ?? ""]
-      if node.children.isEmpty, run.count >= 3 {
-        let word = run.joined()
-        if word.count >= 3 { words[node.id] = word }
+    func descend(_ node: Node) {
+      if node.children.isEmpty {
+        let keys = node.id.split(separator: "/").dropFirst().map(String.init)
+        if keys.count >= 3 { words[node.id] = keys.joined() }
       }
-      for child in node.children {
-        descend(child, inheritedRun: node.children.count == 1 ? run : [node.key ?? ""])
-      }
+      for child in node.children { descend(child) }
     }
-    for child in model.children { descend(child, inheritedRun: []) }
+    descend(model)
     return words
   }
 
