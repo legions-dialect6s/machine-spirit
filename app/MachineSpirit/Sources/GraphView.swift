@@ -153,9 +153,8 @@ struct GraphView: View {
   // MARK: - Layout (main board + the aux leader, one space, overrides last)
 
   private func combinedLayout(for model: Node) -> GraphLayout {
-    var layout = RadialLayout.layout(
-      root: model, ringStep: 165, chainStep: 80, minSpacing: 48,
-      stackLeafClusters: true, stackRow: 32, stackIndent: 30)
+    // The 7:09pm board: the [P1.15] radial — three leaf shells, no stacks.
+    var layout = RadialLayout.layout(root: model)
     let aux = RadialLayout.layout(root: AppState.auxLeader, ringStep: 130)
     let auxOffsetX = layout.width / 2 + aux.width / 2 + 420
     for (id, position) in aux.positions {
@@ -493,22 +492,43 @@ struct GraphView: View {
       }
     }
 
-    // Owner ruling: straight, followable lines. The only curvature is the
-    // obstacle bow — a line bends exactly as much as it must to clear a
-    // node, and no more.
+    // The 7:09pm design, restored verbatim (sway stays retired): minor
+    // curves that ride a sibling-staggered junction ring — circuit arcs,
+    // gently — with the obstacle bow layered in only where a node blocks.
     _ = pulse
-    if abs(bow) < 0.5 {
-      path.move(to: a)
-      path.addLine(to: b)
-      return path
-    }
+    let r1 = hypot(from.x, from.y)
+    let r2 = hypot(to.x, to.y)
     let perpX = -dy / length
     let perpY = dx / length
-    let control = transform.apply(
-      x: from.x + dx * 0.5 + perpX * bow * 1.6,
-      y: from.y + dy * 0.5 + perpY * bow * 1.6)
+
+    // From the center, the trace is a near-straight spoke with a soft lean.
+    guard r1 > 5, r2 > r1 + 8 else {
+      let mid = CGPoint(
+        x: (a.x + b.x) / 2 - (b.y - a.y) * 0.03 + bow * 0.8,
+        y: (a.y + b.y) / 2 + (b.x - a.x) * 0.03 + bow * 0.8)
+      path.move(to: a)
+      path.addQuadCurve(to: b, control: mid)
+      return path
+    }
+
+    let theta1 = atan2(from.y, from.x)
+    let theta2 = atan2(to.y, to.x)
+    var deltaTheta = theta2 - theta1
+    while deltaTheta > .pi { deltaTheta -= 2 * .pi }
+    while deltaTheta < -.pi { deltaTheta += 2 * .pi }
+
+    let fraction = siblings <= 1 ? 0.5 : 0.34 + 0.32 * Double(index) / Double(siblings - 1)
+    let junction = r1 + (r2 - r1) * fraction
+
+    let control1 = transform.apply(
+      x: junction * cos(theta1 + deltaTheta * 0.3) + perpX * bow,
+      y: junction * sin(theta1 + deltaTheta * 0.3) + perpY * bow)
+    let control2 = transform.apply(
+      x: junction * cos(theta1 + deltaTheta * 0.7) + perpX * bow,
+      y: junction * sin(theta1 + deltaTheta * 0.7) + perpY * bow)
+
     path.move(to: a)
-    path.addQuadCurve(to: b, control: control)
+    path.addCurve(to: b, control1: control1, control2: control2)
     return path
   }
 
