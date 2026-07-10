@@ -18,6 +18,7 @@ struct GraphView: View {
   }
   @State private var dragMode: DragMode?
   @State private var selectionRect: CGRect?
+  @State private var showResetConfirm = false
 
   private let nodeRadius: CGFloat = 13
   private let dualRadius: CGFloat = 18
@@ -430,6 +431,27 @@ struct GraphView: View {
         }
         .buttonStyle(.plain)
         .font(.system(size: 11, design: .monospaced))
+        Button {
+          showResetConfirm = true
+        } label: {
+          Image(systemName: "arrow.counterclockwise.circle")
+            .font(.system(size: 11))
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(Theme.ash.opacity(0.7))
+        .help("reset hand layout — deletes every dragged position (asks first)")
+        .confirmationDialog(
+          "Reset the hand layout?", isPresented: $showResetConfirm
+        ) {
+          Button("Delete every dragged position", role: .destructive) {
+            state.resetHandLayout()
+          }
+        } message: {
+          Text(
+            "The board returns to the computed radial layout and the saved hand "
+              + "arrangement is deleted. Switching the toggle never does this; "
+              + "only this button does.")
+        }
       }
       if state.layoutMode == .radial, !state.nodeOverrides.isEmpty {
         Button {

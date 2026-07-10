@@ -456,6 +456,17 @@ final class AppState {
     }
   }
 
+  /// Wipe the saved hand arrangement for good and land on radial — the
+  /// guarded, deliberate version of what the old sort did by accident.
+  /// Only reachable through the confirm dialog.
+  func resetHandLayout() {
+    handLayout = [:]
+    nodeOverrides = [:]
+    layoutMode = .radial
+    saveSidecar()
+    disturb()
+  }
+
   /// "sort" — return to the computed radial order. In hand mode this is
   /// just a mode switch (the hand arrangement is captured, never wiped);
   /// in radial mode it clears the scratch drags.
