@@ -534,6 +534,11 @@
           "key" : "s",
           "type" : "application",
           "value" : "/Applications/Adobe Photoshop 2026/Adobe Photoshop 2026.app"
+        },
+        {
+          "key" : "w",
+          "type" : "application",
+          "value" : "/System/Applications/Passwords.app"
         }
       ],
       "key" : "p",
@@ -794,6 +799,11 @@
           ],
           "key" : "x",
           "type" : "group"
+        },
+        {
+          "key" : "c",
+          "type" : "application",
+          "value" : "/Applications/Xcode.app"
         }
       ],
       "key" : "x",
