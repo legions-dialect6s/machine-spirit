@@ -58,6 +58,14 @@ carried; the SHAs below are the exact upstream commits captured.
   plan once destroyed the owner's live config (SESSION-LOG war story,
   2026-07-06). Never remove this guard; re-check it survives any upstream
   merge.
+- **LeaderKey — fire the board ping** (`[P2.5d]`, #36): `Controller.handleKey`
+  calls `fireBoardPing(actionKey:)` the instant an action executes (before
+  `hide()` clears `navigationPath`), sending
+  `machinespirit://fired?path=<group keys>/<action key>`. Hard contract: only
+  fires if MachineSpirit.app is ALREADY running (never launches it), opens
+  the URL with `activates = false` (no focus theft), swallows every failure —
+  it can never delay or break a bind. The app resolves the same structural
+  key path against its imported model and pulses that route.
 - **LeaderKey — config hot-reload** (`[P2.4]`): `ConfigFileMonitor` (in
   `UserConfig.swift` — no new compile unit for the app target) watches the
   live config via a DispatchSource file-system object source, 300ms debounce,

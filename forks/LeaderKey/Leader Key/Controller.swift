@@ -160,6 +160,11 @@ class Controller {
     switch hit {
     case .action(let action):
       if execute {
+        // machine-spirit fork (#36): tell the board a bind fired, with its
+        // full structural key path — BEFORE hide(), which clears
+        // navigationPath. Non-blocking, silent-failing: it must never
+        // delay or break the bind.
+        fireBoardPing(actionKey: action.key)
         if let mods = modifiers, isInStickyMode(mods) {
           runAction(action)
         } else {
@@ -323,6 +328,36 @@ class Controller {
 
   private func clear() {
     userState.clear()
+  }
+
+  /// machine-spirit fork (#36): fire `machinespirit://fired?path=s/s/w/s`
+  /// so the board pulses the route of the bind that just ran. The path is
+  /// the group keys walked so far plus this action's key — the same
+  /// structural key path the app resolves against its imported model.
+  ///
+  /// Contract: this can NEVER delay or break a bind. It only fires if the
+  /// board is ALREADY running (never launches it), builds the URL without
+  /// activating anything, and swallows every failure.
+  private static let boardBundleID = "com.machinespirit.MachineSpirit"
+  private func fireBoardPing(actionKey: String?) {
+    guard let actionKey else { return }
+    let boardRunning = NSWorkspace.shared.runningApplications.contains {
+      $0.bundleIdentifier == Self.boardBundleID
+    }
+    guard boardRunning else { return }
+
+    var keys = userState.navigationPath.compactMap { $0.key }
+    keys.append(actionKey)
+
+    var components = URLComponents()
+    components.scheme = "machinespirit"
+    components.host = "fired"
+    components.queryItems = [URLQueryItem(name: "path", value: keys.joined(separator: "/"))]
+    guard let url = components.url else { return }
+
+    let config = NSWorkspace.OpenConfiguration()
+    config.activates = false  // pulse without stealing focus from the user
+    NSWorkspace.shared.open(url, configuration: config) { _, _ in }
   }
 
   private func openURL(_ action: Action) {
