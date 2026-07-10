@@ -27,7 +27,7 @@ Everything else in this repo follows from that: additive not replacing, portable
 
 - **Leader-key launcher** ([Leader Key](https://github.com/mikker/LeaderKey)) — one activation key opens a nested, Vim-style shortcut tree. `⇪ c o` → Codex, `⇪ c l` → Claude, `⇪ i t` → iTerm, `⇪ g p` → ChatGPT app, `⇪ g w` → an existing ChatGPT tab in Safari, and so on. No global-shortcut collisions, no chords to memorize. Full listing in [Keybind reference](#keybind-reference).
 - **Silent leader key** ([Karabiner-Elements](https://karabiner-elements.pqrs.org/)) — Caps Lock is remapped to `F19`, a phantom key nothing else uses. It no longer capitalizes, the green LED never lights, and it becomes a clean, dedicated trigger.
-- **Smart launch actions** — plain app launches focus-if-running / launch-if-closed automatically; websites get the same treatment from a single parameterized script ([`bin/web-jump.applescript`](bin/web-jump.applescript)): focus the site's tab if open, open it if not, cycle through its tabs on repeat presses. Any site, one config line.
+- **Smart launch actions** — plain app launches focus-if-running / launch-if-closed automatically; websites get the same treatment from a single parameterized script ([`bin/web-jump.applescript`](bin/web-jump.applescript)): focus the site's tab if open, open it if not, cycle through its tabs on repeat presses. Any site, one config line. Whole browsers get the same ladder from [`bin/browser-jump.applescript`](bin/browser-jump.applescript): launch if closed, focus (restoring minimized windows) if backgrounded, cycle windows in order once frontmost — `⇪ s a` for Safari, `⇪ c h r` for Chrome, any browser is one config line.
 - **Spatial window grid** ([Rectangle](https://rectangleapp.com/) driven from Leader Key via its URL scheme) — the window keys mirror screen positions: `⇪ q q q` top-left, `⇪ x x x` bottom half, `⇪ b b b` center third, and so on. Grow/shrink is a smooth eased animation from a small AppleScript, not an instant jump. See [Window management](#window-management).
 - **iTerm2** — terminal-first workflow, splits, and a custom color scheme. See [`config/iterm2/`](config/iterm2/).
 - **Hotkey-window splash** ([`shell/splash/`](shell/splash/)) — every summon of the hotkey terminal boots a randomized, typed-out splash: blackletter banners in five scripts, an ASCII skull or dragon, fastfetch, a quote from a 54-deep rotation, and blinking unicode charms. See [Terminal splash](#terminal-splash) below.
@@ -77,7 +77,7 @@ The tree follows four rules, by escalating "weight" of the action:
 | `⇪ a c` | Activity Monitor | | `⇪ n o` | Notes |
 | `⇪ c l` | Claude | | `⇪ p h` | Photos |
 | `⇪ c o` | Codex | | `⇪ p s` | Photoshop |
-| `⇪ c h r` | Chrome | | `⇪ s a` | cycle frontmost browser's windows |
+| `⇪ c h r` | Chrome (jump/cycle) | | `⇪ s a` | Safari (jump/cycle) |
 | `⇪ d i` | Discord | | `⇪ s e` | System Settings |
 | `⇪ f a c` / `⇪ f t` | FaceTime | | `⇪ s p` | Spotify |
 | `⇪ f i` | Finder | | `⇪ t e` | TextEdit |
@@ -85,7 +85,7 @@ The tree follows four rules, by escalating "weight" of the action:
 | `⇪ i t` | iTerm | | `⇪ v m w` | VMware Fusion |
 | `⇪ m e` | Messages | | `⇪ w h` | WhatsApp |
 
-`⇪ s a` runs [`bin/browser-window-cycle.applescript`](bin/browser-window-cycle.applescript) — cycles the windows of **whatever browser is currently frontmost** (Safari, Chrome, Arc, Brave, Firefox): no windows → opens one, one window → leaves it, multiple → **cycles to the next, wrapping around** — the window-level analogue of what `web-jump` does for tabs. If the frontmost app isn't a known browser it does nothing. It rides on macOS's native "move focus to next window" (⌘\`), so it's genuinely browser-agnostic rather than scripted per app (the per-browser AppleScript reorder only actually works in Safari).
+`⇪ s a` and `⇪ c h r` run [`bin/browser-jump.applescript`](bin/browser-jump.applescript) with a browser name (Safari / Google Chrome) — the whole-browser analogue of `web-jump`, one ladder for every browser: **not running → launch; backgrounded → restore its minimized windows and bring it forward (opening a window if none); already frontmost → cycle its windows in order, wrapping**. It rides macOS's native ⌘\` / ⌘N, so it's genuinely browser-agnostic rather than scripted per app (the per-browser AppleScript reorder only actually works in Safari). Adding a browser is one config line. (Its predecessor, [`bin/browser-window-cycle.applescript`](bin/browser-window-cycle.applescript), cycled only the frontmost browser and stranded minimized windows; it stays in `bin/` unused.)
 
 `⇪ v m w` runs [`bin/vmware.applescript`](bin/vmware.applescript) — activate if running, launch if not. (Cycling between individual VM windows isn't cleanly scriptable; use ⌘\` once focused.)
 
@@ -241,6 +241,12 @@ Only ever **one sheol** runs: pressing `⇪ t m u x` again kills any open ledger
 ### what we're doing here
 
 sheol is the first piece of a terminal necromancer theme for machine-spirit. the idea: your terminals are spirits. living ones have a watcher, detached ones wander the underworld with their work still breathing, and you get to revive them, commune with them, or banish them for good. it started as a way to never lose a long running session again and turned into something with a bit of soul. the real version lives in the machine-spirit app later (a dock nag that only haunts you while spirits wander, a gui ledger, non-tmux fragile terminals listed too). for now it's a terminal tui and it already goes hard. lean into the language everywhere: land of the living, restless spirits, revive, commune, banish. it's a workflow tool that's also a little bit alive.
+
+## MachineSpirit.app — the board (in progress)
+
+![the node-graph board](docs/altar-board.png)
+
+The beginning of the [north star](#north-star--machine-spirit-as-its-own-tool-not-yet-built): a native app (`app/` + `kit/`) that imports the live Leader Key config **losslessly** (round-trip proven by a headless test gate) and renders it two ways, side by side — a directory tree and a radial node-graph board. Walk either view with the leader grammar itself (type `s s w s` and travel the tree), drag nodes into your own arrangement (two named layouts, the computed `radial` ⇄ your `hand` — switching never destroys either), and when a bind executes on the keyboard the board answers: the fired route pulses from the center out to the node (a `machinespirit://` ping; the Leader Key fork will fire it on every executed action once it becomes the daily driver). Read-only against the live config today — the write-back machinery exists behind an armored gate (round-trip precondition → backup → validate-before-landing → atomic swap) and comes alive next.
 
 ## Busy-pane shield (opt-in, default off)
 

@@ -135,8 +135,8 @@
           "actions" : [
             {
               "key" : "r",
-              "type" : "application",
-              "value" : "/Applications/Google Chrome.app"
+              "type" : "command",
+              "value" : "~/bin/run-quiet.sh osascript ~/bin/browser-jump.applescript 'Google Chrome'"
             }
           ],
           "key" : "h",
@@ -594,7 +594,7 @@
         {
           "key" : "a",
           "type" : "command",
-          "value" : "~/bin/run-quiet.sh osascript ~/bin/browser-window-cycle.applescript"
+          "value" : "~/bin/run-quiet.sh osascript ~/bin/browser-jump.applescript Safari"
         },
         {
           "key" : "e",
