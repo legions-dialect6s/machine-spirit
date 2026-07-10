@@ -64,18 +64,41 @@ struct GraphView: View {
               root, layout: layout, transform: transform, glow: glow, pulse: pulse,
               chainWords: spelledWords, in: &context)
           }
-          // The fired node's arrival flash rides above everything.
+          // #36: the comet head — an unmissable glowing dot travelling the
+          // route, drawn above the traces.
+          if let fire, let head = fire.cometHead,
+            let point = cometPoint(fire: fire, head: head, layout: layout, transform: transform)
+          {
+            context.drawLayer { layer in
+              layer.addFilter(.shadow(color: Theme.phosphor, radius: 12))
+              for (r, a) in [(11.0, 0.35), (6.5, 0.75), (3.2, 1.0)] {
+                layer.fill(
+                  Path(ellipseIn: CGRect(x: point.x - r, y: point.y - r, width: r * 2, height: r * 2)),
+                  with: .color(.white.opacity(a)))
+              }
+            }
+          }
+          // The fired node's arrival flash rides above everything — a
+          // bright expanding burst so the destination is unmistakable.
           if let fire, fire.targetFlash > 0, let position = layout.positions[fire.target] {
             let flash = fire.targetFlash
             let center = transform.apply(position)
-            let radius = 16.0 + 14.0 * (1 - flash)
-            let ring = Path(
-              ellipseIn: CGRect(
-                x: center.x - radius, y: center.y - radius,
-                width: radius * 2, height: radius * 2))
-            context.stroke(
-              ring, with: .color(.white.opacity(0.9 * flash)), lineWidth: 1.5 + 1.5 * flash)
-            context.fill(ring, with: .color(Theme.phosphor.opacity(0.18 * flash)))
+            context.drawLayer { layer in
+              layer.addFilter(.shadow(color: Theme.phosphor, radius: 16))
+              let radius = 20.0 + 34.0 * (1 - flash)
+              let ring = Path(
+                ellipseIn: CGRect(
+                  x: center.x - radius, y: center.y - radius,
+                  width: radius * 2, height: radius * 2))
+              layer.stroke(
+                ring, with: .color(.white.opacity(0.95 * flash)), lineWidth: 2 + 3 * flash)
+              layer.fill(ring, with: .color(Theme.phosphor.opacity(0.22 * flash)))
+              let core = 9.0 * flash
+              layer.fill(
+                Path(ellipseIn: CGRect(
+                  x: center.x - core, y: center.y - core, width: core * 2, height: core * 2)),
+                with: .color(.white.opacity(flash)))
+            }
           }
           if let rect = selectionRect {
             context.stroke(
@@ -210,6 +233,26 @@ struct GraphView: View {
     var targetFlash: Double {
       guard elapsed >= knobs.duration else { return 0 }
       return max(0, 1 - (elapsed - knobs.duration) / knobs.tail)
+    }
+
+    /// While the front is still travelling: which route edge the comet
+    /// head is on and how far along it (0…1). nil once it has arrived.
+    var cometHead: (edgeIndex: Int, fraction: Double)? {
+      guard elapsed < knobs.duration, !edges.isEmpty else { return nil }
+      let count = Double(edges.count)
+      let p = min(max(elapsed / knobs.duration, 0), 0.9999) * count
+      return (Int(p), p - Double(Int(p)))
+    }
+
+    /// The whole lit route stays bright for the pulse's life (so even a
+    /// blink catches SOMETHING lit), fading out over the tail.
+    var routeGlow: Double {
+      if elapsed <= knobs.duration { return knobs.brightness }
+      return max(0, knobs.brightness * (1 - (elapsed - knobs.duration) / knobs.tail))
+    }
+
+    func isOnRoute(parent: String, child: String) -> Bool {
+      edges.contains { $0.parent == parent && $0.child == child }
     }
   }
 
@@ -417,8 +460,11 @@ struct GraphView: View {
       .controlSize(.mini)
       .tint(Theme.phosphorDim)
       Text("+").foregroundStyle(Theme.phosphorDim)
-      if state.hasHandLayout {
-        HStack(spacing: 4) {
+      // Always visible: after a reset the hand layout is empty, but hand
+      // MODE must stay reachable or it could never be rebuilt (drags in
+      // hand mode are what repopulate it — the reset-deadlock bug).
+      HStack(spacing: 4) {
+        Group {
           Button("radial") { state.setLayoutMode(.radial) }
             .foregroundStyle(
               state.layoutMode == .radial ? Theme.phosphor : Theme.phosphorDim.opacity(0.6))
@@ -431,27 +477,29 @@ struct GraphView: View {
         }
         .buttonStyle(.plain)
         .font(.system(size: 11, design: .monospaced))
-        Button {
-          showResetConfirm = true
-        } label: {
-          Image(systemName: "arrow.counterclockwise.circle")
-            .font(.system(size: 11))
-        }
-        .buttonStyle(.plain)
-        .foregroundStyle(Theme.ash.opacity(0.7))
-        .help("reset hand layout — deletes every dragged position (asks first)")
-        .confirmationDialog(
-          "Reset the hand layout?", isPresented: $showResetConfirm
-        ) {
-          Button("Delete every dragged position", role: .destructive) {
-            state.resetHandLayout()
+        if state.hasHandLayout {
+          Button {
+            showResetConfirm = true
+          } label: {
+            Image(systemName: "arrow.counterclockwise.circle")
+              .font(.system(size: 11))
           }
-        } message: {
-          Text(
-            "The board returns to the computed radial layout and the saved hand "
-              + "arrangement is deleted. Switching the toggle never does this; "
-              + "only this button does.")
+          .buttonStyle(.plain)
+          .foregroundStyle(Theme.ash.opacity(0.7))
+          .help("reset hand layout — deletes every dragged position (asks first)")
         }
+      }
+      .confirmationDialog(
+        "Reset the hand layout?", isPresented: $showResetConfirm
+      ) {
+        Button("Delete every dragged position", role: .destructive) {
+          state.resetHandLayout()
+        }
+      } message: {
+        Text(
+          "The board returns to the computed radial layout and the saved hand "
+            + "arrangement is deleted. Switching the toggle never does this; "
+            + "only this button does.")
       }
       if state.layoutMode == .radial, !state.nodeOverrides.isEmpty {
         Button {
@@ -496,6 +544,27 @@ struct GraphView: View {
       return IconStore.tint(forPath: "favicon:\(domain)")
     }
     return Theme.nodeColor(for: node)
+  }
+
+  /// Where the comet head sits in screen space: rebuild the active edge's
+  /// trace and read the point at the head's fraction along it.
+  private func cometPoint(
+    fire: FireWave, head: (edgeIndex: Int, fraction: Double),
+    layout: GraphLayout, transform: CanvasTransform
+  ) -> CGPoint? {
+    guard head.edgeIndex < fire.edges.count else { return nil }
+    let edge = fire.edges[head.edgeIndex]
+    guard let from = layout.positions[edge.parent], let to = layout.positions[edge.child],
+      let model = state.displayModel,
+      let parentNode = findNode(edge.parent, in: model)
+    else { return nil }
+    let index = parentNode.children.firstIndex { $0.id == edge.child } ?? 0
+    let path = trace(
+      from: from, to: to, childID: edge.child, index: index,
+      siblings: parentNode.children.count, obstacles: layout.positions,
+      excluding: [edge.parent, edge.child], pulse: nil, transform: transform)
+    let frac = max(0.001, min(head.fraction, 1))
+    return path.trimmedPath(from: 0, to: frac).currentPoint
   }
 
   private func drawEdges(
@@ -551,12 +620,20 @@ struct GraphView: View {
               endPoint: transform.apply(to)),
             lineWidth: width)
 
-          // #36: the fired wave rides the same trace, brighter and ahead.
-          if let window = fire?.window(parent: node.id, child: child.id) {
+          // #36: the fired wave rides the same trace. The whole lit
+          // route glows for the pulse's life (catchable even in a blink),
+          // and a bright leading segment rides ahead of the comet head.
+          if let fire, fire.isOnRoute(parent: node.id, child: child.id) {
             layer.stroke(
-              segment.trimmedPath(from: window.from, to: window.to),
-              with: .color(.white.opacity(window.alpha)),
-              lineWidth: width + 1.6)
+              segment,
+              with: .color(Theme.phosphor.opacity(0.85 * fire.routeGlow)),
+              lineWidth: width + 3.5)
+            if let window = fire.window(parent: node.id, child: child.id) {
+              layer.stroke(
+                segment.trimmedPath(from: window.from, to: window.to),
+                with: .color(.white.opacity(window.alpha)),
+                lineWidth: width + 4)
+            }
           }
         }
       }
@@ -574,7 +651,7 @@ struct GraphView: View {
     from: GraphLayout.Position, to: GraphLayout.Position,
     childID: String, index: Int, siblings: Int,
     obstacles: [String: GraphLayout.Position], excluding: Set<String>,
-    pulse: Pulse, transform: CanvasTransform
+    pulse: Pulse?, transform: CanvasTransform
   ) -> Path {
     var path = Path()
     let a = transform.apply(from)
@@ -831,6 +908,14 @@ struct GraphView: View {
     if node.status.isInert { return Theme.ash }
     if node.action != nil { return Color.white.opacity(0.92) }
     return node.isDual ? Theme.magenta : Theme.phosphor
+  }
+
+  private func findNode(_ id: String, in node: Node) -> Node? {
+    if node.id == id { return node }
+    for child in node.children {
+      if let found = findNode(id, in: child) { return found }
+    }
+    return nil
   }
 
   private func walk(_ node: Node, _ visit: (Node) -> Void) {

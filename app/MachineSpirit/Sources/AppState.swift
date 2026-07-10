@@ -341,9 +341,9 @@ final class AppState {
   struct FirePulseKnobs {
     var enabled = true
     /// Seconds for the wave front to travel center → fired node.
-    var duration: Double = 0.9
+    var duration: Double = 1.25
     /// Seconds the arrival flash and trace linger take to fade.
-    var tail: Double = 0.6
+    var tail: Double = 0.9
     /// Peak added brightness of the wave (0…1).
     var brightness: Double = 1.0
   }
