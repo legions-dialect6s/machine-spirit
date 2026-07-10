@@ -33,9 +33,12 @@ struct GraphView: View {
       let stillness = Date().timeIntervalSince(state.lastDisturbance)
       let settled = Date().timeIntervalSince(state.bootStamp) > growthDuration + 0.6
       // 60fps while anything moves or rings (smooth, never stepping); a
-      // calm board pauses its clock entirely.
+      // calm board pauses its clock entirely. A live fired-bind pulse
+      // (#36) holds the clock awake — reading bindFire here is also what
+      // wakes a paused board when the ping lands.
+      let firing = state.bindFire != nil
       TimelineView(
-        .animation(minimumInterval: 1.0 / 60.0, paused: settled && stillness > 5)
+        .animation(minimumInterval: 1.0 / 60.0, paused: settled && stillness > 5 && !firing)
       ) { timeline in
         Canvas { context, size in
           guard let model, let layout else { return }
