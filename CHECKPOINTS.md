@@ -488,3 +488,26 @@ first live write witnessed end-to-end (app → config → fork hot-reload →
 keyboard → board pulse), tag `v0.5-the-pen`; then the
 m-a-c-h-i-n-e-s-p-i-r-i-t bind through the app's own editing, tag
 `v0.6-summoned`.
+
+### The swap begins — rollback documented FIRST `[P2.3]`
+
+Supervised, owner present. The fork becomes the runtime driver so the
+fired-pulse loop closes on real keystrokes.
+
+**ROLLBACK (one move, cask never uninstalled):**
+```
+osascript -e 'quit app "Leader Key"'   # quits whichever is frontmost-named
+pkill -f 'DerivedData/Build/Products/Debug/Leader Key.app'   # ensure fork gone
+open -a "Leader Key"                    # cask app back as driver
+```
+The cask app stays in /Applications and stays a login item all session, so a
+reboot alone also restores it. Nothing about the live config or Karabiner is
+touched by the swap.
+
+**Deliberate scope:** this step does the RUNTIME swap only (cask quit, fork
+launched, permission granted, smoke test). Launch-at-login persistence is
+NOT flipped in the same breath — it's deferred until the fork has proven
+itself over real use, keeping rollback trivial (just relaunch the cask). Both
+apps share the bundle id `com.brnbw.Leader-Key`, hence the same F19 activation
+and settings; only the code signature differs (cask Developer-ID vs fork
+ad-hoc), which is why a fresh Accessibility grant is the likely gate.
