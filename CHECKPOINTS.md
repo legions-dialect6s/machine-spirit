@@ -511,3 +511,26 @@ itself over real use, keeping rollback trivial (just relaunch the cask). Both
 apps share the bundle id `com.brnbw.Leader-Key`, hence the same F19 activation
 and settings; only the code signature differs (cask Developer-ID vs fork
 ad-hoc), which is why a fresh Accessibility grant is the likely gate.
+
+### The loop closes — a real keystroke pulses the board `[P2.5e]` 🎇
+
+WITNESSED live, owner driving (2026-07-09, ~23:36). With the fork as the
+runtime driver, pressing a leader bind (`⇪ c l`, `⇪ s a`) fired
+`machinespirit://fired?path=…` and the board pulsed that exact route. The
+full chain proven end to end: **app → config → fork → keyboard → board.**
+Design cache #36, real.
+
+Two snags cleared to get here, both worth remembering:
+- **Duplicate bundle id (`com.brnbw.Leader-Key`) makes `open <fork path>`
+  unreliable** — LaunchServices bounced it to the cask in /Applications, so
+  the fork appeared to run but the cask actually drove (binds worked, nothing
+  pulsed). Fix: launch the fork by its **direct binary path**, cask killed by
+  pid first. The permanent fix (its own bundle id / identity) is the fork's
+  next real chunk of work.
+- **`strings`/`nm` surface no Swift string literals here** (even known ones
+  like "Configuration file changed on disk") — binary forensics lied; only
+  runtime proof counts.
+
+**Restore / rollback:** unchanged from [P2.3] — quit fork, `open -a "Leader
+Key"`. The runtime swap is still session-only; launch-at-login persistence
+and the fork's own identity remain deferred, deliberately.
