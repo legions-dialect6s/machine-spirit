@@ -303,3 +303,100 @@ isolation does not cover that one static path.
 - `v0.3-phase1` tagged at session close: Phase 1 done — the witness, the
   altar, sheol's pane and core, both forks building, the loved state one
   command away.
+
+---
+
+# Session log — Phase 2, the wiring (2026-07-06 → 07-12)
+
+The crossing: machine-spirit stopped *viewing* the config and started *being*
+the input layer. Ended at **v0.4-sovereign-driver** — the fork drives the
+keyboard under its own identity and the board pulses when a bind fires.
+
+## What stands (all committed + pushed, [P2.1]–[P2.6], tags v0.4)
+
+- **[P2.1] Codex hardening adopted** + two truths corrected: the "duplicate
+  JSON keys fail loudly" claim was FALSE (JSONDecoder silently keeps the
+  first) — built the guard, then documented it; sheol `sig()` joints ride
+  \x1f. Kit gate 26→28.
+- **[P2.2] Sort made non-destructive**: named layouts radial ⇄ hand, toggle
+  in the zoom strip, migration of the owner's 156-position sidecar. **[P2.2b]**
+  a guarded true-reset (wipes hand layout behind a confirm). Gate 28→29.
+- **[P2.4] Fork hot-reloads** its config (DispatchSource, debounced,
+  rename-survival unit-tested). **[P2.4x] THE INCIDENT** — running the fork's
+  own test plan DELETED the live config (upstream test removes the real
+  config home); caught by the kit's live-config-copy test, restored from repo
+  mirror, fork patched to sandbox `defaultDirectory()` under XCTest. Two
+  drifted binds later recovered from the cask's memory (Passwords, Xcode).
+- **[P2.5a–e] The fired pulse (#36), end to end**: app registers
+  `machinespirit://`, resolves `fired?path=s/s/w/s` to a route, pulses it
+  (comet head + lit route + arrival burst; all #29 knobs). Fork fires the
+  ping on every executed bind ([P2.5d]). **Witnessed live** — a real keystroke
+  pulses the board. Snags cleared: a ghost-window bug (SwiftUI spawned a new
+  window per URL → `handlesExternalEvents`), a paused-clock bug (calm board
+  froze before the wave drew), and the whole thing was invisible until the
+  route-glow + comet made it unmissable.
+- **[P2.6a] Write-back machinery** (`ConfigWriter`): gate precondition →
+  backup → temp-write + re-import validation → atomic swap → node-level
+  report. Proven against temp targets + a copy of the live config. Gate
+  29→36. **NOT yet wired to the UI** (that's 6b, next).
+- **[P2.6] The fork's own identity**: bundle id `com.machinespirit.leader-key`,
+  display name "MachineSpirit Leader Key". Installed permanent, drives the
+  keyboard, fires pulses.
+- **app-jump** (was browser-jump): one app-agnostic script — launch / focus
+  (un-minimize) / cycle-windows-in-order — bound to `s a` (Safari), `c h r`
+  (Chrome), `f i` (Finder). Any Cocoa app is one config line.
+
+## Key decisions & reversals (the interesting part)
+
+- **Duplicate bundle id was the root of every swap snag.** Both cask and fork
+  were `com.brnbw.Leader-Key`, so `open <fork>` bounced to the cask, TCC
+  grants were ambiguous, login items fought. First swap LOOKED like it worked
+  (binds worked) but the cask was actually driving (no pulse). Fix: give the
+  fork its OWN bundle id + display name. Launch by direct binary path when
+  bundle ids still collide.
+- **Live boundary deliberately opened** (Phase-2 charter): live writes allowed
+  through the write-back machinery and supervised swaps only. The swap + the
+  s-a/f-i rebinds were supervised live edits, sync'd back.
+- **strings/nm are blind to Swift literals** — wasted a diagnostic loop
+  "proving" the ping code wasn't compiled when it was. Only runtime proof
+  counts.
+- **Pulse per-keystroke** (owner idea, cached #37): pulse each key as typed,
+  retract on backspace — a live typing mirror vs completed-route replay.
+  Deferred.
+
+## ⚠️ CURRENT LIVE-SYSTEM STATE (not in git — read before touching the driver)
+
+- **Driver:** `~/Applications/MachineSpirit Leader Key.app`
+  (`com.machinespirit.leader-key`), running, launches at login via
+  `~/Library/LaunchAgents/com.machinespirit.leader-key.plist`.
+- **Prefs domain** `com.machinespirit.leader-key` seeded from the cask
+  (F19 activation = `KeyboardShortcuts_navigate` carbonKeyCode 80).
+- **Cask** (`/Applications/Leader Key.app`, `com.brnbw.Leader-Key`): NOT
+  running, OFF login startup, TCC reset. Kept installed for rollback only.
+- **Rollback** (in FORK-NOTES): `launchctl bootout
+  gui/$(id -u)/com.machinespirit.leader-key`; `pkill -f 'Applications/Leader
+  Key.app'`; re-enable cask launch-at-login; re-grant its Accessibility.
+- **⚠️ Ad-hoc signing caveat:** the fork's signature changes on every rebuild,
+  so after any fork CODE change macOS re-prompts for Accessibility. Permanent
+  fix (personal-team stable signing) noted in FORK-NOTES, unbuilt. Day-to-day
+  use never triggers it.
+- **The board** (MachineSpirit.app) must be running for pulses to show; it's
+  read-only against the live config (write-back UI not wired yet).
+
+## Where we are / what's next
+
+Phase-2 priority spine (1→3→4→6a) is DONE. Remaining Phase-2 flesh:
+- **Step 6b — "the pen"** (NEXT): wire `ConfigWriter` ([P2.6a], already built +
+  tested) to the app's +/− buttons — add/remove a leaf bind through the app,
+  the first witnessed live write (app → config → fork hot-reload → keyboard →
+  board pulse → remove → sync.sh). Tag `v0.5-the-pen`.
+- **Step 7 — the summon spell**: build the m-a-c-h-i-n-e-s-p-i-r-i-t bind
+  THROUGH the app's own editing; typing it opens MachineSpirit.app; the fork's
+  letter-accretion wordmark builds as you type. Tag `v0.6-summoned`.
+- Cached this session: **#37** per-keystroke pulse.
+
+## Re-entry (fresh session)
+
+Read VISION → CLAUDE → HANDOFF-NOTES → this log → CHECKPOINTS, then
+`git log --oneline -15`. Last checkpoint: **[P2.6] / v0.4-sovereign-driver**.
+Repo clean, 153-node live config, fork + board running. Resume at Step 6b.
