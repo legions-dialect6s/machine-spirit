@@ -534,3 +534,47 @@ Two snags cleared to get here, both worth remembering:
 **Restore / rollback:** unchanged from [P2.3] — quit fork, `open -a "Leader
 Key"`. The runtime swap is still session-only; launch-at-login persistence
 and the fork's own identity remain deferred, deliberately.
+
+### v0.4-sovereign-driver — the fork's own identity, permanent driver `[P2.6]`
+
+The deferrals above landed: the fork is `com.machinespirit.leader-key`
+("MachineSpirit Leader Key"), installed at `~/Applications`, launched at
+login via its own LaunchAgent, prefs seeded from the cask (F19 activation).
+The cask is NOT running, off login startup, TCC reset — kept in
+/Applications for rollback only. Ad-hoc signing caveat: every fork REBUILD
+re-prompts Accessibility (stable personal-team signing noted in FORK-NOTES,
+unbuilt). Full live-system state: SESSION-LOG → "CURRENT LIVE-SYSTEM STATE".
+
+**Restore / rollback (replaces [P2.3]'s):**
+```
+launchctl bootout gui/$(id -u)/com.machinespirit.leader-key
+pkill -f 'Applications/MachineSpirit Leader Key.app'
+open -a "Leader Key"     # re-enable cask launch-at-login + Accessibility by hand
+```
+
+### The pen — +/− buttons write the live config through the gate `[P2.6b]`
+
+The write-back machinery ([P2.6a]) is wired to the board. `+` aims at the
+selected group (selection's parent when a leaf is selected; root when
+nothing is) and opens a small form — key, optional label, action type,
+value; `−` strikes a selected leaf bind behind a confirm that names it.
+Every stroke goes through `ConfigWriter`'s full ritual against the live
+config — gate precondition → timestamped backup → temp-write + re-import
+validation → atomic swap — then the app RE-IMPORTS the written truth (never
+trusts its memory), selects the new node, and pulses its route. The footer
+reports node-by-node (`✎ + root/g/n · backup kept`, path on hover) and
+speaks refusals in full. Kit grew the pen's grammar (`insertingLeaf` /
+`removingLeaf`, pure-value edits that mint ids exactly as the importer
+would) — gate 43→44, including the whole add-then-remove ritual run against
+a COPY of the real live config, byte-verified untouched.
+
+Guards that matter: inserts refuse duplicate sibling keys and action-carrying
+parents (the fork never sees a dual node it can't run); removal is leaf-only;
+the unbound MB4 exhibit and the root refuse the pen entirely; a focused text
+field owns the keyboard (the walk can't eat typed letters).
+
+**Restore:** `git stash -u && git reset --hard <commit [P2.6b]>`; any written
+config restores from `~/.local/state/machine-spirit/config-backups/`.
+**Re-verify:** kit `swift test` (44 green); build & open the app; select a
+group, `+`, inscribe a throwaway bind; watch the fork pick it up without
+restart; `−` it; footer reports both writes.

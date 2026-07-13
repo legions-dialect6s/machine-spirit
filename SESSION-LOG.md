@@ -383,13 +383,35 @@ keyboard under its own identity and the board pulses when a bind fires.
 - **The board** (MachineSpirit.app) must be running for pulses to show; it's
   read-only against the live config (write-back UI not wired yet).
 
+## Step 6b — the pen, built ([P2.6b], 2026-07-12, agent session)
+
+The +/− buttons came alive over ConfigWriter. Kit grew the pen's grammar
+(`NodeEditing.swift`: `insertingLeaf` / `removingLeaf` — pure-value edits,
+ids minted exactly as the importer mints them, duplicate-key and
+dual-node-producing inserts refused, removal leaf-only); gate 43→44, the
+new `penRitualOnALiveConfigCopy` runs the whole add-then-remove ritual on a
+copy of the REAL config and byte-verifies the live file untouched. App-side:
+`penAdd`/`penRemove` → `inscribe` (writer's full ritual against the live
+config, then RE-IMPORT the written truth, select + pulse the new node),
+`+` popover form (key/label/type/value, inline refusals), `−` confirm that
+names its target, footer speaks writes (`✎ + root/g/n · backup kept`) and
+refusals. One subtle guard: a focused text field now owns the keyboard —
+without it the graph-walk monitor would have eaten every letter typed into
+the form (first text field the app ever had). "read-only" honestly removed
+from footer/help/README.
+
+**NOT yet witnessed live** — the ritual needs the owner: select a group,
+`+`, inscribe a throwaway bind, keystroke it (fork hot-reloads, board
+pulses), `−` it, then `./scripts/sync.sh`. Tag `v0.5-the-pen` AFTER that
+witness (per the owner-window law). Board relaunched on the new build,
+ready for the click.
+
 ## Where we are / what's next
 
-Phase-2 priority spine (1→3→4→6a) is DONE. Remaining Phase-2 flesh:
-- **Step 6b — "the pen"** (NEXT): wire `ConfigWriter` ([P2.6a], already built +
-  tested) to the app's +/− buttons — add/remove a leaf bind through the app,
-  the first witnessed live write (app → config → fork hot-reload → keyboard →
-  board pulse → remove → sync.sh). Tag `v0.5-the-pen`.
+Phase-2 priority spine (1→3→4→6a) is DONE; **6b is built, awaiting witness**.
+Remaining Phase-2 flesh:
+- **The 6b witness** (owner, ~60s): add/remove a throwaway bind through the
+  board, watch fork hot-reload + pulse, `sync.sh`, tag `v0.5-the-pen`.
 - **Step 7 — the summon spell**: build the m-a-c-h-i-n-e-s-p-i-r-i-t bind
   THROUGH the app's own editing; typing it opens MachineSpirit.app; the fork's
   letter-accretion wordmark builds as you type. Tag `v0.6-summoned`.
@@ -398,5 +420,6 @@ Phase-2 priority spine (1→3→4→6a) is DONE. Remaining Phase-2 flesh:
 ## Re-entry (fresh session)
 
 Read VISION → CLAUDE → HANDOFF-NOTES → this log → CHECKPOINTS, then
-`git log --oneline -15`. Last checkpoint: **[P2.6] / v0.4-sovereign-driver**.
-Repo clean, 153-node live config, fork + board running. Resume at Step 6b.
+`git log --oneline -15`. Last checkpoint: **[P2.6b]** (the pen, built).
+Repo clean, 153-node live config, fork + board running. Resume at the 6b
+witness, then Step 7.
