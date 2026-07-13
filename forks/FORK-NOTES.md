@@ -48,6 +48,14 @@ carried; the SHAs below are the exact upstream commits captured.
 
 ## Local patches (the fork diverges here)
 
+- **LeaderKey — own bundle id** (`[P2.6]`): `PRODUCT_BUNDLE_IDENTIFIER` for the
+  app target is `com.machinespirit.leader-key` (was `com.brnbw.Leader-Key`;
+  Tests target unchanged). This is what makes the fork a distinct app to
+  macOS — its own TCC/Accessibility grant, its own LaunchServices entry (so
+  `open` never bounces to the cask), and its own UserDefaults domain. Display
+  name stays "Leader Key". Consequence: the new domain starts EMPTY, so the
+  install seeds it from the cask's domain (F19 activation lives under
+  `KeyboardShortcuts_navigate` = carbonKeyCode 80).
 - **LeaderKey — summon sigil indicator** (`[P1.7]`): `Themes/Mini.swift` renders
   `SummonSigil` (new imageset from `assets/icon_transparent.png`, 256px) when
   idle instead of the plain `●`; typed keys still take over mid-sequence.
@@ -81,3 +89,32 @@ carried; the SHAs below are the exact upstream commits captured.
 
 Ad-hoc / free personal team is the Phase 1 posture. The exact incantation that
 worked gets recorded per fork above.
+
+## The fork as permanent daily driver (`[P2.6]`, owner machine)
+
+The live setup that makes the fork the standing driver (not committed — these
+are live-system steps; the eventual `install.sh`/onboarding automates them,
+tracked in MANUAL-WIRING):
+
+1. **Bundle id** → `com.machinespirit.leader-key` (in-tree, above).
+2. **Stable install path:** build, then `cp -R` the product to
+   `~/Applications/Leader Key.app` and `codesign --force --deep --sign -` it
+   (ad-hoc re-sign at the new path). DerivedData is ephemeral; the login item
+   must point somewhere stable.
+3. **Seed prefs:** `defaults export com.brnbw.Leader-Key - | defaults import
+   com.machinespirit.leader-key -` — carries F19 activation + theme into the
+   new (empty) domain.
+4. **Launch at login:** `~/Library/LaunchAgents/com.machinespirit.leader-key.plist`
+   (RunAtLoad, ProgramArguments → the ~/Applications binary), loaded with
+   `launchctl bootstrap gui/$(id -u) <plist>`.
+5. **Retire the cask's autostart:** remove its legacy login item
+   (`System Events → delete login item "Leader Key"`, path
+   `/Applications/Leader Key.app`). The cask **stays installed** for rollback.
+6. **Accessibility (owner, consent gate):** the new bundle id is a new TCC
+   identity — grant Accessibility to `~/Applications/Leader Key.app` for the
+   System-Events binds (app-jump, screenshots) to work.
+
+**Rollback to the cask:** `launchctl bootout gui/$(id -u)/com.machinespirit.leader-key`;
+`pkill -f 'Applications/Leader Key.app'`; re-enable the cask's Launch-at-Login
+(open `/Applications/Leader Key.app`, toggle it on); it drives again. The new
+domain, LaunchAgent, and ~/Applications copy can all be deleted with no trace.

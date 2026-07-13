@@ -629,7 +629,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				MARKETING_VERSION = 1.17.3;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.brnbw.Leader-Key";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.machinespirit.leader-key";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -665,7 +665,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				MARKETING_VERSION = 1.17.3;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.brnbw.Leader-Key";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.machinespirit.leader-key";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
