@@ -136,7 +136,7 @@
             {
               "key" : "r",
               "type" : "command",
-              "value" : "~/bin/run-quiet.sh osascript ~/bin/browser-jump.applescript 'Google Chrome'"
+              "value" : "~/bin/run-quiet.sh osascript ~/bin/app-jump.applescript 'Google Chrome'"
             }
           ],
           "key" : "h",
@@ -332,8 +332,8 @@
         },
         {
           "key" : "i",
-          "type" : "application",
-          "value" : "/System/Library/CoreServices/Finder.app"
+          "type" : "command",
+          "value" : "~/bin/run-quiet.sh osascript ~/bin/app-jump.applescript Finder"
         },
         {
           "key" : "p",
@@ -594,7 +594,7 @@
         {
           "key" : "a",
           "type" : "command",
-          "value" : "~/bin/run-quiet.sh osascript ~/bin/browser-jump.applescript Safari"
+          "value" : "~/bin/run-quiet.sh osascript ~/bin/app-jump.applescript Safari"
         },
         {
           "key" : "e",

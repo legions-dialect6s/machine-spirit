@@ -1,18 +1,21 @@
--- browser-jump.applescript <Browser Name>
+-- app-jump.applescript <App Name>
 --
--- THE parameterized "open browser" action — one script, same ladder for
--- every browser, one Leader Key line per browser (web-jump's philosophy,
--- lifted to whole browsers). s→a runs it with "Safari", c→h→r with
--- "Google Chrome"; adding a browser is one config entry, no new script.
+-- THE parameterized "open app and cycle its windows" action — one script,
+-- same ladder for ANY app (web-jump's philosophy, lifted to whole apps).
+-- s→a runs it with "Safari", c→h→r with "Google Chrome", f→i with
+-- "Finder"; adding an app is one config line, no new script. The logic is
+-- app-agnostic because it rides macOS's own ⌘` / ⌘N, not any app's
+-- scripting dictionary — so it works the same for Finder, Preview, Notes,
+-- a browser, anything Cocoa.
 --
---   * browser not running            -> launch it (activate opens a window)
+--   * app not running                -> launch it (activate opens a window)
 --   * running, other app frontmost   -> restore its minimized windows,
 --                                       bring it forward (⌘N if none exist)
 --   * already frontmost, 0 windows   -> open a fresh window (⌘N)
 --   * already frontmost, N windows   -> advance to the next, wrapping (⌘`)
 --
 -- Structure matters: `activate` is done OUTSIDE the `tell "System Events"`
--- block. Nesting `tell application <browser> to activate` inside a System
+-- block. Nesting `tell application <app> to activate` inside a System
 -- Events tell silently fails (the whole point-of-failure of the first
 -- cut) — so we gather state via System Events, end that tell, THEN drive
 -- the app. Minimized windows are un-minimized first because macOS's ⌘`
@@ -22,11 +25,11 @@
 -- focus-stealing dialog at Leader Key; also invoked via run-quiet.sh.
 on run argv
 	try
-		set browserName to item 1 of argv
+		set appName to item 1 of argv
 
 		-- Not running: launch it and stop (its own first window opens).
-		if not appRunning(browserName) then
-			tell application browserName to activate
+		if not appRunning(appName) then
+			tell application appName to activate
 			return
 		end if
 
@@ -34,8 +37,8 @@ on run argv
 		set wasFrontmost to false
 		set winCount to 0
 		tell application "System Events"
-			set wasFrontmost to (name of first application process whose frontmost is true) is browserName
-			tell process browserName
+			set wasFrontmost to (name of first application process whose frontmost is true) is appName
+			tell process appName
 				repeat with w in windows
 					try
 						if value of attribute "AXMinimized" of w is true then
@@ -49,7 +52,7 @@ on run argv
 
 		if not wasFrontmost then
 			-- Backgrounded: bring it forward (open one if it has none).
-			tell application browserName to activate
+			tell application appName to activate
 			if winCount is 0 then keyCmd("n")
 		else
 			-- Already frontmost: cycle in order, wrapping (⌘` = OS-native).
