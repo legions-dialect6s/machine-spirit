@@ -52,8 +52,10 @@ carried; the SHAs below are the exact upstream commits captured.
   app target is `com.machinespirit.leader-key` (was `com.brnbw.Leader-Key`;
   Tests target unchanged). This is what makes the fork a distinct app to
   macOS — its own TCC/Accessibility grant, its own LaunchServices entry (so
-  `open` never bounces to the cask), and its own UserDefaults domain. Display
-  name stays "Leader Key". Consequence: the new domain starts EMPTY, so the
+  `open` never bounces to the cask), and its own UserDefaults domain. Display name is
+  **"MachineSpirit Leader Key"** (CFBundleDisplayName) so it's
+  distinguishable from the cask's "Leader Key" in the TCC panes; the
+  binary/CFBundleName stay "Leader Key". Consequence: the new domain starts EMPTY, so the
   install seeds it from the cask's domain (F19 activation lives under
   `KeyboardShortcuts_navigate` = carbonKeyCode 80).
 - **LeaderKey — summon sigil indicator** (`[P1.7]`): `Themes/Mini.swift` renders

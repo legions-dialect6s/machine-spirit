@@ -617,7 +617,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Leader Key/Support/Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = "Leader Key";
+				INFOPLIST_KEY_CFBundleDisplayName = "MachineSpirit Leader Key";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_LSUIElement = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
@@ -653,7 +653,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Leader Key/Support/Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = "Leader Key";
+				INFOPLIST_KEY_CFBundleDisplayName = "MachineSpirit Leader Key";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_LSUIElement = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
