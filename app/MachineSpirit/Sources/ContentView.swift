@@ -85,7 +85,7 @@ struct ContentView: View {
       .buttonStyle(.plain)
       .foregroundStyle(state.refreshFlashing ? Theme.phosphor : Theme.phosphorDim)
       .animation(.easeOut(duration: 0.2), value: state.refreshFlashing)
-      .help("re-import the live Leader Key config (read-only) — ⌘R")
+      .help("re-import the live Leader Key config — ⌘R")
       }
     }
     .padding(.horizontal, 14)
@@ -157,9 +157,23 @@ struct ContentView: View {
 
   private var footer: some View {
     HStack {
-      Text("\((state.displayModel?.totalCount ?? 1) - 1) nodes · imported live · read-only")
+      Text("\((state.displayModel?.totalCount ?? 1) - 1) nodes · imported live · pen wired")
         .font(.system(.caption, design: .monospaced))
         .foregroundStyle(Theme.ash)
+      // The pen speaks here: node-level summary of the last live write,
+      // or exactly why one was refused. Both fade on their own.
+      if let error = state.penError {
+        Text("✎ \(error)")
+          .font(.system(.caption, design: .monospaced))
+          .foregroundStyle(Theme.magenta)
+          .lineLimit(1)
+          .help(error)
+      } else if let mark = state.penMark {
+        Text("✎ \(mark.lines.joined(separator: " · ")) · backup kept")
+          .font(.system(.caption, design: .monospaced))
+          .foregroundStyle(Theme.phosphor)
+          .help("backup: \(mark.backupPath)")
+      }
       let wanderers = state.spirits.filter(\.isWandering).count
       Text(wanderers > 0 ? "⌁ \(wanderers) spirit\(wanderers == 1 ? "" : "s") wander sheol" : "⌁ sheol is empty")
         .font(.system(.caption, design: .monospaced))

@@ -19,6 +19,17 @@ struct GraphView: View {
   @State private var dragMode: DragMode?
   @State private var selectionRect: CGRect?
   @State private var showResetConfirm = false
+  @State private var showAddForm = false
+  @State private var showRemoveConfirm = false
+
+  /// The − confirm names its target, so the owner reads what dies.
+  private var removeQuestion: String {
+    guard let id = state.penRemovableID,
+      let node = state.displayModel?.node(withID: id)
+    else { return "Remove this bind?" }
+    let keys = id.split(separator: "/").dropFirst().joined(separator: " · ")
+    return "Remove \(keys) — \(node.displayName)?"
+  }
 
   private let nodeRadius: CGFloat = 13
   private let dualRadius: CGFloat = 18
@@ -512,20 +523,34 @@ struct GraphView: View {
         .foregroundStyle(Theme.phosphorDim)
         .help("return dragged nodes to the radial order")
       }
-      Button {} label: {
+      // The pen (6b): both buttons write the LIVE config, always through
+      // ConfigWriter's full ritual — gate, backup, validate, atomic swap.
+      Button { showAddForm = true } label: {
         Image(systemName: "plus").font(.system(size: 11, weight: .bold))
       }
       .buttonStyle(.plain)
-      .foregroundStyle(Theme.ash.opacity(0.4))
-      .disabled(true)
-      .help("adding nodes arrives with config write-back — a later phase, honestly")
-      Button {} label: {
+      .foregroundStyle(state.penTargetGroupID == nil ? Theme.ash.opacity(0.4) : Theme.phosphorDim)
+      .disabled(state.penTargetGroupID == nil)
+      .help("add a leaf bind under the selected group — writes the live config through the gate")
+      .popover(isPresented: $showAddForm, arrowEdge: .bottom) { AddBindForm() }
+      Button { showRemoveConfirm = true } label: {
         Image(systemName: "minus").font(.system(size: 11, weight: .bold))
       }
       .buttonStyle(.plain)
-      .foregroundStyle(Theme.ash.opacity(0.4))
-      .disabled(true)
-      .help("removing nodes arrives with config write-back — a later phase, honestly")
+      .foregroundStyle(state.penRemovableID == nil ? Theme.ash.opacity(0.4) : Theme.phosphorDim)
+      .disabled(state.penRemovableID == nil)
+      .help("remove the selected leaf bind — writes the live config through the gate (asks first)")
+      .confirmationDialog(
+        removeQuestion, isPresented: $showRemoveConfirm
+      ) {
+        Button("Remove the bind (backup kept)", role: .destructive) {
+          if let id = state.penRemovableID { state.penRemove(id: id) }
+        }
+      } message: {
+        Text(
+          "The live config is rewritten without it — after a timestamped "
+            + "backup, validated, swapped atomically. The fork reloads on its own.")
+      }
     }
     .font(.system(size: 12, design: .monospaced).weight(.bold))
     .padding(8)

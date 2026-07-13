@@ -114,6 +114,15 @@ final class AppState {
       guard let self else { return event }
       let modifiers = event.modifierFlags.intersection([.command, .option, .control, .shift])
 
+      // A focused text field (the pen's form) owns the keyboard outright —
+      // even Tab, which moves between its fields. The field editor is an
+      // NSText subclass; the popover being key means checking ITS window.
+      if event.window?.firstResponder is NSText
+        || NSApp.keyWindow?.firstResponder is NSText
+      {
+        return event
+      }
+
       // Tab cycles panes FIRST — even out of the terminal, or sheol would
       // trap the keyboard forever.
       if event.keyCode == 48, modifiers.isEmpty {
@@ -387,6 +396,96 @@ final class AppState {
     }
   }
 
+  // MARK: - The pen (6b): the app writes the live config
+
+  /// One completed write, as the footer tells it: the node-level summary
+  /// (`+ root/g/n`) and where the pre-write backup went.
+  struct PenMark {
+    let lines: [String]
+    let backupPath: String
+  }
+
+  var penMark: PenMark?
+  var penError: String?
+  @ObservationIgnored private var penFadeTask: Task<Void, Never>?
+
+  /// Where the + button aims: the selection when it's a pure group,
+  /// otherwise the selection's parent group; no selection targets the root.
+  /// Nil only when there's no model (or the selection is exhibit-only).
+  var penTargetGroupID: String? {
+    guard let model = displayModel else { return nil }
+    guard let id = selectedNodeID, id.hasPrefix("root"),
+      let node = model.node(withID: id)
+    else { return model.id }
+    if node.action == nil { return node.id }
+    guard let slash = id.lastIndex(of: "/") else { return model.id }
+    return String(id[id.startIndex..<slash])
+  }
+
+  /// What the − button may strike: a selected leaf bind in the real config
+  /// — never the root, never a group, never the unbound exhibit.
+  var penRemovableID: String? {
+    guard let id = selectedNodeID, id.hasPrefix("root/"),
+      let node = displayModel?.node(withID: id), node.children.isEmpty
+    else { return nil }
+    return id
+  }
+
+  func penAdd(key: String, label: String?, type: String, value: String) {
+    guard let model, let parentID = penTargetGroupID else { return }
+    do {
+      let next = try model.insertingLeaf(
+        key: key, label: label, action: .from(type: type, value: value),
+        underGroupID: parentID)
+      try inscribe(next)
+      selectedNodeID = parentID + "/" + key
+      revealSelectionInTree()
+      // The board celebrates its own first written bind: pulse the route.
+      fireBind(atPath: parentID + "/" + key)
+    } catch {
+      penFail(error)
+    }
+  }
+
+  func penRemove(id: String) {
+    guard let model else { return }
+    do {
+      let next = try model.removingLeaf(id: id)
+      try inscribe(next)
+      if selectedNodeID == id { stepUp() }
+    } catch {
+      penFail(error)
+    }
+  }
+
+  /// The one gate every pen stroke passes: ConfigWriter's full ritual
+  /// against the live config, then a re-import of the written truth —
+  /// the board never trusts its own memory of what it wrote.
+  private func inscribe(_ next: Node) throws {
+    let report = try ConfigWriter().write(next, to: LeaderKeyImporter.liveConfigURL)
+    communeWithLiveConfig()
+    penError = nil
+    penMark = PenMark(lines: report.summary, backupPath: report.backupPath)
+    disturb()
+    penFade(after: 10)
+  }
+
+  private func penFail(_ error: Error) {
+    penError = "\(error)"
+    penMark = nil
+    penFade(after: 14)
+  }
+
+  private func penFade(after seconds: Double) {
+    penFadeTask?.cancel()
+    penFadeTask = Task { [weak self] in
+      try? await Task.sleep(for: .seconds(seconds))
+      guard let self, !Task.isCancelled else { return }
+      self.penMark = nil
+      self.penError = nil
+    }
+  }
+
   /// The in-app sheol ledger pane (SwiftTerm).
   var ledgerOpen = false
 
@@ -440,6 +539,7 @@ final class AppState {
     glideTask?.cancel()
     sheolPollTask?.cancel()
     bindFireCleanup?.cancel()
+    penFadeTask?.cancel()
   }
 
   func saveSidecar() {
@@ -480,8 +580,10 @@ final class AppState {
     disturb()
   }
 
-  /// Import the live Leader Key config — the runtime source of truth,
-  /// read-only, always (Phase-1 law: the app never writes the live system).
+  /// Import the live Leader Key config — the runtime source of truth.
+  /// Reading is free; WRITING happens only through `inscribe` (the pen),
+  /// which is to say only through ConfigWriter's full gate-backup-validate
+  /// ritual. Nothing else in the app may touch the live file.
   func communeWithLiveConfig() {
     do {
       model = try LeaderKeyImporter().importConfig(at: LeaderKeyImporter.liveConfigURL)
