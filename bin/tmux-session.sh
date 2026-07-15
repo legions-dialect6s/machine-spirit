@@ -19,6 +19,19 @@
 # unprotected busy pane, the busy-pane shield (pane-shield.py) is the guard.
 name="${1:-ms-$$}"
 
+# ── PATH bootstrap ────────────────────────────────────────────────────────────
+# iTerm launches this as a custom-command session (see iterm-new-window.sh), which
+# does NOT start a login shell — so ~/.zprofile's `brew shellenv` never runs and
+# Homebrew (hence tmux) is missing from PATH after a fresh GUI/boot launch of iTerm.
+# Re-establish it here. Portable: tries Apple-Silicon then Intel brew prefixes;
+# no-op when tmux is already on PATH (a login-shell parent).
+if ! command -v tmux >/dev/null 2>&1; then
+	for _b in /opt/homebrew/bin/brew /usr/local/bin/brew; do
+		[ -x "$_b" ] && eval "$("$_b" shellenv)" && break
+	done
+	unset _b
+fi
+
 if command -v tmux >/dev/null 2>&1; then
 	printf '\033]1337;SetBadgeFormat=%s\007' "$(printf 'TMUX' | base64)"
 	# Make it extra clear this pane is protected: put "tmux" on the right of the

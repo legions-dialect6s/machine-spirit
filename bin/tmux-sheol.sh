@@ -28,6 +28,20 @@
 # no "detached-at" time (quiet-for = time since last activity); non-tmux
 # "fragile" panes + the dock nag are deferred to the app.
 
+# ── PATH bootstrap ────────────────────────────────────────────────────────────
+# iTerm launches this as a custom-command session (see iterm-new-window.sh), which
+# does NOT start a login shell — so ~/.zprofile's `brew shellenv` never runs and
+# Homebrew (hence tmux) is missing from PATH after a fresh GUI/boot launch of iTerm.
+# Re-establish it here so have_tmux and every tmux/sheol-core call below can find it.
+# Portable: tries Apple-Silicon then Intel brew prefixes; no-op when tmux is already
+# on PATH (a login-shell parent). Exported so sheol-core inherits it.
+if ! command -v tmux >/dev/null 2>&1; then
+	for _b in /opt/homebrew/bin/brew /usr/local/bin/brew; do
+		[ -x "$_b" ] && eval "$("$_b" shellenv)" && break
+	done
+	unset _b
+fi
+
 REFRESH=1        # poll interval; redraw only fires when something actually changed
 PIDFILE="$HOME/.cache/machine-spirit/sheol.pid"   # single-instance marker
 # All tmux operations go through sheol-core (shared with MachineSpirit.app) —
