@@ -14,9 +14,14 @@
 			<key>CFBundleTypeRole</key>
 			<string>Viewer</string>
 			<key>CFBundleURLName</key>
-			<string>com.brnbw.LeaderKey</string>
+			<string>com.machinespirit.leader-key</string>
+			<!-- machine-spirit fork: `msleaderkey` is OURS alone, so app->fork
+			     pings (#36/#37) route to this running instance. Bare `leaderkey`
+			     collides with stock Leader Key and LaunchServices resolves it to
+			     /Applications/Leader Key.app, so it can't reach the fork. -->
 			<key>CFBundleURLSchemes</key>
 			<array>
+				<string>msleaderkey</string>
 				<string>leaderkey</string>
 			</array>
 		</dict>
@@ -25,5 +30,10 @@
 	<string>https://mikker.github.io/LeaderKey.app/appcast.xml</string>
 	<key>SUPublicEDKey</key>
 	<string>4ZfPYKvzE7b/uYW4B8f2v++7Bry/OmvYHCzl3g936KE=</string>
+	<!-- machine-spirit fork: single-instance so URL-scheme events (the app->fork
+	     pings, #36/#37) route to the running daily driver instead of launching a
+	     fresh copy that traps in AppKit window-restoration. -->
+	<key>LSMultipleInstancesProhibited</key>
+	<true/>
 </dict>
 </plist>

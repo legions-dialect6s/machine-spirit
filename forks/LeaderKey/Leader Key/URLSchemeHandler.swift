@@ -15,7 +15,9 @@ enum URLSchemeAction: Equatable {
 
 class URLSchemeHandler {
   static func parse(_ url: URL) -> URLSchemeAction {
-    guard url.scheme == "leaderkey" else {
+    // `msleaderkey` is the fork's own scheme (routes here, not to stock);
+    // `leaderkey` kept for compatibility.
+    guard url.scheme == "msleaderkey" || url.scheme == "leaderkey" else {
       return .invalid
     }
 
