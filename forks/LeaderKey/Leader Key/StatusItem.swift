@@ -301,7 +301,12 @@ class StatusItem: NSObject, NSMenuDelegate {
     case .normal:
       button.image = NSImage(named: NSImage.Name("StatusItem"))
     case .active:
-      button.image = NSImage(named: NSImage.Name("StatusItem-filled"))
+      // Summoned: the skull lights up machine-spirit green (design cache #2).
+      // Force non-template so it renders in colour instead of being tinted to
+      // the menu-bar foreground.
+      let lit = NSImage(named: NSImage.Name("StatusItem-filled"))
+      lit?.isTemplate = false
+      button.image = lit
     }
   }
 }
