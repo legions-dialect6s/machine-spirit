@@ -109,11 +109,12 @@ class StatusItem: NSObject, NSMenuDelegate {
     menu.addItem(profile)
     menu.addItem(actionItem("Open Karabiner Settings…", #selector(openKarabinerSettings)))
 
-    // ---- Quit ----
+    // ---- Quit (app-level: quits the whole fork, so it sits last per the
+    // macOS convention; named for the app, not the Leader Key section) ----
     menu.addItem(.separator())
     menu.addItem(
       NSMenuItem(
-        title: "Quit Leader Key",
+        title: "Quit MachineSpirit",
         action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"
       ))
 
