@@ -97,6 +97,37 @@ if command -v xcodebuild >/dev/null 2>&1 && [[ -d /Applications/Xcode.app ]]; th
     mkdir -p "$HOME/Applications"
     rm -rf "$FORK_APP"
     ditto "$FORK_DIR/DerivedData-Release/Build/Products/Release/Leader Key.app" "$FORK_APP"
+    # Stable local code-signing identity: ad-hoc signatures change every build,
+    # which RESETS the app's TCC grants (Screen Recording for the ss-* binds,
+    # Accessibility for window/app control) and traps you in a grant→rebuild→
+    # re-prompt loop. Sign with a per-machine self-signed cert instead (no Apple
+    # account, no sudo) so those grants survive rebuilds.
+    CERT_CN="MachineSpirit Local Codesign"
+    if ! security find-identity -p codesigning 2>/dev/null | grep -q "$CERT_CN"; then
+      echo "    creating local code-signing cert ($CERT_CN)…"
+      W=$(mktemp -d)
+      cat > "$W/x.cnf" <<CNF
+[req]
+distinguished_name=dn
+x509_extensions=ext
+prompt=no
+[dn]
+CN=$CERT_CN
+[ext]
+basicConstraints=critical,CA:FALSE
+keyUsage=critical,digitalSignature
+extendedKeyUsage=critical,codeSigning
+CNF
+      /usr/bin/openssl req -x509 -newkey rsa:2048 -keyout "$W/k.pem" -out "$W/c.pem" \
+        -days 3650 -nodes -config "$W/x.cnf" >/dev/null 2>&1
+      /usr/bin/openssl pkcs12 -export -inkey "$W/k.pem" -in "$W/c.pem" -out "$W/id.p12" \
+        -passout pass:ms-temp -macalg sha1 -name "$CERT_CN" >/dev/null 2>&1
+      security import "$W/id.p12" -k "$HOME/Library/Keychains/login.keychain-db" \
+        -P ms-temp -A >/dev/null 2>&1
+      rm -rf "$W"
+    fi
+    codesign --force --deep -s "$CERT_CN" "$FORK_APP" >/dev/null 2>&1 \
+      && echo "    signed fork with stable local identity (TCC grants survive rebuilds)"
     mkdir -p "$(dirname "$AGENT_DEST")"
     sed "s|__HOME__|$HOME|g" "$AGENT_SRC" > "$AGENT_DEST"
     launchctl bootout "gui/$(id -u)/$AGENT_LABEL" 2>/dev/null || true
@@ -122,10 +153,14 @@ cat <<'EOF'
 ============================================================
   1. Karabiner-Elements: open it, approve Input Monitoring
      and the driver/system extension when prompted.
-  2. System Settings > Privacy & Security > Accessibility:
-     enable  MachineSpirit Leader Key, iTerm, and Rectangle
-     (Rectangle prompts on first launch; also enable its
-     "Launch on login").
+  2. System Settings > Privacy & Security:
+     - Accessibility: enable MachineSpirit Leader Key, iTerm,
+       and Rectangle (Rectangle prompts on first launch; also
+       enable its "Launch on login").
+     - Screen Recording: enable MachineSpirit Leader Key (the
+       ss-* screenshot binds run screencapture as its child).
+       Grant these ONCE — the stable local code signature keeps
+       them granted across rebuilds (ad-hoc would re-prompt).
   3. MachineSpirit Leader Key (the skull menu-bar icon): open
      Settings and set the activation shortcut to F19 (press
      Caps Lock). Auto-start is already handled by the
