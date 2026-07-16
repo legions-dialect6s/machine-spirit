@@ -43,7 +43,9 @@ __pycache__/
 bin/shield-fx           # busy-pane shield overlay, compiled from assets/tools/shield-fx.swift
 
 # ---- Xcode / Swift build debris (app/, kit/, forks/) ----
+# DerivedData-Release/ is the LeaderKey fork's local Release build (daily driver)
 DerivedData/
+DerivedData-Release/
 build/
 .build/
 *.xcuserdata
