@@ -57,7 +57,24 @@ class Controller {
   func show() {
     Events.send(.willActivate)
 
-    let screen = Defaults[.screen].getNSScreen() ?? NSScreen()
+    // The theme window is created asynchronously (Controller.init observes
+    // .theme), so it can still be nil right after launch. A summon that races
+    // that init — e.g. a leaderkey:// URL fired at login — must no-op, not trap
+    // on the implicitly-unwrapped `window`.
+    guard let window else {
+      Events.send(.didActivate)
+      return
+    }
+
+    // Never fall back to a bare `NSScreen()` — that produces a display-less
+    // phantom whose `.frame` traps (SIGTRAP) inside AppKit when a theme calls
+    // `screen.center()`. `getNSScreen()` legitimately returns nil (pointer in a
+    // gap for `.mouse`, no key window for `.activeWindow`), so chain to a real
+    // screen and bail only when the Mac genuinely has no display at all.
+    guard let screen = Defaults[.screen].getNSScreen() ?? NSScreen.main ?? NSScreen.screens.first else {
+      Events.send(.didActivate)
+      return
+    }
     window.show(on: screen) {
       Events.send(.didActivate)
     }
@@ -76,6 +93,10 @@ class Controller {
   }
 
   func hide(afterClose: (() -> Void)? = nil) {
+    guard let window else {
+      afterClose?()
+      return
+    }
     Events.send(.willDeactivate)
 
     window.hide {
@@ -413,7 +434,10 @@ extension Screen {
     case .primary:
       return NSScreen.screens.first
     case .mouse:
+      // Pointer can sit in a gap between displays (or off-screen); fall back to
+      // the active/main screen rather than returning nil.
       return NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) }
+        ?? NSScreen.main
     case .activeWindow:
       return NSScreen.main
     }

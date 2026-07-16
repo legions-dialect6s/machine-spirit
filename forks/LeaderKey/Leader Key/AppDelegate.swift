@@ -110,18 +110,24 @@ class AppDelegate: NSObject, NSApplicationDelegate,
   }
 
   func activate() {
-    if self.controller.window.isKeyWindow {
+    // `controller` and its `window` are wired up during launch (the window is
+    // even set asynchronously via the .theme observer). Ignore an activate that
+    // arrives before they exist — e.g. a leaderkey:// URL delivered at launch —
+    // rather than trapping on the implicitly-unwrapped optionals.
+    guard let controller, let window = controller.window else { return }
+
+    if window.isKeyWindow {
       switch Defaults[.reactivateBehavior] {
       case .hide:
         self.hide()
       case .reset:
-        self.controller.userState.clear()
+        controller.userState.clear()
       case .nothing:
         return
       }
-    } else if self.controller.window.isVisible {
+    } else if window.isVisible {
       // should never happen as the window will self-hide when not key
-      self.controller.window.makeKeyAndOrderFront(nil)
+      window.makeKeyAndOrderFront(nil)
     } else {
       self.show()
     }
@@ -158,11 +164,11 @@ class AppDelegate: NSObject, NSApplicationDelegate,
   }
 
   func show() {
-    controller.show()
+    controller?.show()
   }
 
   func hide() {
-    controller.hide()
+    controller?.hide()
   }
 
   // MARK: - Sparkle Gentle Reminders
@@ -254,7 +260,7 @@ class AppDelegate: NSObject, NSApplicationDelegate,
     case .hide:
       hide()
     case .reset:
-      state.clear()
+      state?.clear()
     case .navigate(let keys, let execute):
       show()
       processKeys(keys, execute: execute)
@@ -266,7 +272,10 @@ class AppDelegate: NSObject, NSApplicationDelegate,
   }
 
   private func processKeys(_ keys: [String], execute: Bool = true) {
-    guard !keys.isEmpty else { return }
+    // Require the theme window too (Controller sets it asynchronously):
+    // handleKey's not-found branch derefs `window`, so a navigate URL that
+    // races launch must be dropped rather than crash.
+    guard let controller, controller.window != nil, !keys.isEmpty else { return }
 
     controller.handleKey(keys[0], execute: execute)
 
@@ -276,7 +285,7 @@ class AppDelegate: NSObject, NSApplicationDelegate,
       var delayMs = 100
       for key in remainingKeys {
         delay(delayMs) { [weak self] in
-          self?.controller.handleKey(key, execute: execute)
+          self?.controller?.handleKey(key, execute: execute)
         }
         delayMs += 100
       }
