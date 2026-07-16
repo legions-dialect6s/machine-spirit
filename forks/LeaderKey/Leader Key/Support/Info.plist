@@ -30,6 +30,13 @@
 	<string>https://mikker.github.io/LeaderKey.app/appcast.xml</string>
 	<key>SUPublicEDKey</key>
 	<string>4ZfPYKvzE7b/uYW4B8f2v++7Bry/OmvYHCzl3g936KE=</string>
+	<!-- machine-spirit fork: the feed above is STOCK Leader Key's appcast, so
+	     leaving auto-update on would silently "update" this fork back INTO stock.
+	     The fork is built from source (forks/LeaderKey) and versioned in-repo, so
+	     automatic checks are OFF by default. (Manual "Check for Updates" still
+	     hits stock's feed — a footgun to retire once the fork has its own feed.) -->
+	<key>SUEnableAutomaticChecks</key>
+	<false/>
 	<!-- machine-spirit fork: single-instance so URL-scheme events (the app->fork
 	     pings, #36/#37) route to the running daily driver instead of launching a
 	     fresh copy that traps in AppKit window-restoration. -->
