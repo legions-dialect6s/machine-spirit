@@ -77,6 +77,38 @@ if [[ -f "$KB_SRC" ]]; then
   echo "    restored Karabiner config"
 fi
 
+# MachineSpirit Leader Key fork — the daily-driver launcher. Built from source
+# (forks/LeaderKey) and auto-started by a self-healing LaunchAgent (relaunches
+# on crash, respects a deliberate Quit). Needs full Xcode; if absent, stock
+# Leader Key (from the Brewfile) stays the launcher.
+FORK_DIR="$REPO_ROOT/forks/LeaderKey"
+FORK_APP="$HOME/Applications/MachineSpirit Leader Key.app"
+AGENT_SRC="$REPO_ROOT/config/leader-key/com.machinespirit.leader-key.plist"
+AGENT_DEST="$HOME/Library/LaunchAgents/com.machinespirit.leader-key.plist"
+AGENT_LABEL="com.machinespirit.leader-key"
+if command -v xcodebuild >/dev/null 2>&1 && [[ -d /Applications/Xcode.app ]]; then
+  echo "    building MachineSpirit Leader Key fork (Release)…"
+  if xcodebuild -project "$FORK_DIR/Leader Key.xcodeproj" \
+       -scheme "Leader Key" -configuration Release \
+       -derivedDataPath "$FORK_DIR/DerivedData-Release" \
+       -skipPackagePluginValidation -skipMacroValidation build \
+       CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO \
+       >/tmp/machinespirit-fork-build.log 2>&1; then
+    mkdir -p "$HOME/Applications"
+    rm -rf "$FORK_APP"
+    ditto "$FORK_DIR/DerivedData-Release/Build/Products/Release/Leader Key.app" "$FORK_APP"
+    mkdir -p "$(dirname "$AGENT_DEST")"
+    sed "s|__HOME__|$HOME|g" "$AGENT_SRC" > "$AGENT_DEST"
+    launchctl bootout "gui/$(id -u)/$AGENT_LABEL" 2>/dev/null || true
+    launchctl bootstrap "gui/$(id -u)" "$AGENT_DEST" || true
+    echo "    installed fork + self-healing LaunchAgent (auto-starts at login)"
+  else
+    echo "    !! fork build failed (see /tmp/machinespirit-fork-build.log); stock Leader Key remains the launcher"
+  fi
+else
+  echo "    (skipped) full Xcode not found — install it and re-run to build the fork; stock Leader Key is the launcher until then"
+fi
+
 echo "==> 5/5  macOS defaults (optional)"
 read -r -p "    Apply macOS window/animation tweaks now? [y/N] " ans
 if [[ "${ans:-N}" =~ ^[Yy]$ ]]; then
@@ -91,15 +123,22 @@ cat <<'EOF'
   1. Karabiner-Elements: open it, approve Input Monitoring
      and the driver/system extension when prompted.
   2. System Settings > Privacy & Security > Accessibility:
-     enable  Leader Key, iTerm, and Rectangle  (Rectangle
-     prompts on first launch; also enable its "Launch on login").
-  3. Leader Key: set activation shortcut to F19 (press Caps
-     Lock), and turn ON "Launch at login". Restart Leader Key
-     so it reloads the restored config.
+     enable  MachineSpirit Leader Key, iTerm, and Rectangle
+     (Rectangle prompts on first launch; also enable its
+     "Launch on login").
+  3. MachineSpirit Leader Key (the skull menu-bar icon): open
+     Settings and set the activation shortcut to F19 (press
+     Caps Lock). Auto-start is already handled by the
+     self-healing LaunchAgent install.sh set up — do NOT also
+     enable "Launch at login" (that would double-launch it).
   4. iTerm2: Settings > Profiles > Colors > Color Presets >
      Import  ->  config/iterm2/*.itermcolors, then select it.
-  5. Menu bar manager (Ice/Thaw): open it, drag rarely-used
-     icons below the divider.
+  5. Menu bar: the skull icon IS the MachineSpirit menu —
+     Leader Key + Rectangle + Karabiner controls in one place
+     (their own icons are hidden by macos-defaults.sh +
+     karabiner.json). On a crowded bar a new item lands in the
+     hidden overflow; ⌘-drag the skull left of the clock once
+     and macOS remembers the spot.
   6. tmux: brew installs it; `t t` launches a protected pane,
      `t m u x` opens the sheol recovery TUI. Nothing to wire.
   7. (Optional) To confirm before closing a pane running a live

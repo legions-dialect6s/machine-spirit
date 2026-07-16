@@ -15,9 +15,15 @@ defaults write NSGlobalDomain NSAutomaticWindowAnimationsEnabled -bool false
 # Rectangle: bigger step for its native larger/smaller actions (default 30px)
 defaults write com.knollsoft.Rectangle sizeOffset -int 100
 
+# Rectangle: hide its own menu-bar icon — its controls are folded into the
+# MachineSpirit skull menu ("Rectangle — Windows" section). Window actions still
+# fire via the rectangle:// scheme, so nothing is lost. Restart Rectangle after.
+defaults write com.knollsoft.Rectangle hideMenubarIcon -bool true
+
 echo "Done. Some changes require an app relaunch or logout to appear."
 echo
 echo "To revert everything this script did:"
 echo "  defaults delete NSGlobalDomain NSWindowResizeTime"
 echo "  defaults delete NSGlobalDomain NSAutomaticWindowAnimationsEnabled"
-echo "  defaults delete com.knollsoft.Rectangle sizeOffset"
+echo "  defaults delete com.knollsoft.Rectangle sizeOffset
+  defaults delete com.knollsoft.Rectangle hideMenubarIcon"
