@@ -39,7 +39,10 @@ codesign --force --deep -s "MachineSpirit Local Codesign" "$HOME/Applications/Ma
 launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/com.machinespirit.leader-key.plist"
 ```
 Menu-bar icon assets: `Leader Key/Assets.xcassets/StatusItem*.imageset` (idle = template
-skull; `StatusItem-filled` = green non-template summon glow). App icon: `AppIcon.appiconset`.
+skull; `StatusItem-filled` = green non-template summon glow). App icon:
+`AppIcon.appiconset` — the summoned green skull on a dark squircle, regenerated from the
+menu-bar mark by `tools/make-appicon.sh` (ImageMagick + `qlmanage`; PNGs ship pre-rendered).
+Re-run it if the skull mark or palette changes, then `clean build`.
 
 ## Architecture Overview
 

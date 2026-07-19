@@ -37,3 +37,4 @@ brew "fastfetch"           # system info panel in the hotkey-window splash
 # --- MachineSpirit.app (app/, kit/, forks/) — build-time only ---
 # Building the app and forks needs full Xcode (not just CLT). Optional:
 # brew "xcodegen"          # regenerates app/MachineSpirit/MachineSpirit.xcodeproj from project.yml (generated project is committed)
+# brew "imagemagick"       # regenerates the fork's skull AppIcon (forks/LeaderKey/tools/make-appicon.sh); PNGs ship pre-rendered
