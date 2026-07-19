@@ -12,6 +12,35 @@ This file provides guidance to coding agents when working with code in this repo
 - Bump version: `bin/bump`
 - Create release: `bin/release`
 
+## machine-spirit fork — build, sign, redeploy (READ THIS)
+
+This fork is the **daily-driver launcher** (LaunchAgent `com.machinespirit.leader-key`,
+runs from `~/Applications/MachineSpirit Leader Key.app`). Two rules differ from upstream:
+
+1. **Always re-sign with the stable local cert after building.** Builds are ad-hoc,
+   and ad-hoc signatures change every build — which RESETS the app's TCC grants
+   (Screen Recording for the `ss-*` screenshot binds, Accessibility for app control)
+   and traps the owner in a grant→re-prompt loop. `install.sh` creates the
+   per-machine cert if absent; after any manual build, re-sign:
+   `codesign --force --deep -s "MachineSpirit Local Codesign" "$HOME/Applications/MachineSpirit Leader Key.app"`
+2. **Asset-catalog changes need `clean build`.** xcodebuild caches `Assets.car` on
+   incremental builds, so a changed menu-bar or app icon won't take effect otherwise.
+
+Full Release build + redeploy recipe this repo uses:
+```
+cd forks/LeaderKey
+xcodebuild -project "Leader Key.xcodeproj" -scheme "Leader Key" -configuration Release \
+  -derivedDataPath ./DerivedData-Release -skipPackagePluginValidation -skipMacroValidation \
+  clean build CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
+launchctl bootout "gui/$(id -u)/com.machinespirit.leader-key" 2>/dev/null
+rm -rf "$HOME/Applications/MachineSpirit Leader Key.app"
+ditto "DerivedData-Release/Build/Products/Release/Leader Key.app" "$HOME/Applications/MachineSpirit Leader Key.app"
+codesign --force --deep -s "MachineSpirit Local Codesign" "$HOME/Applications/MachineSpirit Leader Key.app"
+launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/com.machinespirit.leader-key.plist"
+```
+Menu-bar icon assets: `Leader Key/Assets.xcassets/StatusItem*.imageset` (idle = template
+skull; `StatusItem-filled` = green non-template summon glow). App icon: `AppIcon.appiconset`.
+
 ## Architecture Overview
 
 Leader Key is a macOS application that provides customizable keyboard shortcuts. The core architecture consists of:
