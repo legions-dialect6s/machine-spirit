@@ -73,12 +73,15 @@ case "$verb" in
     have_tmux || exit 0
     tmux has-session -t "=$name" 2>/dev/null || exit 0
     # A GUI can't host `tmux attach` inline — a fresh body means a new window.
-    # env-forward TMUX_TMPDIR so an isolated-socket test revives on the same
-    # isolated socket instead of the default one.
+    # Hand iTerm tmux's ABSOLUTE path: the new window runs its command in a
+    # NON-login shell whose PATH lacks Homebrew, so a bare `tmux` would exit 127
+    # ("not found") and the window would vanish after ~1s. env-forward
+    # TMUX_TMPDIR so an isolated-socket test revives on the same socket.
+    tmux_bin=$(command -v tmux)
     if [[ -n "${TMUX_TMPDIR:-}" ]]; then
-      "$HERE/iterm-new-window.sh" env TMUX_TMPDIR="$TMUX_TMPDIR" tmux attach -t "$name"
+      "$HERE/iterm-new-window.sh" env TMUX_TMPDIR="$TMUX_TMPDIR" "$tmux_bin" attach -t "$name"
     else
-      "$HERE/iterm-new-window.sh" tmux attach -t "$name"
+      "$HERE/iterm-new-window.sh" "$tmux_bin" attach -t "$name"
     fi
     exit 0
     ;;
