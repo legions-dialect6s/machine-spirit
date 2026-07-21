@@ -1,22 +1,24 @@
 #!/bin/zsh
 # terminals-core — enumerate live terminal sessions and focus one, for the
 # menu-bar ledger. The single door the fork's "Terminals" section uses, the way
-# sheol-core is the single door for tmux. iTerm2 for now (its scripting API
-# gives a stable per-session id + tty + name); "or other" terminal apps are a
-# future add.
+# sheol-core is the single door for tmux.
 #
-#   terminals-core list          one line per iTerm session, \x1f-delimited:
-#                                id US tty US name
+#   terminals-core list          one line per session, \x1f-delimited:
+#                                id US tty US name US isTmux
 #   terminals-core list --json   the same as a JSON array {id,tty,name,isTmux}
-#   terminals-core focus <id>    select that session's tab + raise iTerm
+#   terminals-core focus <id>    raise that session (iTerm: its window; other
+#                                apps: activate the app)
 #
-# Never launches iTerm: the enumeration is gated on `application … is running`
-# (a plain `tell` would start it), so the fork can poll safely when iTerm is
-# closed (→ zero terminals).
+# iTerm2 sessions come through its scripting API (stable per-session id + tty +
+# name, and pure-`select` window raise — no System Events grant needed). Any
+# OTHER terminal app is found generically by scanning ptys (a tty with a login
+# shell whose ancestor is a .app that ISN'T iTerm and ISN'T tmux); those get
+# id="app:<Name>" and focus just activates the app. tmux is deliberately
+# excluded here — attached sessions are its clients (own list), pane shells live
+# inside the server — so the terminal list stays non-tmux and can't double-count.
+#
+# Never launches iTerm: the enumeration is gated on `application … is running`.
 set -u
-
-# GUI callers (the fork under launchd) inherit no Homebrew PATH / UTF-8 locale;
-# the latter is needed for zsh's IFS=$'\x1f' read to split the field stream.
 export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 [[ "${LC_ALL:-${LANG:-}}" == *[Uu][Tt][Ff]* ]] || export LC_ALL="en_US.UTF-8"
 
@@ -24,18 +26,42 @@ US=$'\x1f'
 
 json_escape() {
   local s=$1
-  s=${s//\\/\\\\}
-  s=${s//\"/\\\"}
-  s=${s//$'\t'/\\t}
-  s=${s//$'\r'/\\r}
-  s=${s//$'\n'/\\n}
+  s=${s//\\/\\\\}; s=${s//\"/\\\"}
+  s=${s//$'\t'/\\t}; s=${s//$'\r'/\\r}; s=${s//$'\n'/\\n}
   print -rn -- "$s"
 }
 
-verb="${1:-}"
-case "$verb" in
-  list)
-    lines=$(/usr/bin/osascript <<OSA
+# tmux ttys to keep OUT of the plain-terminal list: pane shells + attached
+# clients (the real terminals running `tmux attach`, which belong to tmux).
+tmux_ttys() {
+  command -v tmux >/dev/null 2>&1 || return 0
+  { tmux list-panes -a -F '#{pane_tty}' 2>/dev/null
+    tmux list-clients -F '#{client_tty}' 2>/dev/null ; } | sort -u
+}
+
+# Walk a pid's ancestry to the owning .app; print its name (e.g. "Ghostty").
+owning_app() {
+  local pid=$1 ppid comm guard=0
+  while [[ -n "$pid" && "$pid" != 0 && "$pid" != 1 && guard -lt 20 ]]; do
+    read -r ppid comm < <(ps -o ppid=,comm= -p "$pid" 2>/dev/null)
+    [[ -z "${comm:-}" ]] && return 1
+    if [[ "$comm" == *.app/Contents/MacOS/* ]]; then
+      local app="${comm%%.app/*}"
+      print -r -- "${app:t}"
+      return 0
+    fi
+    pid=$ppid
+    (( guard++ ))
+  done
+  return 1
+}
+
+emit=()  # each element: id US tty US name US isTmux
+
+# ---- iTerm sessions ----
+iterm_ttys=()
+tclients="$(tmux_ttys)"
+iterm_lines=$(/usr/bin/osascript <<OSA
 if application "iTerm2" is running then
   tell application "iTerm2"
     set out to ""
@@ -53,30 +79,58 @@ else
 end if
 OSA
 )
+if [[ -n "$iterm_lines" ]]; then
+  while IFS="$US" read -r id tty name; do
+    [[ -z "$id" ]] && continue
+    iterm_ttys+="$tty"
+    isTmux=false
+    [[ "$name" == tmux* ]] && isTmux=true
+    print -r -- "$tclients" | grep -qxF "$tty" && isTmux=true
+    emit+="${id}${US}${tty}${US}${name}${US}${isTmux}"
+  done <<< "$iterm_lines"
+fi
+
+# ---- other terminal apps (generic pty scan) ----
+# ttys running a login shell, minus iTerm's and tmux's, grouped to their app.
+seen_app=()
+while read -r tty pid; do
+  [[ "$tty" == ttys* ]] || continue
+  dev="/dev/$tty"
+  print -r -- "$tclients" | grep -qxF "$dev" && continue          # tmux tty
+  (( ${iterm_ttys[(I)$dev]} )) && continue                        # iTerm tty
+  app=$(owning_app "$pid") || continue
+  [[ "$app" == iTerm* ]] && continue
+  (( ${seen_app[(I)$app]} )) && continue                          # one row per app
+  seen_app+="$app"
+  emit+="app:${app}${US}${dev}${US}${app}${US}false"
+done < <(ps -Ao tty=,pid=,comm= | awk '$3 ~ /(-zsh|-bash|\/(zsh|bash|fish))$/ {print $1, $2}')
+
+verb="${1:-}"
+case "$verb" in
+  list)
     if [[ "${2:-}" == "--json" ]]; then
       print -n '['
-      local first=1 id tty name isTmux
-      print -r -- "$lines" | while IFS="$US" read -r id tty name; do
-        [[ -z "$id" ]] && continue
-        isTmux=false
-        [[ "$name" == tmux* ]] && isTmux=true
+      first=1
+      for row in "${emit[@]}"; do
+        IFS="$US" read -r id tty name isTmux <<< "$row"
         (( first )) || print -n ','
         first=0
         print -rn -- "{\"id\":\"$(json_escape "$id")\",\"tty\":\"$(json_escape "$tty")\",\"name\":\"$(json_escape "$name")\",\"isTmux\":${isTmux}}"
       done
       print ']'
     else
-      print -r -- "$lines"
+      for row in "${emit[@]}"; do print -r -- "$row"; done
     fi
     exit 0
     ;;
   focus)
     id="${2:-}"
     [[ -z "$id" ]] && exit 0
-    # Pure iTerm: `select` on the session, its tab, AND its window raises that
-    # window to the front (no System Events / Accessibility needed — so it works
-    # from the fork, which drives iTerm but not System Events). `activate` then
-    # brings iTerm forward.
+    if [[ "$id" == app:* ]]; then
+      /usr/bin/open -a "${id#app:}" 2>/dev/null
+      exit 0
+    fi
+    # iTerm session id — pure iTerm select raises its window (no System Events).
     /usr/bin/osascript - "$id" <<'OSA'
 on run argv
   set theID to (item 1 of argv)

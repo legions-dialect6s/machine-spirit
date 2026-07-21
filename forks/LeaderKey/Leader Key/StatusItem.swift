@@ -441,11 +441,13 @@ final class SheolStatusItem: NSObject, NSMenuDelegate {
     }
   }
 
-  /// The title is three counts: live terminals · live tmux · detached tmux.
+  /// The title is three counts: (non-tmux) terminals · live tmux · detached
+  /// tmux. tmux terminals are counted only as tmux — they live in their own
+  /// sections — so the three numbers never double-count the same session.
   private func updateTitle() {
     let liveTmux = spirits.filter { !$0.isWandering }.count
     let deadTmux = spirits.filter { $0.isWandering }.count
-    let terms = terminals.count
+    let terms = terminals.filter { !$0.isTmux }.count
     statusItem?.button?.title = " \(terms) · \(liveTmux) · \(deadTmux)"
     statusItem?.button?.toolTip =
       "\(terms) terminals · \(liveTmux) tmux live · \(deadTmux) tmux detached (running, hidden)"
@@ -533,21 +535,16 @@ final class SheolStatusItem: NSObject, NSMenuDelegate {
     } else {
       // Size every row to the widest label so full names never clip; trailing
       // controls stay right-aligned across all rows.
-      let labels = spirits.map { ($0.name, Self.rowLabel(for: $0)) }
-      let labelW = min(360, ceil(labels.map { $0.1.size().width }.max() ?? 120))
+      let labelW = min(
+        360, ceil(spirits.map { Self.rowLabel(for: $0).size().width }.max() ?? 120))
       let rowW = labelW + 92  // label + gaps + detach slot + kill/ward slot + pad
-      let byName = Dictionary(uniqueKeysWithValues: labels)
       if !living.isEmpty {
         menu.addItem(sectionHeader("Living (attached)"))
-        for s in living {
-          menu.addItem(rowItem(s, label: byName[s.name]!, labelW: labelW, rowW: rowW))
-        }
+        for s in living { menu.addItem(rowItem(s, labelW: labelW, rowW: rowW)) }
       }
       if !wandering.isEmpty {
         menu.addItem(sectionHeader("Sheol (wandering)"))
-        for s in wandering {
-          menu.addItem(rowItem(s, label: byName[s.name]!, labelW: labelW, rowW: rowW))
-        }
+        for s in wandering { menu.addItem(rowItem(s, labelW: labelW, rowW: rowW)) }
       }
     }
 
@@ -557,15 +554,17 @@ final class SheolStatusItem: NSObject, NSMenuDelegate {
     open.target = self
     menu.addItem(open)
 
-    // ---- Terminals: every live iTerm session, click to focus ----
+    // ---- Terminals: every live NON-tmux terminal (tmux keeps its own lists
+    // above, so a session is never listed twice), click to focus ----
+    let plainTerms = terminals.filter { !$0.isTmux }
     menu.addItem(.separator())
-    menu.addItem(sectionHeader("Terminals — \(terminals.count) live"))
-    if terminals.isEmpty {
+    menu.addItem(sectionHeader("Terminals — \(plainTerms.count) live"))
+    if plainTerms.isEmpty {
       let none = NSMenuItem(title: "No terminals", action: nil, keyEquivalent: "")
       none.isEnabled = false
       menu.addItem(none)
     } else {
-      for term in terminals {
+      for term in plainTerms {
         var label = term.name.replacingOccurrences(of: "\n", with: " ")
         if label.count > 52 { label = String(label.prefix(51)) + "…" }
         let item = NSMenuItem(
@@ -607,13 +606,13 @@ final class SheolStatusItem: NSObject, NSMenuDelegate {
   /// attach in a new iTerm window) plus trailing controls — a moon that sends a
   /// LIVING session to sheol (detach), and a red ✕ that banishes it (triple-tap
   /// arms the decaying ◆◆◇ ward, no dialog — the menu-bar echo of the TUI).
-  private func rowItem(
-    _ spirit: Spirit, label: NSAttributedString, labelW: CGFloat, rowW: CGFloat
-  ) -> NSMenuItem {
+  private func rowItem(_ spirit: Spirit, labelW: CGFloat, rowW: CGFloat) -> NSMenuItem {
     let item = NSMenuItem()
+    let dot = spirit.isWandering ? "○ " : "● "
     item.view = SheolRow(
-      name: spirit.name, label: label, labelW: labelW, rowW: rowW,
-      isWandering: spirit.isWandering, owner: self)
+      name: spirit.name, title: dot + spirit.name,
+      subtitle: "   ·  \(spirit.command) · \(spirit.quietFor)",
+      labelW: labelW, rowW: rowW, isWandering: spirit.isWandering, owner: self)
     return item
   }
 
@@ -711,12 +710,21 @@ private final class SheolRowButton: NSButton {
 /// sheol (detach) and a red ✕ that banishes it via triple-tap. The view is
 /// sized to `rowW` so names never clip and the controls line up across rows.
 private final class SheolRow: NSView {
+  private let title: String
+  private let subtitle: String
+  private let nameButton: SheolRowButton
+  private let detachButton: SheolRowButton?
+  private let killButton: SheolRowButton
+  private var hovered = false
+  private var trackingArea: NSTrackingArea?
+
   init(
-    name: String, label: NSAttributedString, labelW: CGFloat, rowW: CGFloat,
+    name: String, title: String, subtitle: String, labelW: CGFloat, rowW: CGFloat,
     isWandering: Bool, owner: SheolStatusItem
   ) {
+    self.title = title
+    self.subtitle = subtitle
     let h: CGFloat = 22
-    super.init(frame: NSRect(x: 0, y: 0, width: rowW, height: h))
 
     // Name — borderless button sized to the measured label (no clipping).
     let revive = SheolRowButton(frame: NSRect(x: 6, y: 0, width: labelW, height: h))
@@ -725,14 +733,14 @@ private final class SheolRow: NSView {
     revive.imagePosition = .noImage
     revive.alignment = .left
     (revive.cell as? NSButtonCell)?.lineBreakMode = .byTruncatingTail
-    revive.attributedTitle = label
+    revive.attributedTitle = Self.label(title: title, subtitle: subtitle, hovered: false)
     revive.target = owner
     revive.action = #selector(SheolStatusItem.reviveRow(_:))
     revive.toolTip =
       isWandering
       ? "Revive — reattach in a new iTerm window"
       : "Open another window attached to this session"
-    addSubview(revive)
+    self.nameButton = revive
 
     // Kill (banish) — the ✕, in red; wider than a plain icon so the ◆◆◇ ward
     // fits when armed. Triple-tap handled in SheolStatusItem.killRow.
@@ -741,19 +749,75 @@ private final class SheolRow: NSView {
     kill.frame = NSRect(x: rowW - 46, y: 1, width: 40, height: 20)
     kill.target = owner
     kill.action = #selector(SheolStatusItem.killRow(_:))
-    addSubview(kill)
+    self.killButton = kill
 
-    // Detach (send to sheol) — only meaningful for a living, attached session.
+    // Detach (the sleepy moon) — only on a living, attached session.
     if !isWandering {
       let detach = Self.icon("moon.zzz", name: name, tip: "Send to sheol (detach)")
       detach.frame = NSRect(x: rowW - 74, y: 1, width: 22, height: 20)
       detach.target = owner
       detach.action = #selector(SheolStatusItem.detachRow(_:))
-      addSubview(detach)
+      self.detachButton = detach
+    } else {
+      self.detachButton = nil
     }
+
+    super.init(frame: NSRect(x: 0, y: 0, width: rowW, height: h))
+    addSubview(nameButton)
+    addSubview(killButton)
+    if let detachButton { addSubview(detachButton) }
   }
 
   required init?(coder: NSCoder) { nil }
+
+  // MARK: hover highlight — custom menu views don't get it for free, so track
+  // the pointer and paint the standard selection behind the controls, matching
+  // the plain Terminals rows.
+
+  override func updateTrackingAreas() {
+    super.updateTrackingAreas()
+    if let trackingArea { removeTrackingArea(trackingArea) }
+    let ta = NSTrackingArea(
+      rect: bounds, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+      owner: self, userInfo: nil)
+    addTrackingArea(ta)
+    trackingArea = ta
+  }
+
+  override func mouseEntered(with event: NSEvent) { setHovered(true) }
+  override func mouseExited(with event: NSEvent) { setHovered(false) }
+
+  private func setHovered(_ h: Bool) {
+    guard hovered != h else { return }
+    hovered = h
+    nameButton.attributedTitle = Self.label(title: title, subtitle: subtitle, hovered: h)
+    // The moon needs to read on the accent fill; the ✕/ward stay red (still
+    // legible, and red is meaningful for a destructive control).
+    detachButton?.contentTintColor = h ? .selectedMenuItemTextColor : nil
+    needsDisplay = true
+  }
+
+  override func draw(_ dirtyRect: NSRect) {
+    guard hovered else { return }
+    NSColor.selectedContentBackgroundColor.setFill()
+    NSBezierPath(roundedRect: bounds.insetBy(dx: 5, dy: 1), xRadius: 5, yRadius: 5).fill()
+  }
+
+  static func label(title: String, subtitle: String, hovered: Bool) -> NSAttributedString {
+    let nameColor: NSColor = hovered ? .selectedMenuItemTextColor : .labelColor
+    let subColor: NSColor = hovered ? .selectedMenuItemTextColor : .secondaryLabelColor
+    let s = NSMutableAttributedString(
+      string: title,
+      attributes: [.foregroundColor: nameColor, .font: NSFont.menuFont(ofSize: 0)])
+    s.append(
+      NSAttributedString(
+        string: subtitle,
+        attributes: [
+          .foregroundColor: hovered ? subColor.withAlphaComponent(0.8) : subColor,
+          .font: NSFont.menuFont(ofSize: 0),
+        ]))
+    return s
+  }
 
   private static func icon(_ symbol: String, name: String, tip: String) -> SheolRowButton {
     let b = SheolRowButton()

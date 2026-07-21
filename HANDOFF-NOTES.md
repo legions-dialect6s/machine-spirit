@@ -110,15 +110,19 @@ irreversible). No Enter-to-attach (was an accidental-dump footgun).
   **v1 SHIPPED 2026-07-19 (in the FORK, not the app — owner's call, since the
   fork is the always-on menu-bar agent):** a second menu-bar item beside the
   skull (`SheolStatusItem` in the fork's `StatusItem.swift`). **Grown 2026-07-21
-  into a terminal+tmux ledger** — the title is now THREE counts,
-  **`terminals · tmux-live · tmux-detached`**, and the menu gained a bottom
-  **Terminals** section listing every live iTerm session (click → focus/raise
-  that window). Terminals come through a new `bin/terminals-core` (iTerm2
-  scripting API — the same door for terminals that sheol-core is for tmux; it
-  never launches iTerm, gated on `application … is running`, and `focus` raises
-  a window with pure iTerm `select` so no System Events grant is needed).
-  Terminals poll every 8s (an Apple Event), tmux every 5s. "or other" terminal
-  apps beyond iTerm are a future add. Per owner's revised spec the tmux counts
+  into a terminal+tmux ledger** — the title is now THREE **disjoint** counts,
+  **`terminals · tmux-live · tmux-detached`** (a session is only ever one of the
+  three; tmux terminals count as tmux, not terminals), and the menu gained a
+  bottom **Terminals** section listing every live NON-tmux terminal (click →
+  focus/raise that window). Terminals come through a new `bin/terminals-core`
+  (the door for terminals that sheol-core is for tmux; never launches iTerm,
+  gated on the app being `running`; `focus` raises a window with pure iTerm
+  `select` so no System Events grant is needed; tmux identified by client-tty,
+  not just the session name). Beyond iTerm it also scans ptys for OTHER terminal
+  apps (id `app:<Name>`, focus = activate the app) — untested here (only iTerm
+  runs) but present JIC. Terminals poll every 8s (an Apple Event), tmux every 5s.
+  The tmux rows (custom views) now paint the standard hover highlight themselves
+  (NSTrackingArea) so they match the plain Terminals rows. Per owner's revised spec the tmux counts
   are ALWAYS shown (`0` when empty), not the auto-clearing version. Menu groups
   sessions
   living/wandering; each row is a custom view sized to the widest name (so full
