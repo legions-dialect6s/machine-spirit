@@ -455,11 +455,11 @@ final class SheolStatusItem: NSObject, NSMenuDelegate {
     } else {
       if !living.isEmpty {
         menu.addItem(sectionHeader("Living (attached)"))
-        for spirit in living { menu.addItem(sessionItem(spirit, glyph: "●")) }
+        for spirit in living { menu.addItem(rowItem(spirit)) }
       }
       if !wandering.isEmpty {
         menu.addItem(sectionHeader("Sheol (wandering)"))
-        for spirit in wandering { menu.addItem(sessionItem(spirit, glyph: "○")) }
+        for spirit in wandering { menu.addItem(rowItem(spirit)) }
       }
     }
 
@@ -470,19 +470,19 @@ final class SheolStatusItem: NSObject, NSMenuDelegate {
     menu.addItem(open)
   }
 
-  /// A session row: click reattaches it in a new iTerm window (revive). For a
-  /// living session that's a second view; for a wandering one it's a revival.
-  /// Irreversible verbs (banish) stay in the full ledger, behind its ◆◆◇ ward.
-  private func sessionItem(_ spirit: Spirit, glyph: String) -> NSMenuItem {
-    let title = "\(glyph)  \(spirit.name)   ·   \(spirit.command)  ·  \(spirit.quietFor)"
-    let item = NSMenuItem(
-      title: title, action: #selector(reviveSession(_:)), keyEquivalent: "")
-    item.target = self
-    item.representedObject = spirit.name
-    item.toolTip =
-      spirit.isWandering
-      ? "Revive — reattach this spirit in a new iTerm window"
-      : "Open another iTerm window attached to this session"
+  /// A session row is a custom view: the name (click = revive / attach in a new
+  /// iTerm window) plus trailing controls — a moon that sends a LIVING session
+  /// to sheol (detach), and a red ✕ that banishes it for good (guarded by a
+  /// confirm — the menu-bar stand-in for the TUI's ◆◆◇ ward).
+  private func rowItem(_ spirit: Spirit) -> NSMenuItem {
+    let item = NSMenuItem()
+    let dot = spirit.isWandering ? "○ " : "● "
+    item.view = SheolRow(
+      name: spirit.name,
+      title: dot + spirit.name,
+      subtitle: "   ·  \(spirit.command) · \(spirit.quietFor)",
+      isWandering: spirit.isWandering,
+      owner: self)
     return item
   }
 
@@ -493,9 +493,37 @@ final class SheolStatusItem: NSObject, NSMenuDelegate {
     return item
   }
 
-  @objc private func reviveSession(_ sender: NSMenuItem) {
-    guard let name = sender.representedObject as? String else { return }
-    runCore(["revive", name])
+  // Row actions. Each dismisses the menu first, then acts. revive + detach are
+  // reversible; kill is guarded by a confirm (irreversible).
+  @objc fileprivate func reviveRow(_ sender: SheolRowButton) {
+    statusItem?.menu?.cancelTracking()
+    runCore(["revive", sender.sessionName])
+  }
+
+  @objc fileprivate func detachRow(_ sender: SheolRowButton) {
+    statusItem?.menu?.cancelTracking()
+    runCore(["detach", sender.sessionName])  // living -> sheol
+  }
+
+  @objc fileprivate func killRow(_ sender: SheolRowButton) {
+    let name = sender.sessionName
+    statusItem?.menu?.cancelTracking()
+    // Let the menu close, then raise the confirm on the next tick.
+    DispatchQueue.main.async { [weak self] in
+      guard let self else { return }
+      let alert = NSAlert()
+      alert.alertStyle = .critical
+      alert.messageText = "Banish “\(name)”?"
+      alert.informativeText =
+        "This kills the tmux session for good — any unsaved work in it is lost. "
+        + "This can't be undone."
+      alert.addButton(withTitle: "Banish")
+      alert.addButton(withTitle: "Cancel")
+      NSApp.activate(ignoringOtherApps: true)
+      if alert.runModal() == .alertFirstButtonReturn {
+        self.runCore(["kill", name])
+      }
+    }
   }
 
   @objc private func openLedger() {
@@ -505,5 +533,86 @@ final class SheolStatusItem: NSObject, NSMenuDelegate {
     task.standardOutput = FileHandle.nullDevice
     task.standardError = FileHandle.nullDevice
     try? task.run()
+  }
+}
+
+/// A menu-row button that remembers which session it acts on.
+private final class SheolRowButton: NSButton {
+  var sessionName = ""
+}
+
+/// The custom view for one sheol session row: a borderless name button (click
+/// = revive) and trailing icon buttons — a moon that sends a living session to
+/// sheol (detach) and a red ✕ that banishes it. Fixed width; long names
+/// truncate. All three buttons target the SheolStatusItem.
+private final class SheolRow: NSView {
+  init(
+    name: String, title: String, subtitle: String, isWandering: Bool,
+    owner: SheolStatusItem
+  ) {
+    let w: CGFloat = 340, h: CGFloat = 22
+    super.init(frame: NSRect(x: 0, y: 0, width: w, height: h))
+    autoresizingMask = [.width]
+
+    // Name — a borderless button filling the left; click revives/attaches.
+    let revive = SheolRowButton(frame: NSRect(x: 6, y: 0, width: w - 66, height: h))
+    revive.sessionName = name
+    revive.isBordered = false
+    revive.imagePosition = .noImage
+    revive.alignment = .left
+    (revive.cell as? NSButtonCell)?.lineBreakMode = .byTruncatingTail
+    let label = NSMutableAttributedString(
+      string: title,
+      attributes: [
+        .foregroundColor: NSColor.labelColor, .font: NSFont.menuFont(ofSize: 0),
+      ])
+    label.append(
+      NSAttributedString(
+        string: subtitle,
+        attributes: [
+          .foregroundColor: NSColor.secondaryLabelColor,
+          .font: NSFont.menuFont(ofSize: 0),
+        ]))
+    revive.attributedTitle = label
+    revive.target = owner
+    revive.action = #selector(SheolStatusItem.reviveRow(_:))
+    revive.toolTip =
+      isWandering
+      ? "Revive — reattach in a new iTerm window"
+      : "Open another window attached to this session"
+    revive.autoresizingMask = [.width]
+    addSubview(revive)
+
+    // Detach (send to sheol) — only meaningful for a living, attached session.
+    if !isWandering {
+      let detach = Self.icon("moon.zzz", name: name, tip: "Send to sheol (detach)")
+      detach.frame = NSRect(x: w - 52, y: 1, width: 22, height: 20)
+      detach.target = owner
+      detach.action = #selector(SheolStatusItem.detachRow(_:))
+      detach.autoresizingMask = [.minXMargin]
+      addSubview(detach)
+    }
+
+    // Kill (banish) — the ✕, in red; guarded by a confirm in the action.
+    let kill = Self.icon("xmark.circle.fill", name: name, tip: "Kill — banish for good")
+    kill.contentTintColor = .systemRed
+    kill.frame = NSRect(x: w - 26, y: 1, width: 22, height: 20)
+    kill.target = owner
+    kill.action = #selector(SheolStatusItem.killRow(_:))
+    kill.autoresizingMask = [.minXMargin]
+    addSubview(kill)
+  }
+
+  required init?(coder: NSCoder) { nil }
+
+  private static func icon(_ symbol: String, name: String, tip: String) -> SheolRowButton {
+    let b = SheolRowButton()
+    b.sessionName = name
+    b.isBordered = false
+    b.bezelStyle = .regularSquare
+    b.image = NSImage(systemSymbolName: symbol, accessibilityDescription: tip)
+    b.imagePosition = .imageOnly
+    b.toolTip = tip
+    return b
   }
 }

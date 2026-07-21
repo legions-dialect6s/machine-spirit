@@ -112,10 +112,15 @@ irreversible). No Enter-to-attach (was an accidental-dump footgun).
   skull (`SheolStatusItem` in the fork's `StatusItem.swift`) whose title is two
   live counts — **`active, invisible`** (attached sessions, then
   detached-but-running). Per owner's revised spec it's ALWAYS shown (`0, 0`
-  when empty), not the auto-clearing version. Menu lists sessions grouped
-  living/wandering; click a row → `sheol-core revive` (open/attach a window);
-  "Open sheol ledger…" launches the full TUI (irreversible **banish** stays
-  there, behind its ◆◆◇ ward). Polls `~/bin/sheol-core list --json` every 5s.
+  when empty), not the auto-clearing version. Menu groups sessions
+  living/wandering; each row is a custom view — the name (click → `revive`,
+  attach in a new window) plus trailing controls: a **moon** that sends a living
+  session to sheol (`detach`) and a red **✕** that banishes it (`kill`, guarded
+  by a confirm — the menu-bar stand-in for the TUI's ◆◆◇ ward). "Open sheol
+  ledger…" still launches the full TUI. Polls `~/bin/sheol-core list --json`
+  every 5s. Sessions now carry evocative Halo-Monitor-style names
+  (`penitent-lich`, `umbral-sepulchre` — see `bin/tmux-name.sh`) instead of
+  `ms-HHMMSS`, which reads far better in this ledger.
   **Load-bearing fix:** `sheol-core` now self-heals PATH + UTF-8 locale, since
   launchd-spawned GUI callers inherit neither — without it every GUI caller
   (this item AND the app's `SheolService`) silently read `0`. A first-class GUI
