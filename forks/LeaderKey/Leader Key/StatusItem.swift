@@ -453,13 +453,23 @@ final class SheolStatusItem: NSObject, NSMenuDelegate {
       none.isEnabled = false
       menu.addItem(none)
     } else {
+      // Size every row to the widest label so full names never clip; trailing
+      // controls stay right-aligned across all rows.
+      let labels = spirits.map { ($0.name, Self.rowLabel(for: $0)) }
+      let labelW = min(360, ceil(labels.map { $0.1.size().width }.max() ?? 120))
+      let rowW = labelW + 92  // label + gaps + detach slot + kill/ward slot + pad
+      let byName = Dictionary(uniqueKeysWithValues: labels)
       if !living.isEmpty {
         menu.addItem(sectionHeader("Living (attached)"))
-        for spirit in living { menu.addItem(rowItem(spirit)) }
+        for s in living {
+          menu.addItem(rowItem(s, label: byName[s.name]!, labelW: labelW, rowW: rowW))
+        }
       }
       if !wandering.isEmpty {
         menu.addItem(sectionHeader("Sheol (wandering)"))
-        for spirit in wandering { menu.addItem(rowItem(spirit)) }
+        for s in wandering {
+          menu.addItem(rowItem(s, label: byName[s.name]!, labelW: labelW, rowW: rowW))
+        }
       }
     }
 
@@ -470,19 +480,33 @@ final class SheolStatusItem: NSObject, NSMenuDelegate {
     menu.addItem(open)
   }
 
-  /// A session row is a custom view: the name (click = revive / attach in a new
-  /// iTerm window) plus trailing controls — a moon that sends a LIVING session
-  /// to sheol (detach), and a red ✕ that banishes it for good (guarded by a
-  /// confirm — the menu-bar stand-in for the TUI's ◆◆◇ ward).
-  private func rowItem(_ spirit: Spirit) -> NSMenuItem {
-    let item = NSMenuItem()
+  /// The two-tone row label: session name in the primary color, then a dimmed
+  /// "· command · quiet" trailer.
+  private static func rowLabel(for spirit: Spirit) -> NSAttributedString {
     let dot = spirit.isWandering ? "○ " : "● "
+    let s = NSMutableAttributedString(
+      string: dot + spirit.name,
+      attributes: [.foregroundColor: NSColor.labelColor, .font: NSFont.menuFont(ofSize: 0)])
+    s.append(
+      NSAttributedString(
+        string: "   ·  \(spirit.command) · \(spirit.quietFor)",
+        attributes: [
+          .foregroundColor: NSColor.secondaryLabelColor, .font: NSFont.menuFont(ofSize: 0),
+        ]))
+    return s
+  }
+
+  /// A session row is a custom view sized to `rowW`: the name (click = revive /
+  /// attach in a new iTerm window) plus trailing controls — a moon that sends a
+  /// LIVING session to sheol (detach), and a red ✕ that banishes it (triple-tap
+  /// arms the decaying ◆◆◇ ward, no dialog — the menu-bar echo of the TUI).
+  private func rowItem(
+    _ spirit: Spirit, label: NSAttributedString, labelW: CGFloat, rowW: CGFloat
+  ) -> NSMenuItem {
+    let item = NSMenuItem()
     item.view = SheolRow(
-      name: spirit.name,
-      title: dot + spirit.name,
-      subtitle: "   ·  \(spirit.command) · \(spirit.quietFor)",
-      isWandering: spirit.isWandering,
-      owner: self)
+      name: spirit.name, label: label, labelW: labelW, rowW: rowW,
+      isWandering: spirit.isWandering, owner: self)
     return item
   }
 
@@ -505,25 +529,27 @@ final class SheolStatusItem: NSObject, NSMenuDelegate {
     runCore(["detach", sender.sessionName])  // living -> sheol
   }
 
+  /// Banish is triple-tap, not a dialog: each ✕ tap decays the ◆◆◇ ward and
+  /// re-arms a short reset timer; the third tap within the window kills. The
+  /// menu stays open between taps (no cancelTracking until the kill). Mirrors
+  /// the TUI's d·d·d ward — irreversible, so it wants deliberate repetition.
   @objc fileprivate func killRow(_ sender: SheolRowButton) {
-    let name = sender.sessionName
-    statusItem?.menu?.cancelTracking()
-    // Let the menu close, then raise the confirm on the next tick.
-    DispatchQueue.main.async { [weak self] in
-      guard let self else { return }
-      let alert = NSAlert()
-      alert.alertStyle = .critical
-      alert.messageText = "Banish “\(name)”?"
-      alert.informativeText =
-        "This kills the tmux session for good — any unsaved work in it is lost. "
-        + "This can't be undone."
-      alert.addButton(withTitle: "Banish")
-      alert.addButton(withTitle: "Cancel")
-      NSApp.activate(ignoringOtherApps: true)
-      if alert.runModal() == .alertFirstButtonReturn {
-        self.runCore(["kill", name])
-      }
+    sender.wardTimer?.invalidate()
+    sender.wardTaps += 1
+    if sender.wardTaps >= 3 {
+      let name = sender.sessionName
+      sender.resetWard()
+      statusItem?.menu?.cancelTracking()
+      runCore(["kill", name])
+      return
     }
+    sender.showWard(remaining: 3 - sender.wardTaps)
+    // The reset timer must fire during menu tracking → .common run-loop mode.
+    let timer = Timer(timeInterval: 1.4, repeats: false) { [weak sender] _ in
+      sender?.resetWard()
+    }
+    RunLoop.main.add(timer, forMode: .common)
+    sender.wardTimer = timer
   }
 
   @objc private func openLedger() {
@@ -536,43 +562,62 @@ final class SheolStatusItem: NSObject, NSMenuDelegate {
   }
 }
 
-/// A menu-row button that remembers which session it acts on.
+/// A menu-row button that remembers its session and, for the kill ✕, holds the
+/// decaying-ward state (taps so far + the reset timer). `showWard`/`resetWard`
+/// swap the ✕ image for the ◆◆◇ ward glyphs and back.
 private final class SheolRowButton: NSButton {
   var sessionName = ""
+  var wardTaps = 0
+  var wardTimer: Timer?
+  private var restImage: NSImage?
+
+  /// Show `remaining` filled diamonds out of 3 (◆◆◇ → ◆◇◇) in place of the ✕.
+  func showWard(remaining: Int) {
+    if restImage == nil { restImage = image }
+    image = nil
+    imagePosition = .noImage
+    let glyphs = String(repeating: "◆", count: max(0, remaining))
+      + String(repeating: "◇", count: max(0, 3 - remaining))
+    attributedTitle = NSAttributedString(
+      string: glyphs,
+      attributes: [
+        .foregroundColor: NSColor.systemRed,
+        .font: NSFont.systemFont(ofSize: 10, weight: .bold),
+      ])
+    toolTip = "Tap \(remaining) more to banish"
+  }
+
+  /// Ward decayed or completed — restore the ✕.
+  func resetWard() {
+    wardTimer?.invalidate()
+    wardTimer = nil
+    wardTaps = 0
+    attributedTitle = NSAttributedString(string: "")
+    imagePosition = .imageOnly
+    image = restImage
+    toolTip = "Banish — tap 3× (◆◆◇ ward)"
+  }
 }
 
-/// The custom view for one sheol session row: a borderless name button (click
-/// = revive) and trailing icon buttons — a moon that sends a living session to
-/// sheol (detach) and a red ✕ that banishes it. Fixed width; long names
-/// truncate. All three buttons target the SheolStatusItem.
+/// The custom view for one sheol session row: a borderless name button (click =
+/// revive) plus trailing icon buttons — a moon that sends a living session to
+/// sheol (detach) and a red ✕ that banishes it via triple-tap. The view is
+/// sized to `rowW` so names never clip and the controls line up across rows.
 private final class SheolRow: NSView {
   init(
-    name: String, title: String, subtitle: String, isWandering: Bool,
-    owner: SheolStatusItem
+    name: String, label: NSAttributedString, labelW: CGFloat, rowW: CGFloat,
+    isWandering: Bool, owner: SheolStatusItem
   ) {
-    let w: CGFloat = 340, h: CGFloat = 22
-    super.init(frame: NSRect(x: 0, y: 0, width: w, height: h))
-    autoresizingMask = [.width]
+    let h: CGFloat = 22
+    super.init(frame: NSRect(x: 0, y: 0, width: rowW, height: h))
 
-    // Name — a borderless button filling the left; click revives/attaches.
-    let revive = SheolRowButton(frame: NSRect(x: 6, y: 0, width: w - 66, height: h))
+    // Name — borderless button sized to the measured label (no clipping).
+    let revive = SheolRowButton(frame: NSRect(x: 6, y: 0, width: labelW, height: h))
     revive.sessionName = name
     revive.isBordered = false
     revive.imagePosition = .noImage
     revive.alignment = .left
     (revive.cell as? NSButtonCell)?.lineBreakMode = .byTruncatingTail
-    let label = NSMutableAttributedString(
-      string: title,
-      attributes: [
-        .foregroundColor: NSColor.labelColor, .font: NSFont.menuFont(ofSize: 0),
-      ])
-    label.append(
-      NSAttributedString(
-        string: subtitle,
-        attributes: [
-          .foregroundColor: NSColor.secondaryLabelColor,
-          .font: NSFont.menuFont(ofSize: 0),
-        ]))
     revive.attributedTitle = label
     revive.target = owner
     revive.action = #selector(SheolStatusItem.reviveRow(_:))
@@ -580,27 +625,25 @@ private final class SheolRow: NSView {
       isWandering
       ? "Revive — reattach in a new iTerm window"
       : "Open another window attached to this session"
-    revive.autoresizingMask = [.width]
     addSubview(revive)
+
+    // Kill (banish) — the ✕, in red; wider than a plain icon so the ◆◆◇ ward
+    // fits when armed. Triple-tap handled in SheolStatusItem.killRow.
+    let kill = Self.icon("xmark.circle.fill", name: name, tip: "Banish — tap 3× (◆◆◇ ward)")
+    kill.contentTintColor = .systemRed
+    kill.frame = NSRect(x: rowW - 46, y: 1, width: 40, height: 20)
+    kill.target = owner
+    kill.action = #selector(SheolStatusItem.killRow(_:))
+    addSubview(kill)
 
     // Detach (send to sheol) — only meaningful for a living, attached session.
     if !isWandering {
       let detach = Self.icon("moon.zzz", name: name, tip: "Send to sheol (detach)")
-      detach.frame = NSRect(x: w - 52, y: 1, width: 22, height: 20)
+      detach.frame = NSRect(x: rowW - 74, y: 1, width: 22, height: 20)
       detach.target = owner
       detach.action = #selector(SheolStatusItem.detachRow(_:))
-      detach.autoresizingMask = [.minXMargin]
       addSubview(detach)
     }
-
-    // Kill (banish) — the ✕, in red; guarded by a confirm in the action.
-    let kill = Self.icon("xmark.circle.fill", name: name, tip: "Kill — banish for good")
-    kill.contentTintColor = .systemRed
-    kill.frame = NSRect(x: w - 26, y: 1, width: 22, height: 20)
-    kill.target = owner
-    kill.action = #selector(SheolStatusItem.killRow(_:))
-    kill.autoresizingMask = [.minXMargin]
-    addSubview(kill)
   }
 
   required init?(coder: NSCoder) { nil }

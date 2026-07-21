@@ -113,12 +113,15 @@ irreversible). No Enter-to-attach (was an accidental-dump footgun).
   live counts — **`active, invisible`** (attached sessions, then
   detached-but-running). Per owner's revised spec it's ALWAYS shown (`0, 0`
   when empty), not the auto-clearing version. Menu groups sessions
-  living/wandering; each row is a custom view — the name (click → `revive`,
-  attach in a new window) plus trailing controls: a **moon** that sends a living
-  session to sheol (`detach`) and a red **✕** that banishes it (`kill`, guarded
-  by a confirm — the menu-bar stand-in for the TUI's ◆◆◇ ward). "Open sheol
-  ledger…" still launches the full TUI. Polls `~/bin/sheol-core list --json`
-  every 5s. Sessions now carry evocative Halo-Monitor-style names
+  living/wandering; each row is a custom view sized to the widest name (so full
+  names never clip) — the name (click → `revive`, attach in a new window) plus
+  trailing controls: a **moon** that sends a living session to sheol (`detach`)
+  and a red **✕** that banishes it (`kill`) via **triple-tap** — each tap decays
+  the ◆◆◇ ward and re-arms a ~1.4s reset timer; the third kills. No dialog — the
+  menu-bar echo of the TUI's `d·d·d` ward (the menu stays open between taps; the
+  reset timer runs in `.common` mode so it fires during menu tracking). "Open
+  sheol ledger…" still launches the full TUI. Polls `~/bin/sheol-core list
+  --json` every 5s. Sessions now carry evocative Halo-Monitor-style names
   (`penitent-lich`, `umbral-sepulchre` — see `bin/tmux-name.sh`) instead of
   `ms-HHMMSS`, which reads far better in this ledger.
   **Load-bearing fix:** `sheol-core` now self-heals PATH + UTF-8 locale, since
