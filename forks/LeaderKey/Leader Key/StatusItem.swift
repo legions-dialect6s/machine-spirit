@@ -310,3 +310,200 @@ class StatusItem: NSObject, NSMenuDelegate {
     }
   }
 }
+
+// MARK: - Sheol tmux status item
+//
+// machine-spirit fork: a second menu-bar item beside the skull — the sheol
+// "nag" (design cache #15). Its title is two counts, "active, invisible":
+// sessions with a client attached (living), then detached-but-running sessions
+// (wandering spirits). Always shown — "0, 0" when nothing runs. Every tmux
+// touch goes through ~/bin/sheol-core, the SAME door the TUI
+// (bin/tmux-sheol.sh) and MachineSpirit.app use, so the three surfaces can
+// never disagree. Reads are cheap; the item polls on a timer and rebuilds its
+// menu (with a fresh read) each time it opens.
+final class SheolStatusItem: NSObject, NSMenuDelegate {
+  private var statusItem: NSStatusItem?
+  private var pollTimer: Timer?
+
+  private var home: URL { FileManager.default.homeDirectoryForCurrentUser }
+  private var corePath: String { home.appendingPathComponent("bin/sheol-core").path }
+  private var openerPath: String {
+    home.appendingPathComponent("bin/tmux-sheol-open.sh").path
+  }
+
+  /// One tmux session as sheol-core reports it (mirrors the app's Spirit).
+  private struct Spirit: Decodable {
+    let name: String
+    let attached: Int
+    let created: Int
+    let activity: Int
+    let command: String
+    var isWandering: Bool { attached == 0 }
+    var quietFor: String {
+      let s = max(0, Int(Date().timeIntervalSince1970) - activity)
+      let d = s / 86400, h = (s % 86400) / 3600, m = (s % 3600) / 60
+      if d > 0 { return "\(d)d\(h)h" }
+      if h > 0 { return "\(h)h\(m)m" }
+      return "\(m)m"
+    }
+  }
+
+  private var spirits: [Spirit] = []
+
+  func enable() {
+    guard statusItem == nil else { return }
+    let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+    if let button = item.button {
+      button.image = NSImage(
+        systemSymbolName: "terminal", accessibilityDescription: "tmux sessions")
+      button.image?.isTemplate = true
+      button.imagePosition = .imageLeading
+      button.title = " 0, 0"  // placeholder until the first poll returns
+    }
+    let menu = NSMenu()
+    menu.delegate = self
+    item.menu = menu
+    statusItem = item
+    refresh(background: true)  // non-blocking at launch
+
+    // Keep the counts live even without opening the menu. 5s is plenty for a
+    // menu-bar nag and stays far below any redraw-pileup concern.
+    let timer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) {
+      [weak self] _ in self?.refresh(background: true)
+    }
+    RunLoop.main.add(timer, forMode: .common)
+    pollTimer = timer
+  }
+
+  func disable() {
+    pollTimer?.invalidate()
+    pollTimer = nil
+    if let item = statusItem { NSStatusBar.system.removeStatusItem(item) }
+    statusItem = nil
+  }
+
+  // MARK: - Data (the process runs off-main; UI mutates on main)
+
+  private func refresh(background: Bool) {
+    if background {
+      DispatchQueue.global(qos: .utility).async { [weak self] in
+        guard let self else { return }
+        let fresh = Self.list(core: self.corePath)
+        DispatchQueue.main.async { self.apply(fresh) }
+      }
+    } else {
+      apply(Self.list(core: corePath))
+    }
+  }
+
+  private func apply(_ fresh: [Spirit]) {
+    spirits = fresh
+    let active = fresh.filter { !$0.isWandering }.count
+    let invisible = fresh.filter { $0.isWandering }.count
+    statusItem?.button?.title = " \(active), \(invisible)"
+    statusItem?.button?.toolTip =
+      "tmux — \(active) active, \(invisible) running but hidden (detached)"
+  }
+
+  private static func list(core: String) -> [Spirit] {
+    guard FileManager.default.isExecutableFile(atPath: core) else { return [] }
+    let task = Process()
+    task.executableURL = URL(fileURLWithPath: core)
+    task.arguments = ["list", "--json"]
+    let out = Pipe()
+    task.standardOutput = out
+    task.standardError = Pipe()
+    do {
+      try task.run()
+      let data = out.fileHandleForReading.readDataToEndOfFile()
+      task.waitUntilExit()
+      return (try? JSONDecoder().decode([Spirit].self, from: data)) ?? []
+    } catch {
+      return []
+    }
+  }
+
+  /// Fire-and-forget a sheol-core verb (revive/detach) off the main thread.
+  private func runCore(_ args: [String]) {
+    let core = corePath
+    guard FileManager.default.isExecutableFile(atPath: core) else { return }
+    DispatchQueue.global(qos: .userInitiated).async {
+      let task = Process()
+      task.executableURL = URL(fileURLWithPath: core)
+      task.arguments = args
+      task.standardOutput = FileHandle.nullDevice
+      task.standardError = FileHandle.nullDevice
+      try? task.run()
+    }
+  }
+
+  // MARK: - Menu (rebuilt fresh on every open)
+
+  func menuNeedsUpdate(_ menu: NSMenu) {
+    apply(Self.list(core: corePath))  // accurate the instant it appears
+    menu.removeAllItems()
+
+    let living = spirits.filter { !$0.isWandering }
+    let wandering = spirits.filter { $0.isWandering }
+    menu.addItem(
+      sectionHeader("Sheol — \(living.count) living · \(wandering.count) wandering"))
+
+    if spirits.isEmpty {
+      let none = NSMenuItem(title: "No tmux sessions", action: nil, keyEquivalent: "")
+      none.isEnabled = false
+      menu.addItem(none)
+    } else {
+      if !living.isEmpty {
+        menu.addItem(sectionHeader("Living (attached)"))
+        for spirit in living { menu.addItem(sessionItem(spirit, glyph: "●")) }
+      }
+      if !wandering.isEmpty {
+        menu.addItem(sectionHeader("Sheol (wandering)"))
+        for spirit in wandering { menu.addItem(sessionItem(spirit, glyph: "○")) }
+      }
+    }
+
+    menu.addItem(.separator())
+    let open = NSMenuItem(
+      title: "Open sheol ledger…", action: #selector(openLedger), keyEquivalent: "")
+    open.target = self
+    menu.addItem(open)
+  }
+
+  /// A session row: click reattaches it in a new iTerm window (revive). For a
+  /// living session that's a second view; for a wandering one it's a revival.
+  /// Irreversible verbs (banish) stay in the full ledger, behind its ◆◆◇ ward.
+  private func sessionItem(_ spirit: Spirit, glyph: String) -> NSMenuItem {
+    let title = "\(glyph)  \(spirit.name)   ·   \(spirit.command)  ·  \(spirit.quietFor)"
+    let item = NSMenuItem(
+      title: title, action: #selector(reviveSession(_:)), keyEquivalent: "")
+    item.target = self
+    item.representedObject = spirit.name
+    item.toolTip =
+      spirit.isWandering
+      ? "Revive — reattach this spirit in a new iTerm window"
+      : "Open another iTerm window attached to this session"
+    return item
+  }
+
+  private func sectionHeader(_ title: String) -> NSMenuItem {
+    if #available(macOS 14.0, *) { return NSMenuItem.sectionHeader(title: title) }
+    let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+    item.isEnabled = false
+    return item
+  }
+
+  @objc private func reviveSession(_ sender: NSMenuItem) {
+    guard let name = sender.representedObject as? String else { return }
+    runCore(["revive", name])
+  }
+
+  @objc private func openLedger() {
+    guard FileManager.default.isExecutableFile(atPath: openerPath) else { return }
+    let task = Process()
+    task.executableURL = URL(fileURLWithPath: openerPath)
+    task.standardOutput = FileHandle.nullDevice
+    task.standardError = FileHandle.nullDevice
+    try? task.run()
+  }
+}

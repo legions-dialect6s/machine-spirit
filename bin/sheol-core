@@ -19,6 +19,14 @@
 
 set -u
 
+# GUI callers (MachineSpirit.app, the fork's menu-bar tmux item) are spawned by
+# launchd with neither Homebrew on PATH nor a UTF-8 locale. Without the former
+# `tmux` isn't found; without the latter zsh's `IFS=$'\x1f' read` won't split
+# the field stream (every row collapses into one field, so counts read 0). Make
+# the core self-sufficient so the TUI, app, and fork can never disagree.
+export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+[[ "${LC_ALL:-${LANG:-}}" == *[Uu][Tt][Ff]* ]] || export LC_ALL="en_US.UTF-8"
+
 US=$'\x1f'
 FMT="#{session_name}${US}#{session_attached}${US}#{session_created}${US}#{session_activity}${US}#{pane_current_command}"
 HERE="${0:A:h}"

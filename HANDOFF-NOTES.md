@@ -107,6 +107,19 @@ irreversible). No Enter-to-attach (was an accidental-dump footgun).
 - The **nag** — a Dock/menu-bar presence that shows ONLY while spirits wander,
   hard to forget, auto-clears when empty. Needs a GUI agent, not a terminal
   script → the app's job, with a first-class GUI ledger tab.
+  **v1 SHIPPED 2026-07-19 (in the FORK, not the app — owner's call, since the
+  fork is the always-on menu-bar agent):** a second menu-bar item beside the
+  skull (`SheolStatusItem` in the fork's `StatusItem.swift`) whose title is two
+  live counts — **`active, invisible`** (attached sessions, then
+  detached-but-running). Per owner's revised spec it's ALWAYS shown (`0, 0`
+  when empty), not the auto-clearing version. Menu lists sessions grouped
+  living/wandering; click a row → `sheol-core revive` (open/attach a window);
+  "Open sheol ledger…" launches the full TUI (irreversible **banish** stays
+  there, behind its ◆◆◇ ward). Polls `~/bin/sheol-core list --json` every 5s.
+  **Load-bearing fix:** `sheol-core` now self-heals PATH + UTF-8 locale, since
+  launchd-spawned GUI callers inherit neither — without it every GUI caller
+  (this item AND the app's `SheolService`) silently read `0`. A first-class GUI
+  ledger tab in the app is still the richer future.
 - **Non-tmux "fragile" panes in the ledger** — list EVERY terminal + its state
   (fragile/basic · tmux-hardened · living · dead spirit). Needs iTerm's API to
   enumerate panes and cross-check tmux membership.

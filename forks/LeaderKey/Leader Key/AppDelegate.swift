@@ -17,6 +17,10 @@ class AppDelegate: NSObject, NSApplicationDelegate,
   var controller: Controller!
 
   let statusItem = StatusItem()
+  // machine-spirit fork: the sheol tmux nag (design cache #15) — a second
+  // menu-bar item showing "active, invisible" session counts, shown/hidden
+  // with the skull.
+  let sheolStatusItem = SheolStatusItem()
   let config = UserConfig()
   // machine-spirit fork: hot-reload — config edits land without a restart.
   let configMonitor = ConfigFileMonitor()
@@ -91,17 +95,21 @@ class AppDelegate: NSObject, NSApplicationDelegate,
       for await value in Defaults.updates(.showMenuBarIcon) {
         if value {
           self.statusItem.enable()
+          self.sheolStatusItem.enable()
         } else {
           self.statusItem.disable()
+          self.sheolStatusItem.disable()
         }
       }
     }
 
-    // Initialize status item according to current preference
+    // Initialize status items according to current preference
     if Defaults[.showMenuBarIcon] {
       statusItem.enable()
+      sheolStatusItem.enable()
     } else {
       statusItem.disable()
+      sheolStatusItem.disable()
     }
 
     // Activation policy is managed solely by the Settings window
