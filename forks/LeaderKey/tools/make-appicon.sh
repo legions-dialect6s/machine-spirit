@@ -21,7 +21,14 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ASSETS="$HERE/../Leader Key/Assets.xcassets"
 SRC_PDF="$ASSETS/StatusItem.imageset/StatusItem Copy.pdf"   # crisp vector silhouette
-OUT="$ASSETS/AppIcon.appiconset"
+
+# The skull is the ONE machine-spirit identity — emitted to both bundles:
+#   the launcher fork (menu-bar agent) and the MachineSpirit node-graph app.
+# One source, one mark, so the suite reads as a single product in Dock + menu bar.
+OUTS=(
+  "$ASSETS/AppIcon.appiconset"                               # fork (launcher)
+  "$HERE/../../../app/MachineSpirit/Assets.xcassets/AppIcon.appiconset"  # node-graph app
+)
 
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 
@@ -60,18 +67,9 @@ magick -size ${CANVAS}x${CANVAS} xc:none \
   \(  "$TMP/tile_full.png" \)                                    -gravity northwest -geometry +${MARGIN}+${MARGIN} -composite \
   "$TMP/master.png"
 
-# 5) Emit every size the catalog needs (mild unsharp keeps the skull crisp when tiny).
-rm -f "$OUT"/icon_*.png
-for s in 16 32 64 128 256 512 1024; do
-  if [ "$s" -le 64 ]; then
-    magick "$TMP/master.png" -filter Lanczos -resize ${s}x${s} -unsharp 0x0.6+0.6+0 -depth 8 -strip "$OUT/icon_${s}.png"
-  else
-    magick "$TMP/master.png" -filter Lanczos -resize ${s}x${s} -depth 8 -strip "$OUT/icon_${s}.png"
-  fi
-done
-
-# 6) Contents.json — mac idiom, 16..512pt @1x/@2x. Same file may back two entries.
-cat > "$OUT/Contents.json" <<'JSON'
+# 5) Emit every size + Contents.json into each target bundle.
+#    (mild unsharp keeps the skull crisp when tiny; same file backs two entries.)
+read -r -d '' CONTENTS_JSON <<'JSON' || true
 {
   "images" : [
     { "filename" : "icon_16.png",   "idiom" : "mac", "scale" : "1x", "size" : "16x16" },
@@ -89,5 +87,16 @@ cat > "$OUT/Contents.json" <<'JSON'
 }
 JSON
 
-echo "AppIcon regenerated in: $OUT"
-ls -1 "$OUT"
+for OUT in "${OUTS[@]}"; do
+  [ -d "$OUT" ] || { echo "skip (no such iconset): $OUT"; continue; }
+  rm -f "$OUT"/icon_*.png
+  for s in 16 32 64 128 256 512 1024; do
+    if [ "$s" -le 64 ]; then
+      magick "$TMP/master.png" -filter Lanczos -resize ${s}x${s} -unsharp 0x0.6+0.6+0 -depth 8 -strip "$OUT/icon_${s}.png"
+    else
+      magick "$TMP/master.png" -filter Lanczos -resize ${s}x${s} -depth 8 -strip "$OUT/icon_${s}.png"
+    fi
+  done
+  printf '%s\n' "$CONTENTS_JSON" > "$OUT/Contents.json"
+  echo "AppIcon regenerated in: $OUT"
+done
