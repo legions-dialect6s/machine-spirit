@@ -109,10 +109,18 @@ irreversible). No Enter-to-attach (was an accidental-dump footgun).
   script → the app's job, with a first-class GUI ledger tab.
   **v1 SHIPPED 2026-07-19 (in the FORK, not the app — owner's call, since the
   fork is the always-on menu-bar agent):** a second menu-bar item beside the
-  skull (`SheolStatusItem` in the fork's `StatusItem.swift`) whose title is two
-  live counts — **`active, invisible`** (attached sessions, then
-  detached-but-running). Per owner's revised spec it's ALWAYS shown (`0, 0`
-  when empty), not the auto-clearing version. Menu groups sessions
+  skull (`SheolStatusItem` in the fork's `StatusItem.swift`). **Grown 2026-07-21
+  into a terminal+tmux ledger** — the title is now THREE counts,
+  **`terminals · tmux-live · tmux-detached`**, and the menu gained a bottom
+  **Terminals** section listing every live iTerm session (click → focus/raise
+  that window). Terminals come through a new `bin/terminals-core` (iTerm2
+  scripting API — the same door for terminals that sheol-core is for tmux; it
+  never launches iTerm, gated on `application … is running`, and `focus` raises
+  a window with pure iTerm `select` so no System Events grant is needed).
+  Terminals poll every 8s (an Apple Event), tmux every 5s. "or other" terminal
+  apps beyond iTerm are a future add. Per owner's revised spec the tmux counts
+  are ALWAYS shown (`0` when empty), not the auto-clearing version. Menu groups
+  sessions
   living/wandering; each row is a custom view sized to the widest name (so full
   names never clip) — the name (click → `revive`, attach in a new window) plus
   trailing controls: a **moon** that sends a living session to sheol (`detach`)

@@ -311,16 +311,18 @@ class StatusItem: NSObject, NSMenuDelegate {
   }
 }
 
-// MARK: - Sheol tmux status item
+// MARK: - Sheol / terminal status item
 //
-// machine-spirit fork: a second menu-bar item beside the skull — the sheol
-// "nag" (design cache #15). Its title is two counts, "active, invisible":
-// sessions with a client attached (living), then detached-but-running sessions
-// (wandering spirits). Always shown — "0, 0" when nothing runs. Every tmux
-// touch goes through ~/bin/sheol-core, the SAME door the TUI
-// (bin/tmux-sheol.sh) and MachineSpirit.app use, so the three surfaces can
-// never disagree. Reads are cheap; the item polls on a timer and rebuilds its
-// menu (with a fresh read) each time it opens.
+// machine-spirit fork: a second menu-bar item beside the skull — the terminal +
+// tmux ledger (design cache #15). Its title is three counts,
+// "terminals · tmux-live · tmux-detached": all live iTerm sessions, then tmux
+// sessions with a client attached (living), then detached-but-running ones
+// (wandering spirits). The menu lists the tmux sections (revive / detach / ✕
+// banish) and, at the bottom, every live terminal (click to focus). tmux reads
+// go through ~/bin/sheol-core and terminal reads through ~/bin/terminals-core —
+// the SAME doors the TUI and MachineSpirit.app use, so the surfaces can never
+// disagree. tmux is polled every 5s; terminals (an Apple Event to iTerm) every
+// 8s. The menu rebuilds with a fresh tmux read each open.
 final class SheolStatusItem: NSObject, NSMenuDelegate {
   private var statusItem: NSStatusItem?
   private var pollTimer: Timer?
@@ -350,34 +352,56 @@ final class SheolStatusItem: NSObject, NSMenuDelegate {
 
   private var spirits: [Spirit] = []
 
+  // Live terminals (iTerm sessions) via ~/bin/terminals-core — the first count
+  // in the title and the "Terminals" menu section. Terminal reads go through
+  // that helper the way tmux reads go through sheol-core.
+  private var termPath: String { home.appendingPathComponent("bin/terminals-core").path }
+  private struct Terminal: Decodable {
+    let id: String
+    let tty: String
+    let name: String
+    let isTmux: Bool
+  }
+  private var terminals: [Terminal] = []
+  private var termPollTimer: Timer?
+
   func enable() {
     guard statusItem == nil else { return }
     let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     if let button = item.button {
       button.image = NSImage(
-        systemSymbolName: "terminal", accessibilityDescription: "tmux sessions")
+        systemSymbolName: "terminal", accessibilityDescription: "terminals + tmux")
       button.image?.isTemplate = true
       button.imagePosition = .imageLeading
-      button.title = " 0, 0"  // placeholder until the first poll returns
+      button.title = " 0 · 0 · 0"  // terminals · tmux-live · tmux-detached
     }
     let menu = NSMenu()
     menu.delegate = self
     item.menu = menu
     statusItem = item
-    refresh(background: true)  // non-blocking at launch
+    refresh(background: true)  // tmux — cheap
+    refreshTerminals(background: true)  // terminals — osascript, off-main
 
-    // Keep the counts live even without opening the menu. 5s is plenty for a
-    // menu-bar nag and stays far below any redraw-pileup concern.
+    // Keep the counts live even without opening the menu. tmux is cheap (5s);
+    // the terminal enumeration is an Apple Event to iTerm, so poll it slower.
     let timer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) {
       [weak self] _ in self?.refresh(background: true)
     }
     RunLoop.main.add(timer, forMode: .common)
     pollTimer = timer
+
+    let tTimer = Timer.scheduledTimer(withTimeInterval: 8, repeats: true) {
+      [weak self] _ in self?.refreshTerminals(background: true)
+    }
+    RunLoop.main.add(tTimer, forMode: .common)
+    termPollTimer = tTimer
   }
 
   func disable() {
     pollTimer?.invalidate()
     pollTimer = nil
+    termPollTimer?.invalidate()
+    termPollTimer = nil
     if let item = statusItem { NSStatusBar.system.removeStatusItem(item) }
     statusItem = nil
   }
@@ -398,11 +422,33 @@ final class SheolStatusItem: NSObject, NSMenuDelegate {
 
   private func apply(_ fresh: [Spirit]) {
     spirits = fresh
-    let active = fresh.filter { !$0.isWandering }.count
-    let invisible = fresh.filter { $0.isWandering }.count
-    statusItem?.button?.title = " \(active), \(invisible)"
+    updateTitle()
+  }
+
+  private func refreshTerminals(background: Bool) {
+    if background {
+      DispatchQueue.global(qos: .utility).async { [weak self] in
+        guard let self else { return }
+        let terms = Self.listTerminals(core: self.termPath)
+        DispatchQueue.main.async {
+          self.terminals = terms
+          self.updateTitle()
+        }
+      }
+    } else {
+      terminals = Self.listTerminals(core: termPath)
+      updateTitle()
+    }
+  }
+
+  /// The title is three counts: live terminals · live tmux · detached tmux.
+  private func updateTitle() {
+    let liveTmux = spirits.filter { !$0.isWandering }.count
+    let deadTmux = spirits.filter { $0.isWandering }.count
+    let terms = terminals.count
+    statusItem?.button?.title = " \(terms) · \(liveTmux) · \(deadTmux)"
     statusItem?.button?.toolTip =
-      "tmux — \(active) active, \(invisible) running but hidden (detached)"
+      "\(terms) terminals · \(liveTmux) tmux live · \(deadTmux) tmux detached (running, hidden)"
   }
 
   private static func list(core: String) -> [Spirit] {
@@ -420,6 +466,38 @@ final class SheolStatusItem: NSObject, NSMenuDelegate {
       return (try? JSONDecoder().decode([Spirit].self, from: data)) ?? []
     } catch {
       return []
+    }
+  }
+
+  private static func listTerminals(core: String) -> [Terminal] {
+    guard FileManager.default.isExecutableFile(atPath: core) else { return [] }
+    let task = Process()
+    task.executableURL = URL(fileURLWithPath: core)
+    task.arguments = ["list", "--json"]
+    let out = Pipe()
+    task.standardOutput = out
+    task.standardError = Pipe()
+    do {
+      try task.run()
+      let data = out.fileHandleForReading.readDataToEndOfFile()
+      task.waitUntilExit()
+      return (try? JSONDecoder().decode([Terminal].self, from: data)) ?? []
+    } catch {
+      return []
+    }
+  }
+
+  /// Fire-and-forget a terminals-core verb (focus) off the main thread.
+  private func runTerm(_ args: [String]) {
+    let core = termPath
+    guard FileManager.default.isExecutableFile(atPath: core) else { return }
+    DispatchQueue.global(qos: .userInitiated).async {
+      let task = Process()
+      task.executableURL = URL(fileURLWithPath: core)
+      task.arguments = args
+      task.standardOutput = FileHandle.nullDevice
+      task.standardError = FileHandle.nullDevice
+      try? task.run()
     }
   }
 
@@ -478,6 +556,35 @@ final class SheolStatusItem: NSObject, NSMenuDelegate {
       title: "Open sheol ledger…", action: #selector(openLedger), keyEquivalent: "")
     open.target = self
     menu.addItem(open)
+
+    // ---- Terminals: every live iTerm session, click to focus ----
+    menu.addItem(.separator())
+    menu.addItem(sectionHeader("Terminals — \(terminals.count) live"))
+    if terminals.isEmpty {
+      let none = NSMenuItem(title: "No terminals", action: nil, keyEquivalent: "")
+      none.isEnabled = false
+      menu.addItem(none)
+    } else {
+      for term in terminals {
+        var label = term.name.replacingOccurrences(of: "\n", with: " ")
+        if label.count > 52 { label = String(label.prefix(51)) + "…" }
+        let item = NSMenuItem(
+          title: (term.isTmux ? "⧉  " : "❯  ") + label,
+          action: #selector(focusTerminal(_:)), keyEquivalent: "")
+        item.target = self
+        item.representedObject = term.id
+        item.toolTip = "\(term.tty)\(term.isTmux ? " · tmux client" : "") — click to focus"
+        menu.addItem(item)
+      }
+    }
+    // Enumerating iTerm is an Apple Event (too slow to block the menu on), so
+    // the list here is the last poll; freshen it for the next open.
+    refreshTerminals(background: true)
+  }
+
+  @objc private func focusTerminal(_ sender: NSMenuItem) {
+    guard let id = sender.representedObject as? String else { return }
+    runTerm(["focus", id])
   }
 
   /// The two-tone row label: session name in the primary color, then a dimmed

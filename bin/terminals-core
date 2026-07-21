@@ -1,0 +1,106 @@
+#!/bin/zsh
+# terminals-core — enumerate live terminal sessions and focus one, for the
+# menu-bar ledger. The single door the fork's "Terminals" section uses, the way
+# sheol-core is the single door for tmux. iTerm2 for now (its scripting API
+# gives a stable per-session id + tty + name); "or other" terminal apps are a
+# future add.
+#
+#   terminals-core list          one line per iTerm session, \x1f-delimited:
+#                                id US tty US name
+#   terminals-core list --json   the same as a JSON array {id,tty,name,isTmux}
+#   terminals-core focus <id>    select that session's tab + raise iTerm
+#
+# Never launches iTerm: the enumeration is gated on `application … is running`
+# (a plain `tell` would start it), so the fork can poll safely when iTerm is
+# closed (→ zero terminals).
+set -u
+
+# GUI callers (the fork under launchd) inherit no Homebrew PATH / UTF-8 locale;
+# the latter is needed for zsh's IFS=$'\x1f' read to split the field stream.
+export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+[[ "${LC_ALL:-${LANG:-}}" == *[Uu][Tt][Ff]* ]] || export LC_ALL="en_US.UTF-8"
+
+US=$'\x1f'
+
+json_escape() {
+  local s=$1
+  s=${s//\\/\\\\}
+  s=${s//\"/\\\"}
+  s=${s//$'\t'/\\t}
+  s=${s//$'\r'/\\r}
+  s=${s//$'\n'/\\n}
+  print -rn -- "$s"
+}
+
+verb="${1:-}"
+case "$verb" in
+  list)
+    lines=$(/usr/bin/osascript <<OSA
+if application "iTerm2" is running then
+  tell application "iTerm2"
+    set out to ""
+    repeat with w in windows
+      repeat with t in tabs of w
+        repeat with s in sessions of t
+          set out to out & (id of s) & "$US" & (tty of s) & "$US" & (name of s) & linefeed
+        end repeat
+      end repeat
+    end repeat
+    return out
+  end tell
+else
+  return ""
+end if
+OSA
+)
+    if [[ "${2:-}" == "--json" ]]; then
+      print -n '['
+      local first=1 id tty name isTmux
+      print -r -- "$lines" | while IFS="$US" read -r id tty name; do
+        [[ -z "$id" ]] && continue
+        isTmux=false
+        [[ "$name" == tmux* ]] && isTmux=true
+        (( first )) || print -n ','
+        first=0
+        print -rn -- "{\"id\":\"$(json_escape "$id")\",\"tty\":\"$(json_escape "$tty")\",\"name\":\"$(json_escape "$name")\",\"isTmux\":${isTmux}}"
+      done
+      print ']'
+    else
+      print -r -- "$lines"
+    fi
+    exit 0
+    ;;
+  focus)
+    id="${2:-}"
+    [[ -z "$id" ]] && exit 0
+    # Pure iTerm: `select` on the session, its tab, AND its window raises that
+    # window to the front (no System Events / Accessibility needed — so it works
+    # from the fork, which drives iTerm but not System Events). `activate` then
+    # brings iTerm forward.
+    /usr/bin/osascript - "$id" <<'OSA'
+on run argv
+  set theID to (item 1 of argv)
+  if not (application "iTerm2" is running) then return
+  tell application "iTerm2"
+    repeat with w in windows
+      repeat with t in tabs of w
+        repeat with s in sessions of t
+          if (id of s) is theID then
+            select s
+            select t
+            select w
+          end if
+        end repeat
+      end repeat
+    end repeat
+    activate
+  end tell
+end run
+OSA
+    exit 0
+    ;;
+  *)
+    print -u2 "terminals-core: list [--json] | focus <id>"
+    exit 0
+    ;;
+esac
