@@ -464,6 +464,9 @@ final class AppState {
   private func inscribe(_ next: Node) throws {
     let report = try ConfigWriter().write(next, to: LeaderKeyImporter.liveConfigURL)
     communeWithLiveConfig()
+    // The pen just wrote this truth — record its mtime so the live-config
+    // watcher doesn't treat our own write as an out-of-band edit and re-import.
+    lastConfigMTime = Self.configMTime()
     penError = nil
     penMark = PenMark(lines: report.summary, backupPath: report.backupPath)
     disturb()
@@ -538,6 +541,7 @@ final class AppState {
     }
     glideTask?.cancel()
     sheolPollTask?.cancel()
+    configPollTask?.cancel()
     bindFireCleanup?.cancel()
     penFadeTask?.cancel()
   }
@@ -646,5 +650,59 @@ final class AppState {
         try? await Task.sleep(for: .seconds(2))
       }
     }
+  }
+
+  // MARK: - Live config watch — both surfaces stay in step
+
+  @ObservationIgnored private var configPollTask: Task<Void, Never>?
+  @ObservationIgnored fileprivate var lastConfigMTime: Date?
+
+  /// Re-import the live config whenever it changes underneath us — an edit in
+  /// the fork's Settings UI, a hand edit, or another machine-spirit surface —
+  /// so the graph and the launcher never drift. A cheap mtime poll: robust
+  /// against the atomic replace (write-temp-then-rename) that defeats
+  /// fd-based watchers. The pen's own writes are excluded (see `inscribe`).
+  func startConfigPolling() {
+    guard configPollTask == nil else { return }
+    lastConfigMTime = Self.configMTime()
+    configPollTask = Task { [weak self] in
+      while !Task.isCancelled {
+        try? await Task.sleep(for: .milliseconds(1200))
+        guard let self else { return }
+        let mtime = Self.configMTime()
+        if let mtime, mtime != self.lastConfigMTime {
+          self.lastConfigMTime = mtime
+          self.communeWithLiveConfig()
+          self.bootStamp = Date()  // regrow the traces so a live edit is felt
+          self.disturb()
+        }
+      }
+    }
+  }
+
+  fileprivate static func configMTime() -> Date? {
+    (try? FileManager.default.attributesOfItem(
+      atPath: LeaderKeyImporter.liveConfigURL.path))?[.modificationDate] as? Date
+  }
+
+  // MARK: - Launcher control (open the fork from the app, for testing)
+
+  /// Restart the Leader Key launcher (the fork) in place — the quick way to
+  /// test a fresh build or kick it after a change. No-op if it isn't the
+  /// managed LaunchAgent (try? swallows the failure).
+  func relaunchLauncher() {
+    let task = Process()
+    task.executableURL = URL(fileURLWithPath: "/bin/launchctl")
+    task.arguments = ["kickstart", "-k", "gui/\(getuid())/com.machinespirit.leader-key"]
+    task.standardOutput = FileHandle.nullDevice
+    task.standardError = FileHandle.nullDevice
+    try? task.run()
+  }
+
+  /// Pop the launcher's own Settings window (via its URL scheme — the fork
+  /// resolves `msleaderkey://` to the running daily driver, per #37).
+  func openLauncherSettings() {
+    guard let url = URL(string: "msleaderkey://settings") else { return }
+    NSWorkspace.shared.open(url)
   }
 }

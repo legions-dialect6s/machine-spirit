@@ -17,6 +17,7 @@ struct MachineSpiritApp: App {
           state.installKeyMonitor()
           state.installScrollMonitor()
           state.startSheolPolling()
+          state.startConfigPolling()
         }
         // The fired ping (#36): machinespirit://fired?path=s/s/w/s —
         // the board pulses the route of the bind that just ran. The
@@ -32,5 +33,14 @@ struct MachineSpiritApp: App {
         }
     }
     .defaultSize(width: 1440, height: 900)
+    .commands {
+      // Open/relaunch the Leader Key launcher (the fork) from the app — the
+      // suite is two processes that share one live config; this is the bridge
+      // for testing a config edit or a fresh build without the terminal.
+      CommandMenu("Launcher") {
+        Button("Relaunch Leader Key") { state.relaunchLauncher() }
+        Button("Open Leader Key Settings") { state.openLauncherSettings() }
+      }
+    }
   }
 }
