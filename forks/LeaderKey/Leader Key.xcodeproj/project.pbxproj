@@ -32,6 +32,7 @@
 		427C18282BD31E2E00955B98 /* GeneralPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = 427C18242BD31E2E00955B98 /* GeneralPane.swift */; };
 		427C18292BD31E2E00955B98 /* MainWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 427C18252BD31E2E00955B98 /* MainWindow.swift */; };
 		427C182A2BD31E2E00955B98 /* StatusItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 427C18262BD31E2E00955B98 /* StatusItem.swift */; };
+		A1B2C3D40000000000000002 /* MemoryPressureStatusItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D40000000000000001 /* MemoryPressureStatusItem.swift */; };
 		427C182B2BD31E2E00955B98 /* Controller.swift in Sources */ = {isa = PBXBuildFile; fileRef = 427C18272BD31E2E00955B98 /* Controller.swift */; };
 		427C182D2BD31F9500955B98 /* Settings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 427C182C2BD31F9500955B98 /* Settings.swift */; };
 		427C182F2BD3206200955B98 /* UserState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 427C182E2BD3206200955B98 /* UserState.swift */; };
@@ -94,6 +95,7 @@
 		427C18242BD31E2E00955B98 /* GeneralPane.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = GeneralPane.swift; sourceTree = "<group>"; };
 		427C18252BD31E2E00955B98 /* MainWindow.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = MainWindow.swift; sourceTree = "<group>"; };
 		427C18262BD31E2E00955B98 /* StatusItem.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = StatusItem.swift; sourceTree = "<group>"; };
+		A1B2C3D40000000000000001 /* MemoryPressureStatusItem.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = MemoryPressureStatusItem.swift; sourceTree = "<group>"; };
 		427C18272BD31E2E00955B98 /* Controller.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Controller.swift; sourceTree = "<group>"; };
 		427C182C2BD31F9500955B98 /* Settings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Settings.swift; sourceTree = "<group>"; };
 		427C182E2BD3206200955B98 /* UserState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserState.swift; sourceTree = "<group>"; };
@@ -202,6 +204,7 @@
 				427C18532BD6E59300955B98 /* NSWindow+Animations.swift */,
 				427C182C2BD31F9500955B98 /* Settings.swift */,
 				427C18262BD31E2E00955B98 /* StatusItem.swift */,
+				A1B2C3D40000000000000001 /* MemoryPressureStatusItem.swift */,
 				423632272D6A806700878D92 /* Theme.swift */,
 				427C183A2BD329F900955B98 /* UserConfig.swift */,
 				427C182E2BD3206200955B98 /* UserState.swift */,
@@ -443,6 +446,7 @@
 				73192AF63CAF425397D7C0D1 /* URLSchemeHandler.swift in Sources */,
 				427C18502BD6652500955B98 /* Util.swift in Sources */,
 				427C182A2BD31E2E00955B98 /* StatusItem.swift in Sources */,
+				A1B2C3D40000000000000002 /* MemoryPressureStatusItem.swift in Sources */,
 				42F4CDCD2D45B13600D0DD76 /* KeyButton.swift in Sources */,
 				606C56EF2DAB875A00198B9F /* Cheater.swift in Sources */,
 				427C181C2BD314B500955B98 /* Constants.swift in Sources */,

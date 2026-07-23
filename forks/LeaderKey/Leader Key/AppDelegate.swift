@@ -21,6 +21,10 @@ class AppDelegate: NSObject, NSApplicationDelegate,
   // menu-bar item showing "active, invisible" session counts, shown/hidden
   // with the skull.
   let sheolStatusItem = SheolStatusItem()
+  // machine-spirit fork: the menu-bar memory-pressure gauge — a syscall-cheap
+  // readout of the VM's real stress level (distinct from Stats' RAM %), shown/
+  // hidden with the skull.
+  let memoryStatusItem = MemoryPressureStatusItem()
   let config = UserConfig()
   // machine-spirit fork: hot-reload — config edits land without a restart.
   let configMonitor = ConfigFileMonitor()
@@ -96,9 +100,11 @@ class AppDelegate: NSObject, NSApplicationDelegate,
         if value {
           self.statusItem.enable()
           self.sheolStatusItem.enable()
+          self.memoryStatusItem.enable()
         } else {
           self.statusItem.disable()
           self.sheolStatusItem.disable()
+          self.memoryStatusItem.disable()
         }
       }
     }
@@ -107,9 +113,11 @@ class AppDelegate: NSObject, NSApplicationDelegate,
     if Defaults[.showMenuBarIcon] {
       statusItem.enable()
       sheolStatusItem.enable()
+      memoryStatusItem.enable()
     } else {
       statusItem.disable()
       sheolStatusItem.disable()
+      memoryStatusItem.disable()
     }
 
     // Activation policy is managed solely by the Settings window
