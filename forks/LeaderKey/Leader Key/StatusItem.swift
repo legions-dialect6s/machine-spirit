@@ -365,6 +365,11 @@ final class SheolStatusItem: NSObject, NSMenuDelegate {
   private var terminals: [Terminal] = []
   private var termPollTimer: Timer?
 
+  // Section-header items captured on menu build, so a banish can hide an
+  // emptied section in place (the ledger stays open across successive kills).
+  private weak var livingHeaderItem: NSMenuItem?
+  private weak var wanderingHeaderItem: NSMenuItem?
+
   func enable() {
     guard statusItem == nil else { return }
     let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -538,12 +543,18 @@ final class SheolStatusItem: NSObject, NSMenuDelegate {
       let labelW = min(
         360, ceil(spirits.map { Self.rowLabel(for: $0).size().width }.max() ?? 120))
       let rowW = labelW + 92  // label + gaps + detach slot + kill/ward slot + pad
+      livingHeaderItem = nil
+      wanderingHeaderItem = nil
       if !living.isEmpty {
-        menu.addItem(sectionHeader("Living (attached)"))
+        let h = sectionHeader("Living (attached)")
+        livingHeaderItem = h
+        menu.addItem(h)
         for s in living { menu.addItem(rowItem(s, labelW: labelW, rowW: rowW)) }
       }
       if !wandering.isEmpty {
-        menu.addItem(sectionHeader("Sheol (wandering)"))
+        let h = sectionHeader("Sheol (wandering)")
+        wanderingHeaderItem = h
+        menu.addItem(h)
         for s in wandering { menu.addItem(rowItem(s, labelW: labelW, rowW: rowW)) }
       }
     }
@@ -623,8 +634,9 @@ final class SheolStatusItem: NSObject, NSMenuDelegate {
     return item
   }
 
-  // Row actions. Each dismisses the menu first, then acts. revive + detach are
-  // reversible; kill is guarded by a confirm (irreversible).
+  // Row actions. revive + detach dismiss the ledger, then act (both reversible).
+  // kill (banish) is guarded by a triple-tap ward and deliberately keeps the
+  // ledger open so you can banish several sessions in a row.
   @objc fileprivate func reviveRow(_ sender: SheolRowButton) {
     statusItem?.menu?.cancelTracking()
     runCore(["revive", sender.sessionName])
@@ -637,16 +649,20 @@ final class SheolStatusItem: NSObject, NSMenuDelegate {
 
   /// Banish is triple-tap, not a dialog: each ✕ tap decays the ◆◆◇ ward and
   /// re-arms a short reset timer; the third tap within the window kills. The
-  /// menu stays open between taps (no cancelTracking until the kill). Mirrors
-  /// the TUI's d·d·d ward — irreversible, so it wants deliberate repetition.
+  /// ledger stays open throughout — including after the kill — so you can
+  /// banish several sessions in a row; the retired row just hides itself.
+  /// Mirrors the TUI's d·d·d ward — irreversible, so it wants deliberate taps.
   @objc fileprivate func killRow(_ sender: SheolRowButton) {
     sender.wardTimer?.invalidate()
     sender.wardTaps += 1
     if sender.wardTaps >= 3 {
       let name = sender.sessionName
       sender.resetWard()
-      statusItem?.menu?.cancelTracking()
       runCore(["kill", name])
+      // Don't dismiss the ledger — banishing a couple in a row is the point.
+      // Retire this row (and any header it empties) in place; a reopen rebuilds
+      // fresh from tmux regardless.
+      retireRow(sender)
       return
     }
     sender.showWard(remaining: 3 - sender.wardTaps)
@@ -656,6 +672,26 @@ final class SheolStatusItem: NSObject, NSMenuDelegate {
     }
     RunLoop.main.add(timer, forMode: .common)
     sender.wardTimer = timer
+  }
+
+  /// Hide a just-banished row and collapse its section header if that was the
+  /// section's last row, leaving the ledger open for the next banish. Deferred
+  /// onto a .common-mode timer — the one dispatch this menu is proven to service
+  /// while open — so we don't restructure the menu inside its own event handler.
+  private func retireRow(_ button: SheolRowButton) {
+    let t = Timer(timeInterval: 0.01, repeats: false) { [weak self, weak button] _ in
+      guard let self, let button, let menu = self.statusItem?.menu else { return }
+      button.enclosingMenuItem?.isHidden = true
+      func remaining(wandering: Bool) -> Int {
+        menu.items.filter {
+          guard let row = $0.view as? SheolRow, !$0.isHidden else { return false }
+          return row.isWandering == wandering
+        }.count
+      }
+      self.livingHeaderItem?.isHidden = remaining(wandering: false) == 0
+      self.wanderingHeaderItem?.isHidden = remaining(wandering: true) == 0
+    }
+    RunLoop.main.add(t, forMode: .common)
   }
 
   @objc private func openLedger() {
@@ -710,6 +746,7 @@ private final class SheolRowButton: NSButton {
 /// sheol (detach) and a red ✕ that banishes it via triple-tap. The view is
 /// sized to `rowW` so names never clip and the controls line up across rows.
 private final class SheolRow: NSView {
+  let isWandering: Bool
   private let title: String
   private let subtitle: String
   private let nameButton: SheolRowButton
@@ -722,6 +759,7 @@ private final class SheolRow: NSView {
     name: String, title: String, subtitle: String, labelW: CGFloat, rowW: CGFloat,
     isWandering: Bool, owner: SheolStatusItem
   ) {
+    self.isWandering = isWandering
     self.title = title
     self.subtitle = subtitle
     let h: CGFloat = 22

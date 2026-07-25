@@ -35,7 +35,7 @@ Everything else in this repo follows from that: additive not replacing, portable
 - **Memory-pressure gauge** — a native menu-bar readout of the machine's real memory *pressure* (`100 − kern.memorystatus_level`), not RAM usage: a gauge whose needle and color escalate green → orange → red with the kernel's VM pressure level. It's syscall-cheap (one `sysctl` + one `host_statistics64`, no subprocess) and event-driven off a `DispatchSourceMemoryPressure`, so it flips the instant pressure changes; the dropdown breaks down App / Wired / Compressed / Cached / Free / Swap. Complements Stats' RAM % — pressure is the signal that actually predicts a stall. See [The launcher fork](#the-launcher--machinespirit-leader-key-fork).
 - **macOS tweaks** — snappier window resize and animation via reversible `defaults` writes.
 - **No dead-end dialogs** — a failed keybind (e.g. resizing an app that refuses it) silently does nothing instead of throwing a focus-stealing macOS alert that blocks the launcher. See [Command reliability](#command-reliability--no-focus-stealing-dialogs).
-- **tmux protection + sheol** (experimental) — `⇪ t t` opens a pane running inside tmux (one window, status bar + **TMUX** badge), so its work survives the window closing. `⇪ t m u x` opens **sheol**, a necromancer's ledger of your tmux "spirits" — living (attached) vs wandering the underworld (detached), auto-refreshing — where you **revive** (`r`, reattach in a new window), **commune** (`c`, peek in place), or **banish** (`d·d·d`, destroy forever). See [tmux protection & sheol](#tmux-protection--sheol-experimental).
+- **tmux protection + sheol** (experimental) — `⇪ t t` opens a pane running inside tmux (one window, status bar + **TMUX** badge), so its work survives the window closing; `⇪ t q q q q` kills just the tmux pane you're looking at (a four-tap ward). `⇪ t m u x` opens **sheol**, a necromancer's ledger of your tmux "spirits" — living (attached) vs wandering the underworld (detached), auto-refreshing — where you **revive** (`r`, reattach in a new window), **commune** (`c`, peek in place), or **banish** (`d·d·d`, destroy forever). Banishing from the skull menu's ledger now **keeps the menu open**, so you can clear several in a row. See [tmux protection & sheol](#tmux-protection--sheol-experimental).
 
 ## Quick start (fresh Mac)
 
@@ -219,6 +219,10 @@ Opens a **new iTerm window running inside tmux** ([`bin/tmux-launch.sh`](bin/tmu
 ### `⇪ t d` — split into a protected pane
 
 [`bin/tmux-split.sh`](bin/tmux-split.sh) splits the **current** iTerm pane and runs a tmux-protected shell in the new half — a hardened pane right beside where you are. (If you're already inside a tmux session and want a tmux split of *that* session, use tmux's own `Ctrl-b "` / `Ctrl-b %`.)
+
+### `⇪ t q q q q` — kill the selected tmux pane
+
+[`bin/tmux-kill-pane.sh`](bin/tmux-kill-pane.sh) kills the **active pane** of the tmux session driving the frontmost iTerm session — the split you're actually looking at — without opening sheol or the menu bar. The four `q`s are a deliberate **ward** (labelled `◆◆◆◆ → ◆◇◇◇` as they decay, echoing sheol's `d·d·d`), because it ends a live process. It resolves the target by matching the front iTerm session's tty to a tmux client (`tmux list-clients`), then kills that session's active `pane_id`; if the front terminal **isn't** a tmux client it's a safe no-op — it kills nothing it can't positively identify. This is the pane-level cut: `⌘W` already tears down a whole session/window, and tmux collapses the window/session automatically if this was its last pane.
 
 ### `⇪ t m u x` — sheol, the necromancer's ledger
 

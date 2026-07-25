@@ -727,6 +727,33 @@
           "key" : "d",
           "type" : "command",
           "value" : "~/bin/run-quiet.sh ~/bin/tmux-split.sh"
+        },
+        {
+          "actions" : [
+            {
+              "actions" : [
+                {
+                  "actions" : [
+                    {
+                      "key" : "q",
+                      "label" : "✕ confirm — kill pane  ◆◇◇◇",
+                      "type" : "command",
+                      "value" : "~/bin/run-quiet.sh ~/bin/tmux-kill-pane.sh"
+                    }
+                  ],
+                  "key" : "q",
+                  "label" : "✕ kill pane  ◆◆◇◇",
+                  "type" : "group"
+                }
+              ],
+              "key" : "q",
+              "label" : "✕ kill pane  ◆◆◆◇",
+              "type" : "group"
+            }
+          ],
+          "key" : "q",
+          "label" : "✕ kill selected tmux pane  ◆◆◆◆",
+          "type" : "group"
         }
       ],
       "key" : "t",
