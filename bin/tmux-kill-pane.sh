@@ -11,6 +11,11 @@
 # browser, the splash window, …): it kills nothing it can't positively identify.
 set -euo pipefail
 
+# Leader Key runs this under launchd's PATH, which lacks Homebrew — so a bare
+# `tmux` (in /opt/homebrew/bin) would be "command not found" and the script
+# would silently no-op. Put Homebrew on PATH first, exactly as sheol-core does.
+export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+
 # The tty backing the frontmost iTerm session is the tmux client's tty.
 tty=$(osascript -e 'tell application "iTerm2" to tell current session of current window to get tty' 2>/dev/null) || exit 0
 [ -n "${tty:-}" ] || exit 0
