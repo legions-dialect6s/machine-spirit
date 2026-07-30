@@ -602,6 +602,17 @@
           "value" : "/System/Applications/System Settings.app"
         },
         {
+          "actions" : [
+            {
+              "key" : "g",
+              "type" : "command",
+              "value" : "~/bin/run-quiet.sh osascript ~/bin/app-jump.applescript Signal"
+            }
+          ],
+          "key" : "i",
+          "type" : "group"
+        },
+        {
           "key" : "p",
           "type" : "application",
           "value" : "/Applications/Spotify.app"

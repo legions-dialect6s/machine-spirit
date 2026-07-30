@@ -79,7 +79,7 @@ The tree follows four rules, by escalating "weight" of the action:
 | `⇪ c l` | Claude | | `⇪ p h` | Photos |
 | `⇪ c o` | Codex | | `⇪ p s` | Photoshop |
 | `⇪ c h r` | Chrome (jump/cycle) | | `⇪ s a` | Safari (jump/cycle) |
-| `⇪ f i` | Finder (jump/cycle) | | | |
+| `⇪ f i` | Finder (jump/cycle) | | `⇪ s i g` | Signal (jump/cycle) |
 | `⇪ d i` | Discord | | `⇪ s e` | System Settings |
 | `⇪ f a c` / `⇪ f t` | FaceTime | | `⇪ s p` | Spotify |
 | `⇪ f i` | Finder | | `⇪ t e` | TextEdit |
