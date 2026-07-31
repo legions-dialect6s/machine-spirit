@@ -142,9 +142,13 @@ final class MemoryPressureStatusItem: NSObject, NSMenuDelegate {
     }
     let key = "\(bucket)|\(tint?.description ?? "template")"
     if let cached = gaugeCache[key] { return cached }
+    // NB: the `.bottom.33percent` / `.bottom.67percent` symbols do NOT ship on
+    // this macOS (only 0/50/100 do), so those two buckets silently fell back to
+    // a 50% needle. The non-`.bottom` variants exist for all five buckets, so
+    // use those — the needle now tracks 0/33/50/67/100 distinctly.
     let candidates = [
-      "gauge.with.dots.needle.bottom.\(bucket)percent",
-      "gauge.with.dots.needle.bottom.50percent",
+      "gauge.with.dots.needle.\(bucket)percent",
+      "gauge.with.dots.needle.50percent",
       "gauge.medium",
       "memorychip",
     ]

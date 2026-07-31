@@ -366,6 +366,7 @@ final class SheolStatusItem: NSObject, NSMenuDelegate {
   }
   private var terminals: [Terminal] = []
   private var termPollTimer: Timer?
+  private var menuIsOpen = false
 
   // Section-header items captured on menu build, so a banish can hide an
   // emptied section in place (the ledger stays open across successive kills).
@@ -442,6 +443,12 @@ final class SheolStatusItem: NSObject, NSMenuDelegate {
         DispatchQueue.main.async {
           self.terminals = terms
           self.updateTitle()
+          // If the menu is open, it rendered the previous poll — repaint it in
+          // place now that fresh terminals are in. This is what lets the 45s
+          // background poll stay cheap without ever showing a stale open list.
+          if self.menuIsOpen, let menu = self.statusItem?.menu {
+            self.rebuildMenu(menu)
+          }
         }
       }
     } else {
@@ -529,6 +536,26 @@ final class SheolStatusItem: NSObject, NSMenuDelegate {
   // MARK: - Menu (rebuilt fresh on every open)
 
   func menuNeedsUpdate(_ menu: NSMenu) {
+    rebuildMenu(menu)
+  }
+
+  func menuWillOpen(_ menu: NSMenu) {
+    menuIsOpen = true
+    // Terminal enumeration is a ~0.7s Apple Event, too slow to block the menu
+    // on — so the initial paint (menuNeedsUpdate) shows the last poll. Kick a
+    // fresh read and repaint the OPEN menu when it lands; fixes the stale-on-open
+    // list that the 45s background poll would otherwise leave visible.
+    refreshTerminals(background: true)
+  }
+
+  func menuDidClose(_ menu: NSMenu) {
+    menuIsOpen = false
+  }
+
+  /// Build the menu from current cached state. Must NOT trigger a terminal
+  /// refresh (callers do), so the async refresh completion can call this to
+  /// repaint an open menu without recursing.
+  private func rebuildMenu(_ menu: NSMenu) {
     apply(Self.list(core: corePath))  // accurate the instant it appears
     menu.removeAllItems()
 
@@ -591,9 +618,8 @@ final class SheolStatusItem: NSObject, NSMenuDelegate {
         menu.addItem(item)
       }
     }
-    // Enumerating iTerm is an Apple Event (too slow to block the menu on), so
-    // the list here is the last poll; freshen it for the next open.
-    refreshTerminals(background: true)
+    // The terminal rows above are the last poll's; menuWillOpen kicks a fresh
+    // read that repaints this menu in place when it lands (see refreshTerminals).
   }
 
   @objc private func focusTerminal(_ sender: NSMenuItem) {

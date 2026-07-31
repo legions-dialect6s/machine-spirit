@@ -96,7 +96,9 @@ class AppDelegate: NSObject, NSApplicationDelegate,
     }
 
     Task {
-      for await value in Defaults.updates(.showMenuBarIcon) {
+      // initial:false — the block below sets the initial state explicitly, so
+      // this stream only needs to react to later toggles (no redundant double-init).
+      for await value in Defaults.updates(.showMenuBarIcon, initial: false) {
         if value {
           self.statusItem.enable()
           self.sheolStatusItem.enable()
