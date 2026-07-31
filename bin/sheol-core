@@ -33,14 +33,14 @@ HERE="${0:A:h}"
 
 have_tmux() { command -v tmux >/dev/null 2>&1 }
 
-json_escape() {
+json_escape() {   # escaped result returned in $REPLY — avoids a $(…) subshell per field
   local s=$1
   s=${s//\\/\\\\}
   s=${s//\"/\\\"}
   s=${s//$'\t'/\\t}
   s=${s//$'\r'/\\r}
   s=${s//$'\n'/\\n}
-  print -rn -- "$s"
+  REPLY=$s
 }
 
 verb="${1:-}"
@@ -58,7 +58,9 @@ case "$verb" in
           [[ "$activity" == <-> ]] || activity=0
           (( first )) || print -n ','
           first=0
-          print -rn -- "{\"name\":\"$(json_escape "$name")\",\"attached\":${attached},\"created\":${created},\"activity\":${activity},\"command\":\"$(json_escape "${command:-?}")\"}"
+          json_escape "$name";          jname=$REPLY
+          json_escape "${command:-?}";  jcmd=$REPLY
+          print -rn -- "{\"name\":\"$jname\",\"attached\":${attached},\"created\":${created},\"activity\":${activity},\"command\":\"$jcmd\"}"
         done
       }
       print ']'

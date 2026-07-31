@@ -60,7 +60,7 @@ have_tmux() { command -v tmux >/dev/null 2>&1; }
 
 fmt_ago() {
 	local now diff d h m
-	now=$(date +%s); diff=$(( now - ${1:-$now} ))
+	now=${_NOW:-$(date +%s)}; diff=$(( now - ${1:-$now} ))
 	(( diff < 0 )) && diff=0
 	d=$(( diff/86400 )); h=$(( (diff%86400)/3600 )); m=$(( (diff%3600)/60 ))
 	if   (( d > 0 )); then printf '%dd%dh' "$d" "$h"
@@ -95,6 +95,7 @@ sig() {
 	# (times are minute-bucketed via fmt_ago, not raw epochs). Joints are the
 	# same \x1f unit separator the parse uses — a name carrying '|' or ':'
 	# must not alias two different rosters into one signature (missed redraw).
+	_NOW=$(date +%s)                        # one clock read per signature, not per row
 	local US=$'\x1f'
 	local s="$total$US$first_dead$US$sel$US$arm$US$arm_sel" i
 	for (( i=0; i<total; i++ )); do
@@ -121,6 +122,7 @@ row() {
 }
 
 draw() {
+	_NOW=$(date +%s)                        # one clock read per redraw, not per row
 	printf '\e[H'
 	printf '  %s+++  S H E O L  +++%s  %sthe necromancer'\''s ledger of tmux spirits%s\e[K\n' \
 		"$BOLD$MAG" "$RST" "$DIM" "$RST"
