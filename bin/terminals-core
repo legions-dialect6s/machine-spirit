@@ -46,16 +46,23 @@ tmux_ttys() {
     tmux list-clients -F '#{client_tty}' 2>/dev/null ; } | sort -u
 }
 
-# ---- one ps snapshot → ancestry map (pid → ppid, comm). Walked in-memory by
-# owning_app so it never forks `ps` per level. comm is the whole rest-of-line so
-# app paths with spaces ("Google Chrome.app/…") survive intact, exactly as the
-# old per-pid `ps -o ppid=,comm=` preserved them.
+# ---- ONE ps snapshot builds BOTH the ancestry map (pid → ppid, comm) AND the
+# login-shell candidate list, from the SAME rows. Deriving them together closes
+# the gap where a shell spawned between two separate snapshots would appear in
+# the candidate list but not the map (so owning_app would silently drop it).
+# comm is the whole rest-of-line so app paths with spaces ("Google Chrome.app/…")
+# survive intact; the shell test mirrors the old awk's first-field ($3) match
+# exactly — ${_cm%% *} is that first whitespace-delimited token.
 typeset -gA _PPID _COMM
-while read -r _p _pp _cm; do
+_candidates=()          # each: "tty pid" for a login shell on a real tty
+while read -r _p _pp _tt _cm; do
   [[ -z "$_p" ]] && continue
   _PPID[$_p]=$_pp
   _COMM[$_p]=$_cm
-done < <(ps -Ao pid=,ppid=,comm=)
+  if [[ "$_tt" == ttys* && "${_cm%% *}" == (*-zsh|*-bash|*/zsh|*/bash|*/fish) ]]; then
+    _candidates+=("$_tt $_p")
+  fi
+done < <(ps -Ao pid=,ppid=,tty=,comm=)
 
 # Walk a pid's ancestry to the owning .app; print its name (e.g. "Ghostty").
 # Reads the in-memory map — same result as forking `ps` up the tree.
@@ -117,10 +124,12 @@ if [[ -n "$iterm_lines" ]]; then
 fi
 
 # ---- other terminal apps (generic pty scan) ----
-# ttys running a login shell, minus iTerm's and tmux's, grouped to their app.
+# ttys running a login shell (from the single snapshot above), minus iTerm's and
+# tmux's, grouped to their app. Candidate order is ps order, same as before.
 seen_app=()
-while read -r tty pid; do
-  [[ "$tty" == ttys* ]] || continue
+for _cand in "${_candidates[@]}"; do
+  tty="${_cand%% *}"                                              # "ttysNNN"
+  pid="${_cand##* }"
   dev="/dev/$tty"
   [[ -n "${_TMUXTTY[$dev]:-}" ]] && continue                      # tmux tty
   (( ${iterm_ttys[(I)$dev]} )) && continue                        # iTerm tty
@@ -129,7 +138,7 @@ while read -r tty pid; do
   (( ${seen_app[(I)$app]} )) && continue                          # one row per app
   seen_app+="$app"
   emit+="app:${app}${US}${dev}${US}${app}${US}false"
-done < <(ps -Ao tty=,pid=,comm= | awk '$3 ~ /(-zsh|-bash|\/(zsh|bash|fish))$/ {print $1, $2}')
+done
 
 verb="${1:-}"
 case "$verb" in
