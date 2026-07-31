@@ -17,6 +17,13 @@
 # excluded here — attached sessions are its clients (own list), pane shells live
 # inside the server — so the terminal list stays non-tmux and can't double-count.
 #
+# PERF (why the maps below): this runs on the fork's background poll AND on every
+# menu open, so it must stay fork-light. Two things used to spawn a subprocess
+# PER ROW: a `grep` membership test per tty, and `owning_app` forking `ps` once
+# per ancestry level (up to 20). Both are now answered from in-memory maps built
+# from a SINGLE `ps` snapshot + the one tmux read — ~20 forks/call down to ~1.
+# Output is byte-identical to the fork-per-row version (verified vs golden).
+#
 # Never launches iTerm: the enumeration is gated on `application … is running`.
 set -u
 export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
@@ -39,18 +46,30 @@ tmux_ttys() {
     tmux list-clients -F '#{client_tty}' 2>/dev/null ; } | sort -u
 }
 
+# ---- one ps snapshot → ancestry map (pid → ppid, comm). Walked in-memory by
+# owning_app so it never forks `ps` per level. comm is the whole rest-of-line so
+# app paths with spaces ("Google Chrome.app/…") survive intact, exactly as the
+# old per-pid `ps -o ppid=,comm=` preserved them.
+typeset -gA _PPID _COMM
+while read -r _p _pp _cm; do
+  [[ -z "$_p" ]] && continue
+  _PPID[$_p]=$_pp
+  _COMM[$_p]=$_cm
+done < <(ps -Ao pid=,ppid=,comm=)
+
 # Walk a pid's ancestry to the owning .app; print its name (e.g. "Ghostty").
+# Reads the in-memory map — same result as forking `ps` up the tree.
 owning_app() {
-  local pid=$1 ppid comm guard=0
+  local pid=$1 comm guard=0
   while [[ -n "$pid" && "$pid" != 0 && "$pid" != 1 && guard -lt 20 ]]; do
-    read -r ppid comm < <(ps -o ppid=,comm= -p "$pid" 2>/dev/null)
-    [[ -z "${comm:-}" ]] && return 1
+    comm=${_COMM[$pid]:-}
+    [[ -z "$comm" ]] && return 1
     if [[ "$comm" == *.app/Contents/MacOS/* ]]; then
       local app="${comm%%.app/*}"
       print -r -- "${app:t}"
       return 0
     fi
-    pid=$ppid
+    pid=${_PPID[$pid]:-}
     (( guard++ ))
   done
   return 1
@@ -58,9 +77,16 @@ owning_app() {
 
 emit=()  # each element: id US tty US name US isTmux
 
+# tmux ttys as an in-memory set (full "/dev/ttysNNN" keys), so the per-row
+# membership test is a hash lookup, not a `grep` subprocess per tty.
+typeset -A _TMUXTTY
+tclients="$(tmux_ttys)"
+while IFS= read -r _t; do
+  [[ -n "$_t" ]] && _TMUXTTY[$_t]=1
+done <<< "$tclients"
+
 # ---- iTerm sessions ----
 iterm_ttys=()
-tclients="$(tmux_ttys)"
 iterm_lines=$(/usr/bin/osascript <<OSA
 if application "iTerm2" is running then
   tell application "iTerm2"
@@ -85,7 +111,7 @@ if [[ -n "$iterm_lines" ]]; then
     iterm_ttys+="$tty"
     isTmux=false
     [[ "$name" == tmux* ]] && isTmux=true
-    print -r -- "$tclients" | grep -qxF "$tty" && isTmux=true
+    [[ -n "${_TMUXTTY[$tty]:-}" ]] && isTmux=true
     emit+="${id}${US}${tty}${US}${name}${US}${isTmux}"
   done <<< "$iterm_lines"
 fi
@@ -96,7 +122,7 @@ seen_app=()
 while read -r tty pid; do
   [[ "$tty" == ttys* ]] || continue
   dev="/dev/$tty"
-  print -r -- "$tclients" | grep -qxF "$dev" && continue          # tmux tty
+  [[ -n "${_TMUXTTY[$dev]:-}" ]] && continue                      # tmux tty
   (( ${iterm_ttys[(I)$dev]} )) && continue                        # iTerm tty
   app=$(owning_app "$pid") || continue
   [[ "$app" == iTerm* ]] && continue
