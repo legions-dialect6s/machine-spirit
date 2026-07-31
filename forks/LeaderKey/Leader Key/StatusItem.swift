@@ -321,8 +321,10 @@ class StatusItem: NSObject, NSMenuDelegate {
 // banish) and, at the bottom, every live terminal (click to focus). tmux reads
 // go through ~/bin/sheol-core and terminal reads through ~/bin/terminals-core —
 // the SAME doors the TUI and MachineSpirit.app use, so the surfaces can never
-// disagree. tmux is polled every 5s; terminals (an Apple Event to iTerm) every
-// 8s. The menu rebuilds with a fresh tmux read each open.
+// disagree. tmux is polled every 5s; terminals (an Apple Event to iTerm, plus a
+// ps snapshot — far pricier) every 45s. The menu force-refreshes on open, so
+// the background terminal poll only keeps the glanceable title count from going
+// stale — which needs nowhere near 8s freshness, and 8s cost ~0.85s/tick forever.
 final class SheolStatusItem: NSObject, NSMenuDelegate {
   private var statusItem: NSStatusItem?
   private var pollTimer: Timer?
@@ -388,14 +390,16 @@ final class SheolStatusItem: NSObject, NSMenuDelegate {
     refreshTerminals(background: true)  // terminals — osascript, off-main
 
     // Keep the counts live even without opening the menu. tmux is cheap (5s);
-    // the terminal enumeration is an Apple Event to iTerm, so poll it slower.
+    // the terminal enumeration is an Apple Event to iTerm + a ps snapshot, so
+    // poll it much slower (45s) — the menu force-refreshes on open anyway, so
+    // this background tick only feeds the always-visible title count.
     let timer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) {
       [weak self] _ in self?.refresh(background: true)
     }
     RunLoop.main.add(timer, forMode: .common)
     pollTimer = timer
 
-    let tTimer = Timer.scheduledTimer(withTimeInterval: 8, repeats: true) {
+    let tTimer = Timer.scheduledTimer(withTimeInterval: 45, repeats: true) {
       [weak self] _ in self?.refreshTerminals(background: true)
     }
     RunLoop.main.add(tTimer, forMode: .common)

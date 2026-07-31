@@ -121,6 +121,14 @@ final class MemoryPressureStatusItem: NSObject, NSMenuDelegate {
       + (reading.swapTotal > 0 ? " · Swap \(Self.fmt(reading.swapUsed))" : "")
   }
 
+  /// Built gauge images cached by bucket+tint. The 2 s poll repaints the button
+  /// every tick, but the image only has 5 buckets × 3 tint states, so on a
+  /// steady machine the SF Symbol lookup + tint (the one nontrivial allocation
+  /// here) is done once and reused. Images are immutable and this is only ever
+  /// touched on the main thread, so the cache is safe; a template image still
+  /// re-tints to the menu-bar color at draw time even when cached.
+  private static var gaugeCache: [String: NSImage] = [:]
+
   /// A gauge whose needle tracks the pressure %, tinted by kernel pressure
   /// level. Falls back gracefully if a needle variant is unavailable.
   private static func gaugeImage(percent: Int, tint: NSColor?) -> NSImage? {
@@ -132,6 +140,8 @@ final class MemoryPressureStatusItem: NSObject, NSMenuDelegate {
     case ..<84: bucket = 67
     default: bucket = 100
     }
+    let key = "\(bucket)|\(tint?.description ?? "template")"
+    if let cached = gaugeCache[key] { return cached }
     let candidates = [
       "gauge.with.dots.needle.bottom.\(bucket)percent",
       "gauge.with.dots.needle.bottom.50percent",
@@ -146,14 +156,18 @@ final class MemoryPressureStatusItem: NSObject, NSMenuDelegate {
       }
     }
     guard let image = base else { return nil }
+    let result: NSImage
     if let tint {
       let cfg = NSImage.SymbolConfiguration(paletteColors: [tint])
       let tinted = image.withSymbolConfiguration(cfg) ?? image
       tinted.isTemplate = false
-      return tinted
+      result = tinted
+    } else {
+      image.isTemplate = true  // healthy → adopt the menu-bar's own color
+      result = image
     }
-    image.isTemplate = true  // healthy → adopt the menu-bar's own color
-    return image
+    gaugeCache[key] = result
+    return result
   }
 
   // MARK: - Reading the kernel (all syscalls, no subprocess)
