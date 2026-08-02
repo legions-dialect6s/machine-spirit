@@ -37,6 +37,8 @@ if command -v tmux >/dev/null 2>&1; then
 	# Make it extra clear this pane is protected: put "tmux" on the right of the
 	# status bar (the badge is unreliable under tmux, so the status bar is the
 	# real "this is hardened" proof). `\;` chains the option-set onto the session.
+	# (Auto-save is a launchd timer, not a status-right hook, so nothing else needs
+	# to live here — see config/tmux/tmux.conf.)
 	exec tmux new -A -s "$name" \; set-option status-right ' ⛧ tmux ⛧ '
 else
 	printf 'tmux is not installed — run:  brew install tmux\n'

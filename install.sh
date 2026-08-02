@@ -93,7 +93,17 @@ if [[ -f "$TMUX_CONF_SRC" ]]; then
   if [[ -e "$HOME/.tmux.conf" && ! -L "$HOME/.tmux.conf" ]]; then cp "$HOME/.tmux.conf" "$HOME/.tmux.conf.bak.$(date +%s)"; fi
   cp "$TMUX_CONF_SRC" "$HOME/.tmux.conf"
   command -v tmux >/dev/null 2>&1 && tmux source-file "$HOME/.tmux.conf" 2>/dev/null || true
-  echo "    installed tmux.conf + resurrect/continuum (session survival; auto-save every 15m)"
+  # Reliable 15-min auto-save via a launchd agent (continuum's status-right hook
+  # leaves broken snapshots here — see config/tmux/tmux.conf).
+  TMUX_AGENT_SRC="$REPO_ROOT/config/tmux/com.machinespirit.tmux-autosave.plist"
+  TMUX_AGENT_DEST="$HOME/Library/LaunchAgents/com.machinespirit.tmux-autosave.plist"
+  if [[ -f "$TMUX_AGENT_SRC" ]]; then
+    mkdir -p "$(dirname "$TMUX_AGENT_DEST")"
+    sed "s|__HOME__|$HOME|g" "$TMUX_AGENT_SRC" > "$TMUX_AGENT_DEST"
+    launchctl bootout "gui/$(id -u)/com.machinespirit.tmux-autosave" 2>/dev/null || true
+    launchctl bootstrap "gui/$(id -u)" "$TMUX_AGENT_DEST" 2>/dev/null || true
+  fi
+  echo "    installed tmux.conf + resurrect/continuum + launchd auto-save (every 15m)"
 fi
 
 # MachineSpirit Leader Key fork — the daily-driver launcher. Built from source

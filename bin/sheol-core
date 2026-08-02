@@ -120,6 +120,7 @@ case "$verb" in
     # never destructive — the safety net you take before you do anything risky.
     have_tmux || exit 0
     [[ -x "$RESURRECT/scripts/save.sh" ]] || { print -u2 "sheol-core: tmux-resurrect not installed"; exit 0 }
+    tmux list-sessions >/dev/null 2>&1 || exit 0   # empty/no server → don't overwrite a good snapshot with nothing
     "$RESURRECT/scripts/save.sh" >/dev/null 2>&1
     exit 0
     ;;

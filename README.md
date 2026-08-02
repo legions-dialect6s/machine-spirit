@@ -251,7 +251,7 @@ Under the hood, every tmux operation (list/revive/detach/kill, plus save/restore
 
 A tmux **server** holds every session in memory, so when it dies (a crash, an OOM, a `banish all`) they **all** die with it — unrecoverable unless the layout was saved to disk first. machine-spirit wires in [tmux-resurrect](https://github.com/tmux-plugins/tmux-resurrect) + [tmux-continuum](https://github.com/tmux-plugins/tmux-continuum) (cloned at pinned SHAs by `install.sh`, sourced from [`config/tmux/tmux.conf`](config/tmux/tmux.conf) → `~/.tmux.conf`; **no plugin manager**) to make that survivable:
 
-- **continuum auto-saves** the whole server **every 15 min**, so there's always a recent snapshot to fall back on.
+- **A launchd agent auto-saves** the whole server **every 15 min** ([`com.machinespirit.tmux-autosave`](config/tmux/com.machinespirit.tmux-autosave.plist) → `sheol-core save`), so there's always a recent snapshot. *Why launchd and not continuum's own timer:* continuum triggers its save from the tmux status bar and backgrounds the work, which tmux reaps mid-write — leaving **broken snapshots** on this setup (verified). A launchd timer runs the save synchronously and independently, the same pattern the launcher agent uses; `continuum`'s own auto-save is set to `0` (off). The save is a **no-op when no session exists**, so it never overwrites a good snapshot with an empty one.
 - **restore is deliberate, not automatic** (`@continuum-restore off`) — no surprise resurrection on boot; you bring spirits back from sheol (`R`) once you've decided to.
 - Snapshots capture **pane contents** (scrollback), so a revived spirit shows what it was doing, and live under `~/.tmux/resurrect/`.
 

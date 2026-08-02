@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  LaunchAgent: tmux session-survival auto-save.
+
+  Every 15 minutes it runs `sheol-core save`, which snapshots the whole tmux
+  server to disk (~/.tmux/resurrect) via tmux-resurrect — so a server death
+  (crash / OOM / `banish all`) is always recoverable from a recent snapshot.
+
+  Why launchd instead of continuum's built-in auto-save: continuum triggers its
+  save from the tmux status bar and backgrounds the work, which tmux reaps
+  mid-write on this setup, leaving BROKEN snapshots. A launchd timer runs the
+  save synchronously and independently of tmux's rendering — reliable, and the
+  same pattern the launcher agent uses. `sheol-core save` is a no-op when no
+  session exists, so it never overwrites a good snapshot with an empty one.
+
+  __HOME__ is expanded to the real home path by install.sh (portability rule).
+-->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.machinespirit.tmux-autosave</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>__HOME__/bin/sheol-core</string>
+		<string>save</string>
+	</array>
+	<key>StartInterval</key>
+	<integer>900</integer>
+	<key>RunAtLoad</key>
+	<false/>
+	<key>ProcessType</key>
+	<string>Background</string>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>PATH</key>
+		<string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+	</dict>
+</dict>
+</plist>
