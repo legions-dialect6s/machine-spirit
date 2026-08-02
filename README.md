@@ -239,10 +239,23 @@ Each row: **name · command · born · quiet-for**.
 | `r` | **revive** — reattach the spirit in a **new** terminal window (a fresh body in the land of the living); the ledger stays open |
 | `c` | **commune** — step *into* the spirit in place to tend it *without* fully reviving it; the session's status bar shows the way back (`Ctrl-b d → back to sheol`), and detaching returns you to the ledger |
 | `d` `d` `d` | **banish** — press `d` three times (the `◆` ward decaying). A **living** spirit is **sent to sheol** (detached); a spirit **already in sheol** is **exiled** (killed forever). |
+| `s` | **save** — snapshot the whole server to disk now (the same store continuum auto-saves). Footer shows the last snapshot's age. |
+| `R` | **restore** — bring every session back from the last snapshot (skips ones already alive); works even from a cold machine. |
+| `q` ×10 on `☠` | **banish all** — arrow down to the red **☠ BANISH ALL** row and mash `q` ten times; a 10-pip ward drains (`◆◆◆◆◆◆◆◆◆◆ → ◇◇◇◇◇◇◇◇◇◇`) and refills if you pause. It **saves first, then kills the server** — so even the nuke is recoverable with `R`. |
 
-(`⌘W` or `q` closes the ledger window.) *Revive* gives the spirit a new body (new window); *commune* is a temporary séance (detach with `Ctrl-b d` to return here); *banish* is two-tier — banishing the **living** just **detaches** them into sheol (recoverable), while banishing what's **already dead exiles it for good** (killed), which is why the triple-tap ward guards it. There is deliberately **no Enter-to-attach** (an accidental Enter used to dump you straight into a session — gone).
+(`⌘W` or `Q` closes the ledger window; on the `☠` row, `q` mashes the ward instead of quitting.) *Revive* gives the spirit a new body (new window); *commune* is a temporary séance (detach with `Ctrl-b d` to return here); *banish* is two-tier — banishing the **living** just **detaches** them into sheol (recoverable), while banishing what's **already dead exiles it for good** (killed), which is why the triple-tap ward guards it. There is deliberately **no Enter-to-attach** (an accidental Enter used to dump you straight into a session — gone).
 
-Under the hood, every tmux operation (list/revive/detach/kill) goes through [`bin/sheol-core`](bin/sheol-core) — a policy-free verb layer shared between this TUI and MachineSpirit.app's live sheol node, so both always agree on what the spirits are doing. The two-tier banish decision stays in the callers.
+Under the hood, every tmux operation (list/revive/detach/kill, plus save/restore/kill-all) goes through [`bin/sheol-core`](bin/sheol-core) — a policy-free verb layer shared between this TUI and MachineSpirit.app's live sheol node, so both always agree on what the spirits are doing. The two-tier banish decision stays in the callers.
+
+### Surviving a server death — resurrect + continuum
+
+A tmux **server** holds every session in memory, so when it dies (a crash, an OOM, a `banish all`) they **all** die with it — unrecoverable unless the layout was saved to disk first. machine-spirit wires in [tmux-resurrect](https://github.com/tmux-plugins/tmux-resurrect) + [tmux-continuum](https://github.com/tmux-plugins/tmux-continuum) (cloned at pinned SHAs by `install.sh`, sourced from [`config/tmux/tmux.conf`](config/tmux/tmux.conf) → `~/.tmux.conf`; **no plugin manager**) to make that survivable:
+
+- **continuum auto-saves** the whole server **every 15 min**, so there's always a recent snapshot to fall back on.
+- **restore is deliberate, not automatic** (`@continuum-restore off`) — no surprise resurrection on boot; you bring spirits back from sheol (`R`) once you've decided to.
+- Snapshots capture **pane contents** (scrollback), so a revived spirit shows what it was doing, and live under `~/.tmux/resurrect/`.
+
+Both surfaces expose it: the sheol TUI's `s` / `R` / `☠ banish-all`, and the same on the menu-bar ledger. All of it routes through `sheol-core save | restore | kill-all` so the surfaces can't disagree.
 
 Only ever **one sheol** runs: pressing `⇪ t m u x` again kills any open ledger and opens a fresh one. It renders on the alternate screen with in-place redraw, so the ~2s auto-refresh doesn't flicker the scrollbar or flash the screen, and a brief `+++ S H E O L +++` reveal plays on open.
 

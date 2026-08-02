@@ -31,7 +31,21 @@ US=$'\x1f'
 FMT="#{session_name}${US}#{session_attached}${US}#{session_created}${US}#{session_activity}${US}#{pane_current_command}"
 HERE="${0:A:h}"
 
+# tmux-resurrect/continuum (cloned to ~/.tmux/plugins by install.sh). save/restore
+# go through resurrect's OWN scripts so sheol's snapshots are byte-compatible with
+# what continuum auto-saves every 15 min — sheol just triggers them.
+RESURRECT="$HOME/.tmux/plugins/tmux-resurrect"
+
 have_tmux() { command -v tmux >/dev/null 2>&1 }
+
+# Where resurrect writes snapshots — mirror its own resolution (option, else the
+# classic dir if present, else XDG) so "last save" reads the same file it wrote.
+resurrect_dir() {
+  local d; d=$(tmux show-option -gqv @resurrect-dir 2>/dev/null)
+  [[ -n "$d" ]] && { print -r -- "$d"; return }
+  [[ -d "$HOME/.tmux/resurrect" ]] && { print -r -- "$HOME/.tmux/resurrect"; return }
+  print -r -- "${XDG_DATA_HOME:-$HOME/.local/share}/tmux/resurrect"
+}
 
 json_escape() {   # escaped result returned in $REPLY — avoids a $(…) subshell per field
   local s=$1
@@ -101,8 +115,62 @@ case "$verb" in
     tmux kill-session -t "=$name" 2>/dev/null
     exit 0
     ;;
+  save)
+    # Snapshot the whole server to disk (same store continuum uses). Idempotent,
+    # never destructive — the safety net you take before you do anything risky.
+    have_tmux || exit 0
+    [[ -x "$RESURRECT/scripts/save.sh" ]] || { print -u2 "sheol-core: tmux-resurrect not installed"; exit 0 }
+    "$RESURRECT/scripts/save.sh" >/dev/null 2>&1
+    exit 0
+    ;;
+  restore)
+    # Recreate sessions from the last snapshot. resurrect SKIPS sessions that
+    # already exist, so this only ever brings back what's missing — safe to run
+    # even while other spirits are alive.
+    #
+    # MUST go through `tmux run-shell`, not a direct call: resurrect spawns the
+    # sessions through the tmux SERVER and needs that context — invoked directly
+    # it resolves no socket and dies with "error creating". run-shell is exactly
+    # how resurrect's own prefix+Ctrl-r binding runs it. start-server first so a
+    # restore works even from a cold machine (no server yet after a death).
+    have_tmux || exit 0
+    [[ -x "$RESURRECT/scripts/restore.sh" ]] || { print -u2 "sheol-core: tmux-resurrect not installed"; exit 0 }
+    # run-shell needs a live server, and an EMPTY server self-exits (exit-empty),
+    # so from cold: seed a throwaway session, restore into it, then drop the seed
+    # once the snapshot's own sessions are back. run-shell is synchronous, so the
+    # count is accurate the instant it returns.
+    seeded=
+    if ! tmux list-sessions >/dev/null 2>&1; then
+      tmux new-session -d -s __sheol_seed__ 2>/dev/null && seeded=1
+    fi
+    tmux run-shell "$RESURRECT/scripts/restore.sh" 2>/dev/null
+    if [[ -n "$seeded" ]]; then
+      others=$(tmux list-sessions -F '#{session_name}' 2>/dev/null | grep -vcx '__sheol_seed__')
+      (( others > 0 )) && tmux kill-session -t '=__sheol_seed__' 2>/dev/null
+    fi
+    exit 0
+    ;;
+  kill-all)
+    # Banish ALL spirits. SAVE FIRST (so even the nuke is recoverable via
+    # `restore`), THEN kill the server — which takes every session with it.
+    have_tmux || exit 0
+    [[ -x "$RESURRECT/scripts/save.sh" ]] && "$RESURRECT/scripts/save.sh" >/dev/null 2>&1
+    tmux kill-server 2>/dev/null
+    exit 0
+    ;;
+  last-save)
+    # Epoch mtime of the most recent snapshot, or "0" if none — for the UI's
+    # "last saved Nm ago" line. Never touches the server.
+    last="$(resurrect_dir)/last"
+    if [[ -e "$last" ]]; then
+      /usr/bin/stat -f %m "$last" 2>/dev/null || echo 0
+    else
+      echo 0
+    fi
+    exit 0
+    ;;
   *)
-    print -u2 "sheol-core: list [--json] | revive <name> | detach <name> | kill <name>"
+    print -u2 "sheol-core: list [--json] | revive <name> | detach <name> | kill <name> | save | restore | kill-all | last-save"
     exit 0
     ;;
 esac

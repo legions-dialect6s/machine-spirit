@@ -86,6 +86,7 @@ load() {
 	first_dead=${#names[@]}
 	for i in "${!Dn[@]}"; do names+=("${Dn[$i]}"); cmds+=("${Dc[$i]}"); born+=("${Db[$i]}"); acts+=("${Da[$i]}"); state+=(0); done
 	total=${#names[@]}
+	last_save=$("$CORE" last-save 2>/dev/null || echo 0)   # newest snapshot epoch, for the footer
 }
 
 sig() {
@@ -97,7 +98,7 @@ sig() {
 	# must not alias two different rosters into one signature (missed redraw).
 	_NOW=$(date +%s)                        # one clock read per signature, not per row
 	local US=$'\x1f'
-	local s="$total$US$first_dead$US$sel$US$arm$US$arm_sel" i
+	local s="$total$US$first_dead$US$sel$US$arm$US$arm_sel$US$mash$US$last_save" i
 	for (( i=0; i<total; i++ )); do
 		s+="$US${names[$i]}$US${cmds[$i]}$US${state[$i]}$US$(fmt_ago "${born[$i]}")$US$(fmt_ago "${acts[$i]}")"
 	done
@@ -109,6 +110,14 @@ ward() {   # $1 = arm, $2 = 1 living (→sheol) / 0 dead (→exile)
 	for i in 1 2 3; do if (( i <= a )); then o+="◆"; else o+="◇"; fi; done
 	if (( $2 == 1 )); then where="→ sheol"; else where="→ exile"; fi
 	printf '%sBANISH %s %s  d ×%d%s' "$RED" "$o" "$where" "$(( 3 - a ))" "$RST"
+}
+
+# the nuke's 10-pip draining ward: pips left = 10 - taps; fires at empty.
+mass_ward() {
+	local o='' i
+	for (( i=0; i<10; i++ )); do if (( i < 10 - mash )); then o+="◆"; else o+="◇"; fi; done
+	if (( mash > 0 )); then printf '%s%s☠ BANISH ALL  %s  q ×%d more%s' "$BOLD" "$RED" "$o" "$(( 10 - mash ))" "$RST"
+	else                    printf '%s%s☠ BANISH ALL  %s  mash q ×10%s'  "$BOLD" "$RED" "$o" "$RST"; fi
 }
 
 row() {
@@ -126,10 +135,13 @@ draw() {
 	printf '\e[H'
 	printf '  %s+++  S H E O L  +++%s  %sthe necromancer'\''s ledger of tmux spirits%s\e[K\n' \
 		"$BOLD$MAG" "$RST" "$DIM" "$RST"
-	printf '  %s↑/↓·k/j walk   r revive   c commune   n new spirit   d·d·d banish%s\e[K\n' "$DIM" "$RST"
+	printf '  %s↑/↓ walk · r revive · c commune · n new · d·d·d banish · s save · R restore%s\e[K\n' "$DIM" "$RST"
 	if ! have_tmux; then printf '\e[K\n  %stmux is not installed.%s  brew install tmux\e[K\n\e[J' "$YEL" "$RST"; return; fi
 	if (( total == 0 )); then
-		printf '\e[K\n  %sthe ledger is empty — no tmux spirits walk, living or dead.%s\e[K\n\e[J' "$DIM" "$RST"; return; fi
+		printf '\e[K\n  %s%s%s\e[K\n' "$DIM" "${msg:-the ledger is empty — no tmux spirits walk, living or dead.}" "$RST"
+		if (( last_save > 0 )); then printf '\e[K\n  %s♻ last snapshot %s ago — press R to restore%s\e[K\n\e[J' "$CYN" "$(fmt_ago "$last_save")" "$RST"
+		else                         printf '\e[K\n  %sno snapshot saved yet — press s to save one%s\e[K\n\e[J' "$DIM" "$RST"; fi
+		return; fi
 	printf '\e[K\n  %s☀ THE LIVING%s %s— a watcher is present%s\e[K\n' "$GRN$BOLD" "$RST" "$DIM" "$RST"
 	(( first_dead == 0 )) && printf '     %s— none —%s\e[K\n' "$DIM" "$RST"
 	local i
@@ -137,8 +149,15 @@ draw() {
 	printf '\e[K\n  %s⌁ SHEOL%s %s— detached spirits; restless, but the work lives%s\e[K\n' "$MAG$BOLD" "$RST" "$DIM" "$RST"
 	(( first_dead == total )) && printf '     %s— none wander —%s\e[K\n' "$DIM" "$RST"
 	for (( i=first_dead; i<total; i++ )); do row "$i" dead; done
-	printf '\e[K\n  %s%d living · %d in sheol · auto-refreshing%s\e[K\n\e[J' \
-		"$DIM" "$first_dead" "$(( total - first_dead ))" "$RST"
+	# ☠ BANISH ALL — the nuke row (index == total); selectable, mash q ×10 to fire
+	printf '\e[K\n'
+	if (( sel == total )); then printf '  %s%s%s\e[K\n' "$INV" "$(mass_ward)" "$RST"
+	else                        printf '  %s%s☠ BANISH ALL%s  %s(↓ to select · mash q ×10)%s\e[K\n' "$DIM" "$RED" "$RST" "$DIM" "$RST"; fi
+	# footer: counts · last snapshot age · transient message (💾/♻/☠)
+	local saved
+	if (( last_save > 0 )); then saved="saved $(fmt_ago "$last_save") ago"; else saved="never saved"; fi
+	printf '\e[K\n  %s%d living · %d in sheol · %s%s%s\e[K\n\e[J' \
+		"$DIM" "$first_dead" "$(( total - first_dead ))" "$saved" "${msg:+   $CYN$msg$DIM}" "$RST"
 }
 
 intro() {
@@ -149,17 +168,36 @@ intro() {
 	sleep 0.18
 }
 
-move() { arm=0; arm_sel=-1; local n=$(( sel + $1 )); (( n >= 0 && n < total )) && sel=$n; }
+# sel ranges 0..total: indices 0..total-1 are spirits, index == total is the
+# ☠ BANISH-ALL row (only present when total>0). Moving resets both wards.
+move() { arm=0; arm_sel=-1; mash=0; local n=$(( sel + $1 )); (( n >= 0 && n <= total && total > 0 )) && sel=$n; }
+
+# ── resurrect: save / restore the whole server (see ~/.tmux.conf) ──────────────
+do_save()    { "$CORE" save;    msg="💾 layout saved";              load; }
+do_restore() { "$CORE" restore; msg="♻ restored from last snapshot"; load; sel=0; }
+
+# ── BANISH ALL: the nuke. Guarded by a 10-tap draining ward (q on the ☠ row);
+# kill-all SAVES a snapshot first, so even this is recoverable with R. ──────────
+mass_step() {
+	(( total == 0 || sel >= total )) && return   # no-op on the ☠ BANISH-ALL row
+	(( mash++ )); arm_at=$SECONDS
+	if (( mash >= 10 )); then
+		"$CORE" kill-all          # snapshot, then kill the server → all spirits gone
+		mash=0; sel=0
+		msg="☠ all spirits banished — press R to restore them"
+		load
+	fi
+}
 
 revive() {
-	(( total == 0 )) && return
+	(( total == 0 || sel >= total )) && return   # no-op on the ☠ BANISH-ALL row
 	(( ${state[$sel]} == 1 )) && return
 	"$CORE" revive "${names[$sel]}"
 	load
 }
 
 commune() {
-	(( total == 0 )) && return
+	(( total == 0 || sel >= total )) && return   # no-op on the ☠ BANISH-ALL row
 	local n="${names[$sel]}"
 	tmux set-option -t "$n" status-right " Ctrl-b d → back to sheol " 2>/dev/null
 	tmux set-option -t "$n" status-right-length 32 2>/dev/null
@@ -170,7 +208,7 @@ commune() {
 }
 
 banish_step() {
-	(( total == 0 )) && return
+	(( total == 0 || sel >= total )) && return   # no-op on the ☠ BANISH-ALL row
 	if (( arm_sel != sel )); then arm=1; arm_sel=$sel; else (( arm++ )); fi
 	arm_at=$SECONDS
 	if (( arm >= 3 )); then
@@ -184,7 +222,7 @@ banish_step() {
 	fi
 }
 
-sel=0; arm=0; arm_sel=-1; arm_at=0
+sel=0; arm=0; arm_sel=-1; arm_at=0; mash=0; msg=''; last_save=0
 mkdir -p "$(dirname "$PIDFILE")" 2>/dev/null; printf '%s\n' "$$" > "$PIDFILE"
 printf '\e[?1049h\e[?25l'
 intro
@@ -197,22 +235,28 @@ while :; do
 	# timeout (refresh); a closed stdin -> real EOF (exit, don't busy-loop).
 	if ! IFS= read -rsn1 -t "$REFRESH" key; then
 		[ -t 0 ] || break                   # stdin gone -> exit
-		(( arm > 0 && SECONDS - arm_at >= 2 )) && { arm=0; arm_sel=-1; }  # ward decays after ~2s idle
+		(( arm > 0 && SECONDS - arm_at >= 2 )) && { arm=0; arm_sel=-1; }  # single-banish ward decays
+		(( mash > 0 && SECONDS - arm_at >= 2 )) && mash=0                 # mass-banish ward refills
 		load                                # tty timeout -> refresh roster
-		(( sel >= total )) && sel=$(( total > 0 ? total - 1 : 0 ))
+		(( sel > total )) && sel=$(( total > 0 ? total : 0 ))            # keep sel in range (total == ☠ row)
 		new=$(sig); [ "$new" != "$sig" ] && { draw; sig=$new; }   # redraw only if changed
 		continue
 	fi
+	msg=''                                      # any keypress dismisses the last toast
 	case "$key" in
 		$'\e') rest=''; read -rsn2 -t 1 rest
 			case "$rest" in '[A'|'OA') move -1 ;; '[B'|'OB') move 1 ;; esac ;;
 		k|K) move -1 ;;
 		j|J) move 1 ;;
-		r|R) revive ;;
+		r) revive ;;
+		R) do_restore ;;
 		c|C) commune ;;
 		n|N) "$LAUNCHER" >/dev/null 2>&1; load ;;   # birth a spirit in the land of the living
 		d|D) banish_step ;;
-		q|Q) break ;;
+		s|S) do_save ;;
+		# on the ☠ row, q drains the nuke ward; anywhere else q quits. Q always quits.
+		q) if (( total > 0 && sel == total )); then mass_step; else break; fi ;;
+		Q) break ;;
 	esac
 	draw; sig=$(sig)
 done

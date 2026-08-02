@@ -77,6 +77,25 @@ if [[ -f "$KB_SRC" ]]; then
   echo "    restored Karabiner config"
 fi
 
+# tmux session-survival — tmux-resurrect + tmux-continuum, sourced by ~/.tmux.conf
+# (config/tmux/tmux.conf). Cloned at PINNED SHAs, no plugin manager. Makes a
+# tmux-server death recoverable and powers sheol's 💾 save / ♻ restore / ☠ banish-all.
+TMUX_CONF_SRC="$REPO_ROOT/config/tmux/tmux.conf"
+if [[ -f "$TMUX_CONF_SRC" ]]; then
+  mkdir -p "$HOME/.tmux/plugins" "$HOME/.tmux/resurrect"   # classic resurrect dir (deterministic path)
+  clone_pinned_tmux_plugin() {   # $1 = repo name, $2 = pinned SHA
+    local dest="$HOME/.tmux/plugins/$1"
+    [[ -d "$dest/.git" ]] || git clone -q "https://github.com/tmux-plugins/$1.git" "$dest" 2>/dev/null
+    git -C "$dest" checkout -q "$2" 2>/dev/null || true
+  }
+  clone_pinned_tmux_plugin tmux-resurrect cff343cf9e81983d3da0c8562b01616f12e8d548
+  clone_pinned_tmux_plugin tmux-continuum 0698e8f4b17d6454c71bf5212895ec055c578da0
+  if [[ -e "$HOME/.tmux.conf" && ! -L "$HOME/.tmux.conf" ]]; then cp "$HOME/.tmux.conf" "$HOME/.tmux.conf.bak.$(date +%s)"; fi
+  cp "$TMUX_CONF_SRC" "$HOME/.tmux.conf"
+  command -v tmux >/dev/null 2>&1 && tmux source-file "$HOME/.tmux.conf" 2>/dev/null || true
+  echo "    installed tmux.conf + resurrect/continuum (session survival; auto-save every 15m)"
+fi
+
 # MachineSpirit Leader Key fork — the daily-driver launcher. Built from source
 # (forks/LeaderKey) and auto-started by a self-healing LaunchAgent (relaunches
 # on crash, respects a deliberate Quit). Needs full Xcode; if absent, stock
