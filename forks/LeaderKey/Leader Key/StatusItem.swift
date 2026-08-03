@@ -366,7 +366,9 @@ final class SheolStatusItem: NSObject, NSMenuDelegate {
   }
   private var terminals: [Terminal] = []
   private var termPollTimer: Timer?
-  private var menuIsOpen = false
+
+  // Retains the ☠ BANISH ALL type-to-confirm panel while it's on screen.
+  private var banishPanel: BanishAllPanel?
 
   // Section-header items captured on menu build, so a banish can hide an
   // emptied section in place (the ledger stays open across successive kills).
@@ -443,12 +445,9 @@ final class SheolStatusItem: NSObject, NSMenuDelegate {
         DispatchQueue.main.async {
           self.terminals = terms
           self.updateTitle()
-          // If the menu is open, it rendered the previous poll — repaint it in
-          // place now that fresh terminals are in. This is what lets the 45s
-          // background poll stay cheap without ever showing a stale open list.
-          if self.menuIsOpen, let menu = self.statusItem?.menu {
-            self.rebuildMenu(menu)
-          }
+          // NB: intentionally does NOT repaint an open menu — mutating the menu
+          // under the cursor could shift a row mid-click (a data-loss hazard next
+          // to banish). The open list is the last poll; it refreshes on next open.
         }
       }
     } else {
@@ -540,16 +539,9 @@ final class SheolStatusItem: NSObject, NSMenuDelegate {
   }
 
   func menuWillOpen(_ menu: NSMenu) {
-    menuIsOpen = true
-    // Terminal enumeration is a ~0.7s Apple Event, too slow to block the menu
-    // on — so the initial paint (menuNeedsUpdate) shows the last poll. Kick a
-    // fresh read and repaint the OPEN menu when it lands; fixes the stale-on-open
-    // list that the 45s background poll would otherwise leave visible.
+    // Terminal enumeration is a ~0.7s Apple Event, too slow to block the menu on;
+    // this open shows the last poll, so freshen the list for the NEXT open.
     refreshTerminals(background: true)
-  }
-
-  func menuDidClose(_ menu: NSMenu) {
-    menuIsOpen = false
   }
 
   /// Build the menu from current cached state. Must NOT trigger a terminal
@@ -590,6 +582,32 @@ final class SheolStatusItem: NSObject, NSMenuDelegate {
       }
     }
 
+    // ── session survival: save · restore · banish-all ─────────────────────────
+    menu.addItem(.separator())
+    if let age = Self.lastSaveAge(core: corePath) {
+      let hdr = NSMenuItem(title: "Snapshot — \(age)", action: nil, keyEquivalent: "")
+      hdr.isEnabled = false
+      menu.addItem(hdr)
+    }
+    let save = NSMenuItem(
+      title: "💾  Save layout now", action: #selector(saveLayout), keyEquivalent: "")
+    save.target = self
+    menu.addItem(save)
+    let restore = NSMenuItem(
+      title: "♻  Restore last snapshot", action: #selector(restoreLayout), keyEquivalent: "")
+    restore.target = self
+    menu.addItem(restore)
+    if !spirits.isEmpty {
+      // The nuke. Opens a type-to-confirm panel (you type BANISH, the letters
+      // light up) rather than firing on click — typing inside an open menu fights
+      // the menu's own type-select, and this is irreversible-adjacent, so it wants
+      // a deliberate, visible gate. kill-all saves first, so it's undoable with ♻.
+      let banish = NSMenuItem(
+        title: "☠  BANISH ALL…", action: #selector(confirmBanishAll), keyEquivalent: "")
+      banish.target = self
+      menu.addItem(banish)
+    }
+
     menu.addItem(.separator())
     let open = NSMenuItem(
       title: "Open sheol ledger…", action: #selector(openLedger), keyEquivalent: "")
@@ -597,7 +615,9 @@ final class SheolStatusItem: NSObject, NSMenuDelegate {
     menu.addItem(open)
 
     // ---- Terminals: every live NON-tmux terminal (tmux keeps its own lists
-    // above, so a session is never listed twice), click to focus ----
+    // above, so a session is never listed twice). Name click = focus; the red ✕
+    // closes it via the same triple-tap ◆◆◇ ward as the sheol banish. Only iTerm
+    // sessions get the ✕ (an "app:" row isn't a single session we can target). ----
     let plainTerms = terminals.filter { !$0.isTmux }
     menu.addItem(.separator())
     menu.addItem(sectionHeader("Terminals — \(plainTerms.count) live"))
@@ -606,25 +626,65 @@ final class SheolStatusItem: NSObject, NSMenuDelegate {
       none.isEnabled = false
       menu.addItem(none)
     } else {
+      let font = NSFont.menuFont(ofSize: 0)
+      let labelW = min(
+        360,
+        ceil(
+          plainTerms.map {
+            NSAttributedString(
+              string: "❯  " + $0.name.replacingOccurrences(of: "\n", with: " "),
+              attributes: [.font: font]).size().width
+          }.max() ?? 160))
+      let rowW = labelW + 60  // label + ✕ slot + pad
       for term in plainTerms {
         var label = term.name.replacingOccurrences(of: "\n", with: " ")
         if label.count > 52 { label = String(label.prefix(51)) + "…" }
-        let item = NSMenuItem(
-          title: (term.isTmux ? "⧉  " : "❯  ") + label,
-          action: #selector(focusTerminal(_:)), keyEquivalent: "")
-        item.target = self
-        item.representedObject = term.id
-        item.toolTip = "\(term.tty)\(term.isTmux ? " · tmux client" : "") — click to focus"
+        let item = NSMenuItem()
+        item.view = TerminalRow(
+          id: term.id, title: "❯  " + label, tty: term.tty,
+          canKill: !term.id.hasPrefix("app:"),
+          labelW: labelW, rowW: rowW, owner: self)
         menu.addItem(item)
       }
     }
     // The terminal rows above are the last poll's; menuWillOpen kicks a fresh
-    // read that repaints this menu in place when it lands (see refreshTerminals).
+    // read so the NEXT open is current (mutating the open menu could shift a row
+    // under the cursor next to a ✕ — a data-loss hazard we deliberately avoid).
   }
 
-  @objc private func focusTerminal(_ sender: NSMenuItem) {
-    guard let id = sender.representedObject as? String else { return }
-    runTerm(["focus", id])
+  @objc fileprivate func focusTerminalRow(_ sender: SheolRowButton) {
+    statusItem?.menu?.cancelTracking()
+    runTerm(["focus", sender.sessionName])
+  }
+
+  /// Close a terminal — the same triple-tap ward as killRow, calling
+  /// terminals-core kill. The ledger stays open so you can close several; the
+  /// retired row hides in place (a reopen rebuilds fresh regardless).
+  @objc fileprivate func killTerminalRow(_ sender: SheolRowButton) {
+    sender.wardTimer?.invalidate()
+    sender.wardTaps += 1
+    if sender.wardTaps >= 3 {
+      let id = sender.sessionName
+      sender.resetWard()
+      runTerm(["kill", id])
+      retireTerminalRow(sender)
+      return
+    }
+    sender.showWard(remaining: 3 - sender.wardTaps)
+    let timer = Timer(timeInterval: 1.4, repeats: false) { [weak sender] _ in
+      sender?.resetWard()
+    }
+    RunLoop.main.add(timer, forMode: .common)
+    sender.wardTimer = timer
+  }
+
+  /// Hide a just-closed terminal row in place (no section-header bookkeeping —
+  /// the Terminals header count just reads stale until the next open).
+  private func retireTerminalRow(_ button: SheolRowButton) {
+    let t = Timer(timeInterval: 0.01, repeats: false) { [weak button] _ in
+      button?.enclosingMenuItem?.isHidden = true
+    }
+    RunLoop.main.add(t, forMode: .common)
   }
 
   /// The two-tone row label: session name in the primary color, then a dimmed
@@ -732,6 +792,162 @@ final class SheolStatusItem: NSObject, NSMenuDelegate {
     task.standardError = FileHandle.nullDevice
     try? task.run()
   }
+
+  // MARK: - Session survival (save / restore / banish-all)
+
+  @objc private func saveLayout() { runCore(["save"]) }
+  @objc private func restoreLayout() { runCore(["restore"]) }
+
+  /// ☠ BANISH ALL — show the type-to-confirm panel; fire kill-all only when the
+  /// user types the whole word. kill-all snapshots first, so ♻ Restore undoes it.
+  @objc private func confirmBanishAll() {
+    let count = spirits.count
+    let panel = BanishAllPanel()
+    banishPanel = panel
+    panel.show(count: count) { [weak self] in self?.runCore(["kill-all"]) }
+  }
+
+  /// Human "saved Nm ago" for the snapshot header, or nil if sheol-core is
+  /// missing. Cheap (a stat via `last-save`); runs inline like `list` does.
+  private static func lastSaveAge(core: String) -> String? {
+    guard FileManager.default.isExecutableFile(atPath: core) else { return nil }
+    let task = Process()
+    task.executableURL = URL(fileURLWithPath: core)
+    task.arguments = ["last-save"]
+    let out = Pipe()
+    task.standardOutput = out
+    task.standardError = Pipe()
+    do {
+      try task.run()
+      let data = out.fileHandleForReading.readDataToEndOfFile()
+      task.waitUntilExit()
+      let text = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+      let epoch = Int(text) ?? 0
+      if epoch == 0 { return "never saved" }
+      let secs = max(0, Int(Date().timeIntervalSince1970) - epoch)
+      let d = secs / 86400, h = (secs % 86400) / 3600, m = (secs % 3600) / 60
+      if d > 0 { return "saved \(d)d\(h)h ago" }
+      if h > 0 { return "saved \(h)h\(m)m ago" }
+      if m > 0 { return "saved \(m)m ago" }
+      return "saved just now"
+    } catch {
+      return nil
+    }
+  }
+}
+
+/// The ☠ BANISH ALL confirmation: a small floating panel where you type the word
+/// BANISH and watch each letter light up. Reliable window key-handling (unlike
+/// typing inside a tracking NSMenu), and a deliberately visible gate for a
+/// destructive action. The confirm button enables only on the exact word.
+final class BanishAllPanel: NSObject, NSTextFieldDelegate {
+  private var panel: NSPanel?
+  private var cells: [NSTextField] = []
+  private var field: NSTextField?
+  private var confirmButton: NSButton?
+  private var onConfirm: (() -> Void)?
+  private let word = "BANISH"
+
+  func show(count: Int, onConfirm: @escaping () -> Void) {
+    self.onConfirm = onConfirm
+    let w: CGFloat = 400, h: CGFloat = 220
+    let p = NSPanel(
+      contentRect: NSRect(x: 0, y: 0, width: w, height: h),
+      styleMask: [.titled, .closable], backing: .buffered, defer: false)
+    p.title = "Banish all spirits"
+    p.isFloatingPanel = true
+    p.level = .modalPanel
+    p.center()
+    guard let v = p.contentView else { return }
+
+    let head = NSTextField(labelWithString: "☠  BANISH ALL")
+    head.font = .boldSystemFont(ofSize: 18)
+    head.textColor = .systemRed
+    head.frame = NSRect(x: 24, y: h - 54, width: w - 48, height: 26)
+    v.addSubview(head)
+
+    let sub = NSTextField(
+      wrappingLabelWithString:
+        "\(count) tmux session\(count == 1 ? "" : "s") will be killed. A snapshot is "
+        + "saved first — bring them back with ♻ Restore.")
+    sub.font = .systemFont(ofSize: 11)
+    sub.textColor = .secondaryLabelColor
+    sub.frame = NSRect(x: 24, y: h - 100, width: w - 48, height: 38)
+    v.addSubview(sub)
+
+    // letter cells — dim, then red-bold as each matching letter is typed
+    let cw: CGFloat = 42, gap: CGFloat = 8
+    let totalW = CGFloat(word.count) * cw + CGFloat(word.count - 1) * gap
+    var x = (w - totalW) / 2
+    for ch in word {
+      let c = NSTextField(labelWithString: String(ch))
+      c.alignment = .center
+      c.font = .monospacedSystemFont(ofSize: 20, weight: .bold)
+      c.textColor = .tertiaryLabelColor
+      c.frame = NSRect(x: x, y: 104, width: cw, height: 34)
+      c.wantsLayer = true
+      c.layer?.borderWidth = 1
+      c.layer?.borderColor = NSColor.separatorColor.cgColor
+      c.layer?.cornerRadius = 6
+      v.addSubview(c)
+      cells.append(c)
+      x += cw + gap
+    }
+
+    let f = NSTextField(frame: NSRect(x: 24, y: 60, width: w - 48, height: 24))
+    f.placeholderString = "type BANISH to confirm"
+    f.alignment = .center
+    f.delegate = self
+    v.addSubview(f)
+    field = f
+
+    let cancel = NSButton(title: "Cancel", target: self, action: #selector(cancel))
+    cancel.frame = NSRect(x: w - 192, y: 16, width: 84, height: 30)
+    cancel.bezelStyle = .rounded
+    cancel.keyEquivalent = "\u{1b}"  // Esc
+    v.addSubview(cancel)
+
+    let ok = NSButton(title: "Banish all", target: self, action: #selector(confirm))
+    ok.frame = NSRect(x: w - 100, y: 16, width: 88, height: 30)
+    ok.bezelStyle = .rounded
+    ok.keyEquivalent = "\r"
+    ok.isEnabled = false
+    v.addSubview(ok)
+    confirmButton = ok
+
+    panel = p
+    NSApp.activate(ignoringOtherApps: true)
+    p.makeKeyAndOrderFront(nil)
+    p.makeFirstResponder(f)
+  }
+
+  func controlTextDidChange(_ obj: Notification) {
+    let typed = Array((field?.stringValue ?? "").uppercased())
+    let target = Array(word)
+    for (i, c) in cells.enumerated() {
+      let lit = i < typed.count && typed[i] == target[i]
+      c.textColor = lit ? .systemRed : .tertiaryLabelColor
+      c.layer?.borderColor = (lit ? NSColor.systemRed : NSColor.separatorColor).cgColor
+    }
+    confirmButton?.isEnabled = (typed == target)
+  }
+
+  @objc private func confirm() {
+    guard (field?.stringValue ?? "").uppercased() == word else { return }
+    let cb = onConfirm
+    close()
+    cb?()
+  }
+
+  @objc private func cancel() { close() }
+
+  private func close() {
+    panel?.close()
+    panel = nil
+    cells = []
+    field = nil
+    confirmButton = nil
+  }
 }
 
 /// A menu-row button that remembers its session and, for the kill ✕, holds the
@@ -741,6 +957,7 @@ private final class SheolRowButton: NSButton {
   var sessionName = ""
   var wardTaps = 0
   var wardTimer: Timer?
+  var wardVerb = "Banish"  // "Close" for terminal rows — same ward, different word
   private var restImage: NSImage?
 
   /// Show `remaining` filled diamonds out of 3 (◆◆◇ → ◆◇◇) in place of the ✕.
@@ -756,7 +973,7 @@ private final class SheolRowButton: NSButton {
         .foregroundColor: NSColor.systemRed,
         .font: NSFont.systemFont(ofSize: 10, weight: .bold),
       ])
-    toolTip = "Tap \(remaining) more to banish"
+    toolTip = "Tap \(remaining) more to \(wardVerb.lowercased())"
   }
 
   /// Ward decayed or completed — restore the ✕.
@@ -767,7 +984,98 @@ private final class SheolRowButton: NSButton {
     attributedTitle = NSAttributedString(string: "")
     imagePosition = .imageOnly
     image = restImage
-    toolTip = "Banish — tap 3× (◆◆◇ ward)"
+    toolTip = "\(wardVerb) — tap 3× (◆◆◇ ward)"
+  }
+}
+
+/// One row in the menu-bar Terminals section: a name button (click = focus that
+/// terminal) and, for an iTerm session, a red ✕ that closes it via the same
+/// triple-tap ◆◆◇ ward as the sheol banish. "app:" rows omit the ✕ (no single
+/// session to target). Mirrors SheolRow's hover highlight so the sections match.
+private final class TerminalRow: NSView {
+  private let title: String
+  private let nameButton: SheolRowButton
+  private let killButton: SheolRowButton?
+  private var hovered = false
+  private var trackingArea: NSTrackingArea?
+
+  init(
+    id: String, title: String, tty: String, canKill: Bool,
+    labelW: CGFloat, rowW: CGFloat, owner: SheolStatusItem
+  ) {
+    self.title = title
+    let h: CGFloat = 22
+
+    let focus = SheolRowButton(frame: NSRect(x: 6, y: 0, width: labelW, height: h))
+    focus.sessionName = id
+    focus.isBordered = false
+    focus.imagePosition = .noImage
+    focus.alignment = .left
+    (focus.cell as? NSButtonCell)?.lineBreakMode = .byTruncatingTail
+    focus.attributedTitle = Self.label(title: title, hovered: false)
+    focus.target = owner
+    focus.action = #selector(SheolStatusItem.focusTerminalRow(_:))
+    focus.toolTip = "\(tty) — click to focus"
+    self.nameButton = focus
+
+    if canKill {
+      let kill = SheolRowButton()
+      kill.sessionName = id
+      kill.wardVerb = "Close"
+      kill.isBordered = false
+      kill.bezelStyle = .regularSquare
+      kill.image = NSImage(systemSymbolName: "xmark.circle.fill", accessibilityDescription: "close")
+      kill.imagePosition = .imageOnly
+      kill.contentTintColor = .systemRed
+      kill.toolTip = "Close — tap 3× (◆◆◇ ward)"
+      kill.frame = NSRect(x: rowW - 46, y: 1, width: 40, height: 20)
+      kill.target = owner
+      kill.action = #selector(SheolStatusItem.killTerminalRow(_:))
+      self.killButton = kill
+    } else {
+      self.killButton = nil
+    }
+
+    super.init(frame: NSRect(x: 0, y: 0, width: rowW, height: h))
+    addSubview(nameButton)
+    if let killButton { addSubview(killButton) }
+  }
+
+  required init?(coder: NSCoder) { nil }
+
+  override func updateTrackingAreas() {
+    super.updateTrackingAreas()
+    if let trackingArea { removeTrackingArea(trackingArea) }
+    let ta = NSTrackingArea(
+      rect: bounds, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+      owner: self, userInfo: nil)
+    addTrackingArea(ta)
+    trackingArea = ta
+  }
+
+  override func mouseEntered(with event: NSEvent) { setHovered(true) }
+  override func mouseExited(with event: NSEvent) { setHovered(false) }
+
+  private func setHovered(_ h: Bool) {
+    guard hovered != h else { return }
+    hovered = h
+    nameButton.attributedTitle = Self.label(title: title, hovered: h)
+    needsDisplay = true
+  }
+
+  override func draw(_ dirtyRect: NSRect) {
+    guard hovered else { return }
+    NSColor.selectedContentBackgroundColor.setFill()
+    NSBezierPath(roundedRect: bounds.insetBy(dx: 5, dy: 1), xRadius: 5, yRadius: 5).fill()
+  }
+
+  static func label(title: String, hovered: Bool) -> NSAttributedString {
+    NSAttributedString(
+      string: title,
+      attributes: [
+        .foregroundColor: hovered ? NSColor.selectedMenuItemTextColor : NSColor.labelColor,
+        .font: NSFont.menuFont(ofSize: 0),
+      ])
   }
 }
 

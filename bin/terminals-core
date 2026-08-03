@@ -188,8 +188,34 @@ end run
 OSA
     exit 0
     ;;
+  kill)
+    # Close a terminal session. Only iTerm sessions can be targeted precisely (by
+    # id); an "app:<Name>" row isn't a single session we can address, so it's a
+    # deliberate no-op (the menu-bar ledger only offers ✕ on iTerm rows). iTerm's
+    # own "a process is running" prompt may still appear — that's fine, it's a
+    # second guard on top of the ledger's triple-tap ward.
+    id="${2:-}"
+    [[ -z "$id" ]] && exit 0
+    [[ "$id" == app:* ]] && exit 0
+    /usr/bin/osascript - "$id" <<'OSA'
+on run argv
+  set theID to (item 1 of argv)
+  if not (application "iTerm2" is running) then return
+  tell application "iTerm2"
+    repeat with w in windows
+      repeat with t in tabs of w
+        repeat with s in sessions of t
+          if (id of s) is theID then close s
+        end repeat
+      end repeat
+    end repeat
+  end tell
+end run
+OSA
+    exit 0
+    ;;
   *)
-    print -u2 "terminals-core: list [--json] | focus <id>"
+    print -u2 "terminals-core: list [--json] | focus <id> | kill <id>"
     exit 0
     ;;
 esac
