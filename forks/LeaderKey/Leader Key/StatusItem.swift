@@ -363,6 +363,7 @@ final class SheolStatusItem: NSObject, NSMenuDelegate {
     let tty: String
     let name: String
     let isTmux: Bool
+    let job: String?  // foreground command (iTerm jobName) — for agent detection
   }
   private var terminals: [Terminal] = []
   private var termPollTimer: Timer?
@@ -556,6 +557,11 @@ final class SheolStatusItem: NSObject, NSMenuDelegate {
     menu.addItem(
       sectionHeader("Sheol — \(living.count) living · \(wandering.count) wandering"))
 
+    let newTmux = NSMenuItem(
+      title: "＋  New tmux window", action: #selector(newTmuxWindow), keyEquivalent: "")
+    newTmux.target = self
+    menu.addItem(newTmux)
+
     if spirits.isEmpty {
       let none = NSMenuItem(title: "No tmux sessions", action: nil, keyEquivalent: "")
       none.isEnabled = false
@@ -564,8 +570,8 @@ final class SheolStatusItem: NSObject, NSMenuDelegate {
       // Size every row to the widest label so full names never clip; trailing
       // controls stay right-aligned across all rows.
       let labelW = min(
-        360, ceil(spirits.map { Self.rowLabel(for: $0).size().width }.max() ?? 120))
-      let rowW = labelW + 92  // label + gaps + detach slot + kill/ward slot + pad
+        360, ceil(spirits.map { Self.rowLabel(for: $0).size().width }.max() ?? 120) + 22)  // + $| marker
+      let rowW = labelW + 116  // label + gaps + detach + agent + kill/ward slot + pad
       livingHeaderItem = nil
       wanderingHeaderItem = nil
       if !living.isEmpty {
@@ -582,7 +588,62 @@ final class SheolStatusItem: NSObject, NSMenuDelegate {
       }
     }
 
-    // ── session survival: save · restore · banish-all ─────────────────────────
+    menu.addItem(.separator())
+    let open = NSMenuItem(
+      title: "Open sheol ledger…", action: #selector(openLedger), keyEquivalent: "")
+    open.target = self
+    menu.addItem(open)
+
+    // ---- Terminals: every live NON-tmux terminal (tmux keeps its own lists
+    // above, so a session is never listed twice). Name click = focus; the red ✕
+    // closes it via the same triple-tap ◆◆◇ ward as the sheol banish. Only iTerm
+    // sessions get the ✕ (an "app:" row isn't a single session we can target). ----
+    let plainTerms = terminals.filter { !$0.isTmux }
+    menu.addItem(.separator())
+    menu.addItem(sectionHeader("Terminals — \(plainTerms.count) live"))
+    let newTerm = NSMenuItem(
+      title: "＋  New terminal window", action: #selector(newTerminalWindow), keyEquivalent: "")
+    newTerm.target = self
+    menu.addItem(newTerm)
+    if plainTerms.isEmpty {
+      let none = NSMenuItem(title: "No terminals", action: nil, keyEquivalent: "")
+      none.isEnabled = false
+      menu.addItem(none)
+    } else {
+      let font = NSFont.menuFont(ofSize: 0)
+      let labelW = min(
+        360,
+        ceil(
+          plainTerms.map {
+            NSAttributedString(
+              string: "$|  ❯  " + $0.name.replacingOccurrences(of: "\n", with: " "),
+              attributes: [.font: font]).size().width
+          }.max() ?? 160))
+      let rowW = labelW + 84  // label + agent slot + ✕ slot + pad
+      for term in plainTerms {
+        var label = term.name.replacingOccurrences(of: "\n", with: " ")
+        if label.count > 52 { label = String(label.prefix(51)) + "…" }
+        let isITerm = !term.id.hasPrefix("app:")  // iTerm rows get green $| + the ✕
+        let item = NSMenuItem()
+        item.view = TerminalRow(
+          id: term.id, title: "❯  " + label, tty: term.tty,
+          canKill: isITerm, marker: isITerm ? .iterm : .other,
+          agent: agentKind(for: term.job),
+          labelW: labelW, rowW: rowW, owner: self)
+        menu.addItem(item)
+      }
+    }
+    // The terminal rows above are the last poll's; menuWillOpen kicks a fresh
+    // read so the NEXT open is current (mutating the open menu could shift a row
+    // under the cursor next to a ✕ — a data-loss hazard we deliberately avoid).
+
+    // ── session survival at the very bottom: snapshot age · save · restore · nuke
+    addSurvivalSection(to: menu)
+  }
+
+  /// Snapshot age + 💾 Save · ♻ Restore · ☠ BANISH ALL. Lives at the bottom of the
+  /// menu so the destructive nuke is far from the per-session controls.
+  private func addSurvivalSection(to menu: NSMenu) {
     menu.addItem(.separator())
     if let age = Self.lastSaveAge(core: corePath) {
       let hdr = NSMenuItem(title: "Snapshot — \(age)", action: nil, keyEquivalent: "")
@@ -607,49 +668,6 @@ final class SheolStatusItem: NSObject, NSMenuDelegate {
       banish.target = self
       menu.addItem(banish)
     }
-
-    menu.addItem(.separator())
-    let open = NSMenuItem(
-      title: "Open sheol ledger…", action: #selector(openLedger), keyEquivalent: "")
-    open.target = self
-    menu.addItem(open)
-
-    // ---- Terminals: every live NON-tmux terminal (tmux keeps its own lists
-    // above, so a session is never listed twice). Name click = focus; the red ✕
-    // closes it via the same triple-tap ◆◆◇ ward as the sheol banish. Only iTerm
-    // sessions get the ✕ (an "app:" row isn't a single session we can target). ----
-    let plainTerms = terminals.filter { !$0.isTmux }
-    menu.addItem(.separator())
-    menu.addItem(sectionHeader("Terminals — \(plainTerms.count) live"))
-    if plainTerms.isEmpty {
-      let none = NSMenuItem(title: "No terminals", action: nil, keyEquivalent: "")
-      none.isEnabled = false
-      menu.addItem(none)
-    } else {
-      let font = NSFont.menuFont(ofSize: 0)
-      let labelW = min(
-        360,
-        ceil(
-          plainTerms.map {
-            NSAttributedString(
-              string: "❯  " + $0.name.replacingOccurrences(of: "\n", with: " "),
-              attributes: [.font: font]).size().width
-          }.max() ?? 160))
-      let rowW = labelW + 60  // label + ✕ slot + pad
-      for term in plainTerms {
-        var label = term.name.replacingOccurrences(of: "\n", with: " ")
-        if label.count > 52 { label = String(label.prefix(51)) + "…" }
-        let item = NSMenuItem()
-        item.view = TerminalRow(
-          id: term.id, title: "❯  " + label, tty: term.tty,
-          canKill: !term.id.hasPrefix("app:"),
-          labelW: labelW, rowW: rowW, owner: self)
-        menu.addItem(item)
-      }
-    }
-    // The terminal rows above are the last poll's; menuWillOpen kicks a fresh
-    // read so the NEXT open is current (mutating the open menu could shift a row
-    // under the cursor next to a ✕ — a data-loss hazard we deliberately avoid).
   }
 
   @objc fileprivate func focusTerminalRow(_ sender: SheolRowButton) {
@@ -710,10 +728,16 @@ final class SheolStatusItem: NSObject, NSMenuDelegate {
   private func rowItem(_ spirit: Spirit, labelW: CGFloat, rowW: CGFloat) -> NSMenuItem {
     let item = NSMenuItem()
     let dot = spirit.isWandering ? "○ " : "● "
+    // Living (attached) → has a terminal → green $|; wandering → dim ▪.
+    // Agent glyph flags a session whose command is a known agent CLI — and a
+    // DETACHED spirit can still be running one (that's the point of tmux), so it
+    // applies regardless of attach state.
     item.view = SheolRow(
       name: spirit.name, title: dot + spirit.name,
       subtitle: "   ·  \(spirit.command) · \(spirit.quietFor)",
-      labelW: labelW, rowW: rowW, isWandering: spirit.isWandering, owner: self)
+      labelW: labelW, rowW: rowW, isWandering: spirit.isWandering,
+      marker: spirit.isWandering ? .other : .iterm,
+      agent: agentKind(for: spirit.command), owner: self)
     return item
   }
 
@@ -792,6 +816,25 @@ final class SheolStatusItem: NSObject, NSMenuDelegate {
     task.standardError = FileHandle.nullDevice
     try? task.run()
   }
+
+  // MARK: - New windows
+
+  /// ＋ New tmux window — a fresh protected session (evocative name) via
+  /// tmux-launch.sh, the same thing the TUI's `n` and Leader Key's `t t` run.
+  @objc private func newTmuxWindow() {
+    let launcher = home.appendingPathComponent("bin/tmux-launch.sh").path
+    guard FileManager.default.isExecutableFile(atPath: launcher) else { return }
+    DispatchQueue.global(qos: .userInitiated).async {
+      let task = Process()
+      task.executableURL = URL(fileURLWithPath: launcher)
+      task.standardOutput = FileHandle.nullDevice
+      task.standardError = FileHandle.nullDevice
+      try? task.run()
+    }
+  }
+
+  /// ＋ New terminal window — a fresh iTerm2 window (terminals-core new).
+  @objc private func newTerminalWindow() { runTerm(["new"]) }
 
   // MARK: - Session survival (save / restore / banish-all)
 
@@ -950,6 +993,62 @@ final class BanishAllPanel: NSObject, NSTextFieldDelegate {
   }
 }
 
+// MARK: - Agent awareness + terminal marker (shared by both row types)
+
+/// A known agent CLI and the glyph that flags a session running it. Matched by a
+/// substring of the session's running command / foreground job, so it fires
+/// whether or not the tool is "installed" — the instant one runs, the row warns
+/// you before you close it. Extend by adding a row to `agentTable`.
+struct AgentKind {
+  let glyph: String
+  let label: String
+}
+
+/// Ordered; first substring match wins. Keys are lowercased and matched against
+/// the short foreground command (e.g. "claude.exe", "codex", "node"), so plain
+/// keywords are safe. Add agents here — no other change needed.
+private let agentTable: [(key: String, glyph: String, label: String)] = [
+  ("claude", "🦀", "Claude Code"),
+  ("codex", "🔷", "Codex"),
+  ("grok", "🛰️", "Grok"),
+  ("gemini", "✦", "Gemini CLI"),
+  ("deepseek", "🐋", "DeepSeek"),
+  ("kimi", "🌙", "Kimi"),
+  ("qwen", "🐧", "Qwen Code"),
+  ("aider", "🤝", "Aider"),
+  ("opencode", "🤖", "opencode"),
+  ("goose", "🪿", "Goose"),
+  ("cursor-agent", "▮", "Cursor Agent"),
+]
+
+func agentKind(for command: String?) -> AgentKind? {
+  guard let command, !command.isEmpty else { return nil }
+  let c = command.lowercased()
+  for row in agentTable where c.contains(row.key) {
+    return AgentKind(glyph: row.glyph, label: row.label)
+  }
+  return nil
+}
+
+/// The leading terminal marker: green `$|` (the iTerm dock-icon look) when a
+/// session has an iTerm terminal, a dim `▪` otherwise (a detached tmux spirit or
+/// a non-iTerm app). Baked into the row's name label as a colored prefix.
+enum RowMarker {
+  case iterm
+  case other
+  var glyph: String { self == .iterm ? "$|" : "▪" }
+  var color: NSColor { self == .iterm ? .systemGreen : .tertiaryLabelColor }
+}
+
+/// A small non-interactive label for an agent glyph (emoji), used in the trailing
+/// slot of both row types.
+func agentGlyphLabel(_ text: String) -> NSTextField {
+  let f = NSTextField(labelWithString: text)
+  f.alignment = .center
+  f.font = .systemFont(ofSize: 13)
+  return f
+}
+
 /// A menu-row button that remembers its session and, for the kill ✕, holds the
 /// decaying-ward state (taps so far + the reset timer). `showWard`/`resetWard`
 /// swap the ✕ image for the ◆◆◇ ward glyphs and back.
@@ -994,16 +1093,18 @@ private final class SheolRowButton: NSButton {
 /// session to target). Mirrors SheolRow's hover highlight so the sections match.
 private final class TerminalRow: NSView {
   private let title: String
+  private let marker: RowMarker
   private let nameButton: SheolRowButton
   private let killButton: SheolRowButton?
   private var hovered = false
   private var trackingArea: NSTrackingArea?
 
   init(
-    id: String, title: String, tty: String, canKill: Bool,
-    labelW: CGFloat, rowW: CGFloat, owner: SheolStatusItem
+    id: String, title: String, tty: String, canKill: Bool, marker: RowMarker,
+    agent: AgentKind?, labelW: CGFloat, rowW: CGFloat, owner: SheolStatusItem
   ) {
     self.title = title
+    self.marker = marker
     let h: CGFloat = 22
 
     let focus = SheolRowButton(frame: NSRect(x: 6, y: 0, width: labelW, height: h))
@@ -1012,7 +1113,7 @@ private final class TerminalRow: NSView {
     focus.imagePosition = .noImage
     focus.alignment = .left
     (focus.cell as? NSButtonCell)?.lineBreakMode = .byTruncatingTail
-    focus.attributedTitle = Self.label(title: title, hovered: false)
+    focus.attributedTitle = Self.label(title: title, marker: marker, hovered: false)
     focus.target = owner
     focus.action = #selector(SheolStatusItem.focusTerminalRow(_:))
     focus.toolTip = "\(tty) — click to focus"
@@ -1039,6 +1140,14 @@ private final class TerminalRow: NSView {
     super.init(frame: NSRect(x: 0, y: 0, width: rowW, height: h))
     addSubview(nameButton)
     if let killButton { addSubview(killButton) }
+    // Agent glyph — flags an agent CLI running in this terminal, just left of the
+    // ✕ (the safety cue before you close it).
+    if let agent {
+      let g = agentGlyphLabel(agent.glyph)
+      g.frame = NSRect(x: rowW - 70, y: 0, width: 22, height: h)
+      g.toolTip = "\(agent.label) may be running here"
+      addSubview(g)
+    }
   }
 
   required init?(coder: NSCoder) { nil }
@@ -1059,7 +1168,7 @@ private final class TerminalRow: NSView {
   private func setHovered(_ h: Bool) {
     guard hovered != h else { return }
     hovered = h
-    nameButton.attributedTitle = Self.label(title: title, hovered: h)
+    nameButton.attributedTitle = Self.label(title: title, marker: marker, hovered: h)
     needsDisplay = true
   }
 
@@ -1069,13 +1178,21 @@ private final class TerminalRow: NSView {
     NSBezierPath(roundedRect: bounds.insetBy(dx: 5, dy: 1), xRadius: 5, yRadius: 5).fill()
   }
 
-  static func label(title: String, hovered: Bool) -> NSAttributedString {
-    NSAttributedString(
-      string: title,
+  static func label(title: String, marker: RowMarker, hovered: Bool) -> NSAttributedString {
+    let s = NSMutableAttributedString(
+      string: marker.glyph + "  ",
       attributes: [
-        .foregroundColor: hovered ? NSColor.selectedMenuItemTextColor : NSColor.labelColor,
+        .foregroundColor: hovered ? NSColor.selectedMenuItemTextColor : marker.color,
         .font: NSFont.menuFont(ofSize: 0),
       ])
+    s.append(
+      NSAttributedString(
+        string: title,
+        attributes: [
+          .foregroundColor: hovered ? NSColor.selectedMenuItemTextColor : NSColor.labelColor,
+          .font: NSFont.menuFont(ofSize: 0),
+        ]))
+    return s
   }
 }
 
@@ -1087,6 +1204,7 @@ private final class SheolRow: NSView {
   let isWandering: Bool
   private let title: String
   private let subtitle: String
+  private let marker: RowMarker
   private let nameButton: SheolRowButton
   private let detachButton: SheolRowButton?
   private let killButton: SheolRowButton
@@ -1095,21 +1213,24 @@ private final class SheolRow: NSView {
 
   init(
     name: String, title: String, subtitle: String, labelW: CGFloat, rowW: CGFloat,
-    isWandering: Bool, owner: SheolStatusItem
+    isWandering: Bool, marker: RowMarker, agent: AgentKind?, owner: SheolStatusItem
   ) {
     self.isWandering = isWandering
     self.title = title
     self.subtitle = subtitle
+    self.marker = marker
     let h: CGFloat = 22
 
-    // Name — borderless button sized to the measured label (no clipping).
+    // Name — borderless button sized to the measured label (no clipping). The
+    // leading terminal marker ($| / ▪) is baked in as a colored prefix.
     let revive = SheolRowButton(frame: NSRect(x: 6, y: 0, width: labelW, height: h))
     revive.sessionName = name
     revive.isBordered = false
     revive.imagePosition = .noImage
     revive.alignment = .left
     (revive.cell as? NSButtonCell)?.lineBreakMode = .byTruncatingTail
-    revive.attributedTitle = Self.label(title: title, subtitle: subtitle, hovered: false)
+    revive.attributedTitle = Self.label(
+      title: title, subtitle: subtitle, marker: marker, hovered: false)
     revive.target = owner
     revive.action = #selector(SheolStatusItem.reviveRow(_:))
     revive.toolTip =
@@ -1127,10 +1248,11 @@ private final class SheolRow: NSView {
     kill.action = #selector(SheolStatusItem.killRow(_:))
     self.killButton = kill
 
-    // Detach (the sleepy moon) — only on a living, attached session.
+    // Detach (the sleepy moon) — only on a living, attached session. Sits left of
+    // the agent-glyph slot.
     if !isWandering {
       let detach = Self.icon("moon.zzz", name: name, tip: "Send to sheol (detach)")
-      detach.frame = NSRect(x: rowW - 74, y: 1, width: 22, height: 20)
+      detach.frame = NSRect(x: rowW - 96, y: 1, width: 22, height: 20)
       detach.target = owner
       detach.action = #selector(SheolStatusItem.detachRow(_:))
       self.detachButton = detach
@@ -1142,6 +1264,14 @@ private final class SheolRow: NSView {
     addSubview(nameButton)
     addSubview(killButton)
     if let detachButton { addSubview(detachButton) }
+    // Agent glyph — flags that an agent CLI may be running, just left of the ✕
+    // (the safety cue before you banish). Non-interactive; tooltip names it.
+    if let agent {
+      let g = agentGlyphLabel(agent.glyph)
+      g.frame = NSRect(x: rowW - 70, y: 0, width: 22, height: h)
+      g.toolTip = "\(agent.label) may be running here"
+      addSubview(g)
+    }
   }
 
   required init?(coder: NSCoder) { nil }
@@ -1166,7 +1296,8 @@ private final class SheolRow: NSView {
   private func setHovered(_ h: Bool) {
     guard hovered != h else { return }
     hovered = h
-    nameButton.attributedTitle = Self.label(title: title, subtitle: subtitle, hovered: h)
+    nameButton.attributedTitle = Self.label(
+      title: title, subtitle: subtitle, marker: marker, hovered: h)
     // The moon needs to read on the accent fill; the ✕/ward stay red (still
     // legible, and red is meaningful for a destructive control).
     detachButton?.contentTintColor = h ? .selectedMenuItemTextColor : nil
@@ -1179,12 +1310,21 @@ private final class SheolRow: NSView {
     NSBezierPath(roundedRect: bounds.insetBy(dx: 5, dy: 1), xRadius: 5, yRadius: 5).fill()
   }
 
-  static func label(title: String, subtitle: String, hovered: Bool) -> NSAttributedString {
+  static func label(title: String, subtitle: String, marker: RowMarker, hovered: Bool)
+    -> NSAttributedString
+  {
     let nameColor: NSColor = hovered ? .selectedMenuItemTextColor : .labelColor
     let subColor: NSColor = hovered ? .selectedMenuItemTextColor : .secondaryLabelColor
     let s = NSMutableAttributedString(
-      string: title,
-      attributes: [.foregroundColor: nameColor, .font: NSFont.menuFont(ofSize: 0)])
+      string: marker.glyph + "  ",
+      attributes: [
+        .foregroundColor: hovered ? NSColor.selectedMenuItemTextColor : marker.color,
+        .font: NSFont.menuFont(ofSize: 0),
+      ])
+    s.append(
+      NSAttributedString(
+        string: title,
+        attributes: [.foregroundColor: nameColor, .font: NSFont.menuFont(ofSize: 0)]))
     s.append(
       NSAttributedString(
         string: subtitle,

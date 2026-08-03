@@ -93,6 +93,8 @@ while IFS= read -r _t; do
 done <<< "$tclients"
 
 # ---- iTerm sessions ----
+# Also grab jobName (the session's FOREGROUND command) so the menu-bar ledger can
+# flag agent CLIs (claude/codex/…) before you close a session that's running one.
 iterm_ttys=()
 iterm_lines=$(/usr/bin/osascript <<OSA
 if application "iTerm2" is running then
@@ -101,7 +103,11 @@ if application "iTerm2" is running then
     repeat with w in windows
       repeat with t in tabs of w
         repeat with s in sessions of t
-          set out to out & (id of s) & "$US" & (tty of s) & "$US" & (name of s) & linefeed
+          set jn to ""
+          try
+            set jn to (variable s named "jobName")
+          end try
+          set out to out & (id of s) & "$US" & (tty of s) & "$US" & (name of s) & "$US" & jn & linefeed
         end repeat
       end repeat
     end repeat
@@ -113,13 +119,13 @@ end if
 OSA
 )
 if [[ -n "$iterm_lines" ]]; then
-  while IFS="$US" read -r id tty name; do
+  while IFS="$US" read -r id tty name job; do
     [[ -z "$id" ]] && continue
     iterm_ttys+="$tty"
     isTmux=false
     [[ "$name" == tmux* ]] && isTmux=true
     [[ -n "${_TMUXTTY[$tty]:-}" ]] && isTmux=true
-    emit+="${id}${US}${tty}${US}${name}${US}${isTmux}"
+    emit+="${id}${US}${tty}${US}${name}${US}${isTmux}${US}${job}"
   done <<< "$iterm_lines"
 fi
 
@@ -137,7 +143,7 @@ for _cand in "${_candidates[@]}"; do
   [[ "$app" == iTerm* ]] && continue
   (( ${seen_app[(I)$app]} )) && continue                          # one row per app
   seen_app+="$app"
-  emit+="app:${app}${US}${dev}${US}${app}${US}false"
+  emit+="app:${app}${US}${dev}${US}${app}${US}false${US}"   # trailing empty job (no ✕ on app rows)
 done
 
 verb="${1:-}"
@@ -147,10 +153,10 @@ case "$verb" in
       print -n '['
       first=1
       for row in "${emit[@]}"; do
-        IFS="$US" read -r id tty name isTmux <<< "$row"
+        IFS="$US" read -r id tty name isTmux job <<< "$row"
         (( first )) || print -n ','
         first=0
-        print -rn -- "{\"id\":\"$(json_escape "$id")\",\"tty\":\"$(json_escape "$tty")\",\"name\":\"$(json_escape "$name")\",\"isTmux\":${isTmux}}"
+        print -rn -- "{\"id\":\"$(json_escape "$id")\",\"tty\":\"$(json_escape "$tty")\",\"name\":\"$(json_escape "$name")\",\"isTmux\":${isTmux},\"job\":\"$(json_escape "$job")\"}"
       done
       print ']'
     else
@@ -214,8 +220,19 @@ end run
 OSA
     exit 0
     ;;
+  new)
+    # Open a fresh iTerm2 window (the menu-bar "＋ New terminal window"). iTerm is
+    # the setup's terminal; create + activate a default-profile window.
+    /usr/bin/osascript <<'OSA' >/dev/null 2>&1
+tell application "iTerm2"
+  create window with default profile
+  activate
+end tell
+OSA
+    exit 0
+    ;;
   *)
-    print -u2 "terminals-core: list [--json] | focus <id> | kill <id>"
+    print -u2 "terminals-core: list [--json] | focus <id> | kill <id> | new"
     exit 0
     ;;
 esac
