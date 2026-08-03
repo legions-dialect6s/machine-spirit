@@ -255,7 +255,9 @@ A tmux **server** holds every session in memory, so when it dies (a crash, an OO
 - **restore is deliberate, not automatic** (`@continuum-restore off`) — no surprise resurrection on boot; you bring spirits back from sheol (`R`) once you've decided to.
 - Snapshots capture **pane contents** (scrollback), so a revived spirit shows what it was doing, and live under `~/.tmux/resurrect/`.
 
-Both surfaces expose it: the sheol TUI's `s` / `R` / `☠ banish-all`, and the same on the menu-bar ledger. All of it routes through `sheol-core save | restore | kill-all` so the surfaces can't disagree.
+Both surfaces expose it: the sheol TUI's `s` / `R` / `☠ banish-all`, and the same on the menu-bar ledger. All of it routes through `sheol-core save | restore | kill-all` so the surfaces can't disagree. On the menu bar, **☠ BANISH ALL…** opens a type-to-confirm panel — you type the word `BANISH` and each letter lights up; the button arms only on the exact word (typing inside a tracking menu fights its type-select, so a panel gives it a reliable, visible gate). And because `kill-all` snapshots first, even the nuke is undoable with **♻ Restore**.
+
+The menu-bar **Terminals** section (every live non-tmux terminal) now carries the same triple-tap `◆◆◇` **✕** ward as the sheol banish — three taps closes that iTerm session in place, the ledger staying open so you can clear several. Only iTerm rows get the ✕ (an `app:` row isn't a single session that can be targeted, so it stays focus-only).
 
 Only ever **one sheol** runs: pressing `⇪ t m u x` again kills any open ledger and opens a fresh one. It renders on the alternate screen with in-place redraw, so the ~2s auto-refresh doesn't flicker the scrollbar or flash the screen, and a brief `+++ S H E O L +++` reveal plays on open.
 
