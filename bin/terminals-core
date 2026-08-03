@@ -98,20 +98,30 @@ done <<< "$tclients"
 
 # ---- iTerm sessions ----
 # Also grab jobName (the session's FOREGROUND command) so the menu-bar ledger can
-# flag agent CLIs (claude/codex/…) before you close a session that's running one.
+# flag agent CLIs, and the per-window hotkey flag + visibility so the summonable
+# hotkey terminal reads as "Hotkey Terminal" (not a bare "-zsh") and can be
+# revealed on click even while hidden.
 iterm_ttys=()
 iterm_lines=$(/usr/bin/osascript <<OSA
 if application "iTerm2" is running then
   tell application "iTerm2"
     set out to ""
     repeat with w in windows
+      set ih to false
+      try
+        set ih to (is hotkey window of w)
+      end try
+      set vis to true
+      try
+        set vis to (visible of w)
+      end try
       repeat with t in tabs of w
         repeat with s in sessions of t
           set jn to ""
           try
             set jn to (variable s named "jobName")
           end try
-          set out to out & (id of s) & "$US" & (tty of s) & "$US" & (name of s) & "$US" & jn & linefeed
+          set out to out & (id of s) & "$US" & (tty of s) & "$US" & (name of s) & "$US" & jn & "$US" & ih & "$US" & vis & linefeed
         end repeat
       end repeat
     end repeat
@@ -123,8 +133,19 @@ end if
 OSA
 )
 if [[ -n "$iterm_lines" ]]; then
-  while IFS="$US" read -r id tty name job; do
+  while IFS="$US" read -r id tty name job hk vis; do
     [[ -z "$id" ]] && continue
+    # The iTerm hotkey window: label it explicitly, note (hidden) when it isn't
+    # showing, and append the running task when it's busy (not a bare shell).
+    if [[ "$hk" == "true" ]]; then
+      disp="Hotkey Terminal"
+      [[ "$vis" != "true" ]] && disp="$disp (hidden)"
+      case "${job:l}" in
+        zsh|-zsh|bash|-bash|fish|-fish|login|"") : ;;
+        *) disp="$disp · ${name}" ;;
+      esac
+      name="$disp"
+    fi
     iterm_ttys+="$tty"
     isTmux=false
     [[ "$name" == tmux* ]] && isTmux=true
@@ -177,23 +198,34 @@ case "$verb" in
       exit 0
     fi
     # iTerm session id — pure iTerm select raises its window (no System Events).
+    # The HOTKEY window is special: when hidden it can't be raised by `select`, so
+    # summon it with `reveal hotkey window` instead (works whether shown or hidden).
     /usr/bin/osascript - "$id" <<'OSA'
 on run argv
   set theID to (item 1 of argv)
   if not (application "iTerm2" is running) then return
   tell application "iTerm2"
     repeat with w in windows
+      set ih to false
+      try
+        set ih to (is hotkey window of w)
+      end try
       repeat with t in tabs of w
         repeat with s in sessions of t
           if (id of s) is theID then
-            select s
-            select t
-            select w
+            if ih then
+              reveal hotkey window w
+            else
+              select s
+              select t
+              select w
+              activate
+            end if
+            return
           end if
         end repeat
       end repeat
     end repeat
-    activate
   end tell
 end run
 OSA
