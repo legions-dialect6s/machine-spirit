@@ -20,7 +20,7 @@ on run argv
 	end repeat
 	try
 		tell application "iTerm2"
-			activate
+			if (system attribute "ITERM_NO_ACTIVATE") is not "1" then activate
 			create window with default profile command cmd
 		end tell
 	on error
