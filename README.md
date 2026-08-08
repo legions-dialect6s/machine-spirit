@@ -136,12 +136,15 @@ Every site key runs the same script, [`bin/web-jump.applescript`](bin/web-jump.a
 |---|---|
 | `⇪ h` | hide frontmost app (⌘H) |
 | `⇪ q u i t` | quit frontmost app (⌘Q) — spelled out on purpose |
+| `⇪ s l e e p` | sleep the **display only** (`pmset displaysleepnow`) — spelled out |
 | `⇪ l l` | focus the address/search bar (sends ⌘L to the frontmost app) |
 | `⇪ l k` | Leader Key settings (see limitation below) |
 
 `⇪ l l` sends ⌘L to whatever's frontmost, which focuses the address/search bar in **every browser** — Safari, Chrome, Arc, Brave, Firefox all bind ⌘L natively, so the bind is universal by construction (nothing is browser-hardcoded); in a non-browser app it does nothing (routed through `run-quiet.sh`). *Future:* cycling through multiple in-page search/entry fields is planned via the Accessibility API (real field focus, not a simulated Tab) — which fields should count is an open design question. This v1 just hits the primary address bar via ⌘L.
 
 **`⇪ l k` limitation:** it only surfaces Leader Key's settings if the settings window is *already* open — menu-bar apps don't reliably pop their settings from `open -a`, so from a cold state you still need a manual **⌘,** once Leader Key is focused. To be properly fixed when Leader Key is forked into machine-spirit and we own the settings-open behavior directly.
+
+**`⇪ s l e e p`** sleeps only the **display** — the machine stays fully awake (music keeps playing, downloads/builds/tmux keep running); it's not system sleep. The bind is `(sleep 2 && pmset displaysleepnow) &` routed through [`run-quiet.sh`](bin/run-quiet.sh): the **2 s delay** lets the key-release events of the chord settle so the display doesn't instantly wake back up, and the `&` backgrounds it so Leader Key never blocks. Spelled out (rule 4) both as a mnemonic and so it's never one slip away.
 
 **Reloading after a config edit:** Leader Key does not reliably hot-reload `config.json` — a changed bind stays stale until the app restarts. Run [`bin/reload-leaderkey.sh`](bin/reload-leaderkey.sh) after any edit (by hand or via `sync.sh`) to make it live.
 

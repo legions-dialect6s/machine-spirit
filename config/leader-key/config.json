@@ -695,6 +695,31 @@
           "key" : "x",
           "type" : "command",
           "value" : "osascript ~/bin/web-jump.applescript x.com,twitter.com"
+        },
+        {
+          "key" : "l",
+          "label" : "😴 sleep",
+          "type" : "group",
+          "actions" : [
+            {
+              "key" : "e",
+              "type" : "group",
+              "actions" : [
+                {
+                  "key" : "e",
+                  "type" : "group",
+                  "actions" : [
+                    {
+                      "key" : "p",
+                      "label" : "😴 display sleep now",
+                      "type" : "command",
+                      "value" : "~/bin/run-quiet.sh sh -c '(sleep 2 && pmset displaysleepnow) &'"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
         }
       ],
       "key" : "s",
