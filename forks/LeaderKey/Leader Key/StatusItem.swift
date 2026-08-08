@@ -1055,9 +1055,15 @@ func agentKind(for command: String?) -> AgentKind? {
   guard let command, !command.isEmpty else { return nil }
   let c = command.lowercased()
   for row in agentTable where c.contains(row.key) {
-    // Claude gets the drawn spark mark (its real logo look, in Anthropic orange);
-    // others use their glyph until a mark is drawn for them too.
-    let image = row.key == "claude" ? claudeSparkMark : nil
+    // Drawn marks for the agents that have them (stylized, brand-colored — Claude's
+    // orange spark, Codex's rosette, Grok's slash); the rest fall back to a glyph.
+    let image: NSImage?
+    switch row.key {
+    case "claude": image = claudeSparkMark
+    case "codex": image = codexRosetteMark
+    case "grok": image = grokSlashMark
+    default: image = nil
+    }
     return AgentKind(glyph: row.glyph, label: row.label, image: image)
   }
   return nil
@@ -1085,6 +1091,55 @@ let claudeSparkMark: NSImage = {
     p.stroke()
   }
   img.unlockFocus()
+  return img
+}()
+
+/// Codex's mark: a six-fold rosette (an OpenAI-blossom feel). A template image, so
+/// it adopts the menu's text color and stays legible in light and dark. A stylized
+/// functional indicator, not a copy of the brand logo.
+let codexRosetteMark: NSImage = {
+  let size: CGFloat = 13
+  let img = NSImage(size: NSSize(width: size, height: size))
+  img.lockFocus()
+  let c = CGPoint(x: size / 2, y: size / 2)
+  NSColor.black.setStroke()
+  let petals = 6
+  let r = size * 0.30
+  for i in 0..<petals {
+    let a = CGFloat(i) / CGFloat(petals) * .pi * 2
+    let pc = CGPoint(x: c.x + cos(a) * r * 0.62, y: c.y + sin(a) * r * 0.62)
+    let p = NSBezierPath(
+      ovalIn: NSRect(x: pc.x - r * 0.62, y: pc.y - r * 0.62, width: r * 1.24, height: r * 1.24))
+    p.lineWidth = size * 0.08
+    p.stroke()
+  }
+  img.unlockFocus()
+  img.isTemplate = true
+  return img
+}()
+
+/// Grok's mark: a stark angular slash (an xAI feel). Template image (light/dark
+/// safe). A stylized functional indicator, not a copy of the brand logo.
+let grokSlashMark: NSImage = {
+  let size: CGFloat = 13
+  let img = NSImage(size: NSSize(width: size, height: size))
+  img.lockFocus()
+  let c = CGPoint(x: size / 2, y: size / 2)
+  NSColor.black.setStroke()
+  let long = NSBezierPath()
+  long.lineWidth = size * 0.15
+  long.lineCapStyle = .round
+  long.move(to: CGPoint(x: c.x - size * 0.28, y: c.y - size * 0.30))
+  long.line(to: CGPoint(x: c.x + size * 0.30, y: c.y + size * 0.30))
+  long.stroke()
+  let tick = NSBezierPath()
+  tick.lineWidth = size * 0.15
+  tick.lineCapStyle = .round
+  tick.move(to: CGPoint(x: c.x + size * 0.06, y: c.y - size * 0.30))
+  tick.line(to: CGPoint(x: c.x + size * 0.30, y: c.y - size * 0.06))
+  tick.stroke()
+  img.unlockFocus()
+  img.isTemplate = true
   return img
 }()
 
