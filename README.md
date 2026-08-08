@@ -84,8 +84,9 @@ The tree follows four rules, by escalating "weight" of the action:
 | `⇪ f a c` / `⇪ f t` | FaceTime | | `⇪ s p` | Spotify |
 | `⇪ f i` | Finder | | `⇪ t e` | TextEdit |
 | `⇪ g p` | ChatGPT | | `⇪ t r` | Terminal |
-| `⇪ i t` | iTerm | | `⇪ v m w` | VMware Fusion |
-| `⇪ m e` | Messages | | `⇪ w h` | WhatsApp |
+| `⇪ i t` | iTerm | | `⇪ v l c` | VLC (jump/cycle) |
+| `⇪ m e` | Messages | | `⇪ v m w` | VMware Fusion |
+| `⇪ w h` | WhatsApp | | | |
 
 `⇪ s a` (Safari), `⇪ c h r` (Chrome), and `⇪ f i` (Finder) all run [`bin/app-jump.applescript`](bin/app-jump.applescript) with an app name — the whole-app analogue of `web-jump`, one ladder for every app: **not running → launch; backgrounded → restore its minimized windows and bring it forward (opening a window if none); already frontmost → cycle its windows in order, wrapping**. It rides macOS's native ⌘\` / ⌘N, so it's genuinely app-agnostic rather than scripted per app — any Cocoa app (Preview, Notes, TextEdit…) is one config line. (Its predecessor, [`bin/browser-window-cycle.applescript`](bin/browser-window-cycle.applescript), cycled only the frontmost browser and stranded minimized windows; it stays in `bin/` unused.)
 

@@ -793,6 +793,17 @@
           ],
           "key" : "m",
           "type" : "group"
+        },
+        {
+          "key" : "l",
+          "type" : "group",
+          "actions" : [
+            {
+              "key" : "c",
+              "type" : "command",
+              "value" : "~/bin/run-quiet.sh osascript ~/bin/app-jump.applescript VLC"
+            }
+          ]
         }
       ],
       "key" : "v",
