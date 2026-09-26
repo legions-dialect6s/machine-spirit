@@ -18,6 +18,7 @@ struct MachineSpiritApp: App {
           state.installScrollMonitor()
           state.startSheolPolling()
           state.startConfigPolling()
+          state.wakeBoard()  // arm the settle so the boot growth pauses the clock
         }
         // The fired ping (#36): machinespirit://fired?path=s/s/w/s —
         // the board pulses the route of the bind that just ran. The

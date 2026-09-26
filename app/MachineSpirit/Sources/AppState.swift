@@ -43,7 +43,9 @@ final class AppState {
 
   /// Reference instant for the boot/refresh growth animation — traces grow
   /// out of the center toward the rim, the directory cascades in.
-  var bootStamp = Date()
+  var bootStamp = Date() {
+    didSet { wakeBoard() }
+  }
 
   /// The lines stir when the viewport moves and settle to perfect stillness
   /// (no idle jitter — a calm board pauses its render clock entirely).
@@ -58,6 +60,33 @@ final class AppState {
     lastDisturbance = Date()
     let magnitude = Double(hypot(delta.width, delta.height))
     flowEnergy = min(1, flowEnergy * 0.75 + magnitude / 60)
+    wakeBoard()
+  }
+
+  /// Whether the graph's render clock runs. The view can't decide this from
+  /// `Date()` in its body — a running TimelineView never re-evaluates that
+  /// body, so the clock would never pause (the 100%-CPU idle bug). Instead
+  /// this observed flag flips false once the board has been calm for
+  /// `settleDelay`, which re-renders the view with the clock paused.
+  private(set) var boardAwake = true
+  @ObservationIgnored private var settleTask: Task<Void, Never>?
+  private let settleDelay: TimeInterval = 5
+
+  func wakeBoard() {
+    if !boardAwake { boardAwake = true }
+    guard settleTask == nil else { return }  // the running settle re-reads the deadline
+    settleTask = Task { [weak self] in
+      while !Task.isCancelled {
+        guard let self else { return }
+        let calmAt = max(self.lastDisturbance, self.bootStamp).addingTimeInterval(self.settleDelay)
+        let wait = calmAt.timeIntervalSinceNow
+        if wait <= 0 { break }
+        try? await Task.sleep(for: .seconds(wait))
+      }
+      guard let self, !Task.isCancelled else { return }
+      self.settleTask = nil
+      self.boardAwake = false
+    }
   }
 
   /// ⌘-click multi-selection for group drags; rubber-band select fills it.
@@ -543,6 +572,7 @@ final class AppState {
     sheolPollTask?.cancel()
     configPollTask?.cancel()
     bindFireCleanup?.cancel()
+    settleTask?.cancel()
     penFadeTask?.cancel()
   }
 

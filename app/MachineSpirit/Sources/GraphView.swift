@@ -42,15 +42,15 @@ struct GraphView: View {
       let roots: [Node] = model.map { [$0, AppState.auxLeader] } ?? []
       let spelledWords = model.map { chainWords(in: $0) } ?? [:]
 
-      let stillness = Date().timeIntervalSince(state.lastDisturbance)
-      let settled = Date().timeIntervalSince(state.bootStamp) > growthDuration + 0.6
       // 60fps while anything moves or rings (smooth, never stepping); a
-      // calm board pauses its clock entirely. A live fired-bind pulse
-      // (#36) holds the clock awake — reading bindFire here is also what
-      // wakes a paused board when the ping lands.
+      // calm board pauses its clock entirely. `boardAwake` is observed state
+      // that AppState flips after the settle delay — never compute this from
+      // Date() here, since a ticking TimelineView doesn't re-run this body.
+      // A live fired-bind pulse (#36) holds the clock awake — reading
+      // bindFire here is also what wakes a paused board when the ping lands.
       let firing = state.bindFire != nil
       TimelineView(
-        .animation(minimumInterval: 1.0 / 60.0, paused: settled && stillness > 5 && !firing)
+        .animation(minimumInterval: 1.0 / 60.0, paused: !state.boardAwake && !firing)
       ) { timeline in
         Canvas { context, size in
           guard let model, let layout else { return }
