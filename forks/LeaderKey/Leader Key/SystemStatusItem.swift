@@ -2,9 +2,11 @@ import Cocoa
 import os.log
 
 final class SystemMenuSection: NSObject {
-  private weak var menu: NSMenu?
+  private weak var displayMenu: NSMenu?
+  private weak var awakeItem: NSMenuItem?
+  private weak var syncItem: NSMenuItem?
+  private weak var keysItem: NSMenuItem?
   var onChange: (() -> Void)?
-  var rebuild: (() -> Void)?
   var isAwake: Bool { awake.minutes != 0 }
   private let awake = KeepAwake()
   private let brightness = BrightnessController()
@@ -42,7 +44,10 @@ final class SystemMenuSection: NSObject {
     awake.stop()
     brightness.stop()
   }
-  func checkExpiry() { awake.checkExpiry() }
+  func checkExpiry() {
+    awake.checkExpiry()
+    updateAwake()
+  }
 
   func menuWillOpen() {
     brightness.installTap()
@@ -61,10 +66,39 @@ final class SystemMenuSection: NSObject {
   }
 
   func append(to menu: NSMenu) {
-    self.menu = menu
     sessionItems.removeAll()
-    rows.removeAll()
-    menu.addItem(.msSectionHeader(title: "Keep awake"))
+    let displays = NSMenu()
+    displays.autoenablesItems = false
+    displayMenu = displays
+    let item = NSMenuItem(title: "Brightness", action: nil, keyEquivalent: "")
+    item.submenu = displays
+    let row = BrightnessMenuRow(display: nil, inline: true) { [weak self] value in
+      self?.brightness.setAll(value)
+    }
+    row.updateMaster(brightness.masterLevel)
+    row.openDetails = { [weak displays, weak row] in
+      guard let row else { return }
+      displays?.popUp(positioning: nil, at: NSPoint(x: row.bounds.maxX, y: row.bounds.maxY), in: row)
+    }
+    masterRow = row
+    item.view = row
+    menu.addItem(item)
+    buildDisplays()
+
+    let awakeRow = NSMenuItem(title: "Keep awake", action: nil, keyEquivalent: "")
+    let awakeMenu = NSMenu()
+    awakeMenu.autoenablesItems = false
+    awakeRow.submenu = awakeMenu
+    awakeItem = awakeRow
+    menu.addItem(awakeRow)
+    appendAwake(to: awakeMenu)
+    let clipboard = add("Clipboard history…", action: #selector(openClipboard), to: menu)
+    clipboard.keyEquivalent = "v"
+    clipboard.keyEquivalentModifierMask = [.command, .shift]
+    updateAwake()
+  }
+
+  private func appendAwake(to menu: NSMenu) {
     for (minutes, title) in durations {
       let item = add(title, action: #selector(selectDuration(_:)), to: menu)
       item.tag = minutes
@@ -76,21 +110,15 @@ final class SystemMenuSection: NSObject {
     _ = add(
       "Keep awake at launch", action: #selector(toggleLaunch(_:)), to: menu,
       checked: UserDefaults.standard.bool(forKey: "msKeepAwakeAtLaunch"))
-    menu.addItem(.msSectionHeader(title: "Displays"))
-    _ = add(
+  }
+
+  private func buildDisplays() {
+    guard let menu = displayMenu else { return }
+    menu.removeAllItems()
+    rows.removeAll()
+    syncItem = add(
       "Sync all displays", action: #selector(toggleSync(_:)), to: menu, checked: brightness.sync)
-    masterRow = nil
-    if brightness.sync {
-      let item = NSMenuItem()
-      let row = BrightnessMenuRow(display: nil) { [weak self] value in
-        self?.brightness.setAll(value)
-      }
-      row.updateMaster(brightness.masterLevel)
-      masterRow = row
-      item.view = row
-      menu.addItem(item)
-    }
-    for display in brightness.displays where !brightness.sync {
+    for display in brightness.displays {
       let item = NSMenuItem()
       let row = BrightnessMenuRow(display: display) { [weak self, weak display] value in
         guard let display else { return }
@@ -108,18 +136,17 @@ final class SystemMenuSection: NSObject {
     let keys = add(
       title, action: #selector(toggleKeys(_:)), to: menu, checked: brightness.keysEnabled)
     keys.isEnabled = brightness.keysAvailable
+    keysItem = keys
     let conflict = add(
       "Quit MonitorControl (conflicts)", action: #selector(quitMonitorControl), to: menu)
     conflict.isEnabled = !NSRunningApplication.runningApplications(
       withBundleIdentifier: "app.monitorcontrol.MonitorControl"
     ).isEmpty
-    _ = add("Clipboard history…", action: #selector(openClipboard), to: menu)
-    let clear = add("Clear history", action: #selector(clearHistory), to: menu)
-    clear.toolTip = "Remove unpinned clipboard entries; pinned entries are kept."
-    updateAwake()
   }
 
   func appendLeaderOptions(to menu: NSMenu) {
+    let clear = add("Clear clipboard history", action: #selector(clearHistory), to: menu)
+    clear.toolTip = "Remove unpinned clipboard entries; pinned entries are kept."
     _ = add("Open machine-spirit board", action: #selector(openBoard), to: menu)
     _ = add(
       "Graph overlay while typing", action: #selector(toggleOverlay(_:)), to: menu,
@@ -127,6 +154,16 @@ final class SystemMenuSection: NSObject {
   }
 
   private func updateAwake() {
+    let state: String
+    if let deadline = awake.deadline {
+      let minutes = max(0, Int(ceil(deadline.timeIntervalSinceNow / 60)))
+      state = minutes >= 60
+        ? "\(minutes / 60)h" + (minutes % 60 == 0 ? "" : " \(minutes % 60)m") + " left"
+        : "\(minutes)m left"
+    } else {
+      state = isAwake ? "indefinitely" : "off"
+    }
+    awakeItem?.title = "Keep awake: " + state
     for (minutes, title) in durations {
       sessionItems[minutes]?.state = awake.minutes == minutes ? .on : .off
       var label = title
@@ -139,26 +176,23 @@ final class SystemMenuSection: NSObject {
   }
 
   private func updateDisplays() {
-    if brightness.sync {
-      if let masterRow {
-        masterRow.updateMaster(brightness.masterLevel)
-      } else if self.menu != nil {
-        rebuild?()
-      }
-      return
-    }
+    masterRow?.updateMaster(brightness.masterLevel)
     let ids = Set(brightness.displays.map { $0.id })
     let changedDisplays = brightness.displays.contains { rows[$0.id]?.display !== $0 }
-    if ids != Set(rows.keys) || changedDisplays, self.menu != nil {
-      rebuild?()
+    if ids != Set(rows.keys) || changedDisplays {
+      buildDisplays()
     } else {
       for display in brightness.displays { rows[display.id]?.update(display) }
     }
+    syncItem?.state = brightness.sync ? .on : .off
+    keysItem?.title = (brightness.sync
+      ? "Brightness keys control all displays" : "Brightness keys control external under mouse")
+      + (brightness.keysAvailable ? "" : " (needs Accessibility)")
+    keysItem?.isEnabled = brightness.keysAvailable
   }
 
   @objc private func toggleSync(_ item: NSMenuItem) {
     brightness.sync.toggle()
-    if self.menu != nil { rebuild?() }
   }
   @objc private func quitMonitorControl() {
     NSRunningApplication.runningApplications(
@@ -201,11 +235,14 @@ private final class BrightnessMenuRow: NSView {
   private let label = NSTextField(labelWithString: "")
   private let slider = NSSlider(value: 50, minValue: 0, maxValue: 100, target: nil, action: nil)
   private let changed: (Double) -> Void
+  private let inline: Bool
+  var openDetails: (() -> Void)?
 
-  init(display: BrightnessController.Display?, changed: @escaping (Double) -> Void) {
+  init(display: BrightnessController.Display?, inline: Bool = false, changed: @escaping (Double) -> Void) {
+    self.inline = inline
     self.changed = changed
     self.display = display
-    super.init(frame: NSRect(x: 0, y: 0, width: 360, height: 52))
+    super.init(frame: NSRect(x: 0, y: 0, width: 360, height: inline ? 28 : 52))
     label.frame = NSRect(x: 16, y: 28, width: 328, height: 18)
     label.font = .menuFont(ofSize: 0)
     label.lineBreakMode = .byTruncatingTail
@@ -214,7 +251,24 @@ private final class BrightnessMenuRow: NSView {
     slider.target = self
     slider.action = #selector(slid)
     slider.setAccessibilityLabel("\(display?.screen.localizedName ?? "All displays") brightness")
-    addSubview(label)
+    if inline {
+      let details = NSButton(title: "Brightness", target: self, action: #selector(showDetails))
+      details.isBordered = false
+      details.alignment = .left
+      details.font = .menuFont(ofSize: 0)
+      details.frame = NSRect(x: 16, y: 3, width: 90, height: 22)
+      addSubview(details)
+      let arrow = NSButton(title: "›", target: self, action: #selector(showDetails))
+      arrow.isBordered = false
+      arrow.frame = NSRect(x: 328, y: 3, width: 22, height: 22)
+      arrow.autoresizingMask = [.minXMargin]
+      arrow.setAccessibilityLabel("Display brightness options")
+      addSubview(arrow)
+      slider.frame = NSRect(x: 112, y: 4, width: 204, height: 20)
+      slider.autoresizingMask = [.width]
+    } else {
+      addSubview(label)
+    }
     addSubview(slider)
     if let display { update(display) }
   }
@@ -234,5 +288,6 @@ private final class BrightnessMenuRow: NSView {
     slider.doubleValue = value
   }
 
+  @objc private func showDetails() { openDetails?() }
   @objc private func slid() { changed(slider.doubleValue) }
 }

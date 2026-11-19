@@ -66,6 +66,12 @@ final class SystemStats {
     let name: String
     let summary: String
     let details: [String]
+    var compact: String? = nil
+
+    var compactSummary: String {
+      let label = ["Memory": "MEM", "Temperatures": "TEMP", "Network ↓/↑": "NET", "Battery": "BAT"][name] ?? name
+      return compact ?? "\(label) —"
+    }
   }
   static let names = ["CPU", "GPU", "Memory", "Network ↓/↑", "Disk", "Battery", "Temperatures"]
   private let cpu = CPUUsageReader()  // Main-thread, 2s bar sample only.
@@ -73,6 +79,7 @@ final class SystemStats {
   private var timer: Timer?
   private var generation = 0
   private var inFlight = false
+  private var detailsVisible = false
   private(set) var isOpen = false
   private(set) var detailedSamples = 0
   var onUpdate: (([Row]) -> Void)?
@@ -97,7 +104,12 @@ final class SystemStats {
     self.timer = timer
   }
 
+  func setDetailsVisible(_ visible: Bool) {
+    detailsVisible = visible
+  }
+
   func close() {
+    detailsVisible = false
     isOpen = false
     generation += 1
     timer?.invalidate()
@@ -108,8 +120,9 @@ final class SystemStats {
   private func refresh(generation current: Int) {
     guard isOpen, !inFlight, generation == current else { return }
     inFlight = true
+    let includeDetails = detailsVisible
     queue.async {
-      let rows = self.details?.sample() ?? []
+      let rows = self.details?.sample(includeDetails: includeDetails) ?? []
       DispatchQueue.main.async {
         self.inFlight = false
         guard self.isOpen, self.generation == current else { return }
@@ -147,9 +160,9 @@ final class SystemStats {
         bytes(UInt64(Double(current.up - previous.up) / elapsed)) + "/s"
       )
     }
-    func sample() -> [Row] {
-      cpu.sample(includeCores: true)
-      let top = processes.sample()
+    func sample(includeDetails: Bool) -> [Row] {
+      cpu.sample(includeCores: includeDetails)
+      let top = includeDetails ? processes.sample() : []
       let cpuDetails =
         cpu.hasDelta
         ? cpu.cores.enumerated().map { "Core \($0.offset + 1): \(Int($0.element.rounded()))%" }
@@ -166,12 +179,13 @@ final class SystemStats {
       return [
         Row(
           name: "CPU", summary: cpu.hasDelta ? "\(cpu.cpuPercent)%" : "Measuring…",
-          details: cpuDetails),
+          details: cpuDetails, compact: cpu.hasDelta ? "CPU \(cpu.cpuPercent)%" : "CPU —"),
         gpu(),
         Row(
           name: "Memory",
           summary: "\(Self.bytes(memory.used)) used · \(memory.pressurePercent)% pressure",
-          details: memoryDetails),
+          details: memoryDetails,
+          compact: memory.total > 0 ? "MEM \(Int((Double(memory.used) * 100 / Double(memory.total)).rounded()))%" : "MEM —"),
         network(), disk(), battery(), sensors.sample(),
       ]
     }
@@ -198,7 +212,8 @@ final class SystemStats {
       return Row(
         name: "GPU",
         summary: values.isEmpty ? "Unavailable" : values.map { "\($0)%" }.joined(separator: " · "),
-        details: details.isEmpty ? ["GPU utilisation unavailable on this hardware"] : details)
+        details: details.isEmpty ? ["GPU utilisation unavailable on this hardware"] : details,
+        compact: values.max().map { "GPU \($0)%" })
     }
 
     private func network() -> Row {
@@ -207,7 +222,7 @@ final class SystemStats {
         ?? SCDynamicStoreCopyValue(nil, "State:/Network/Global/IPv6" as CFString)) as? [String: Any]
       guard let primary = global?["PrimaryInterface"] as? String else {
         previousNetwork = nil
-        return Row(name: "Network ↓/↑", summary: "Offline", details: ["No primary interface"])
+        return Row(name: "Network ↓/↑", summary: "Offline", details: ["No primary interface"], compact: "NET offline")
       }
       var interfaces: UnsafeMutablePointer<ifaddrs>?
       guard getifaddrs(&interfaces) == 0 else {
@@ -228,13 +243,20 @@ final class SystemStats {
           identity: primary, down: UInt64(data.ifi_ibytes), up: UInt64(data.ifi_obytes),
           time: ProcessInfo.processInfo.systemUptime)
         let rates = Self.rates(current, previousNetwork)
+        var compact = "↓— ↑— MB/s"
+        if let previous = previousNetwork, current.identity == previous.identity,
+          current.time > previous.time, current.down >= previous.down, current.up >= previous.up {
+          let elapsed = (current.time - previous.time) * 1_000_000
+          compact = String(format: "↓%.1f ↑%.1f MB/s",
+            Double(current.down - previous.down) / elapsed, Double(current.up - previous.up) / elapsed)
+        }
         previousNetwork = current
         return Row(
           name: "Network ↓/↑", summary: "\(rates.0) / \(rates.1)",
           details: [
             "Primary interface: \(primary)", "Download: \(rates.0)", "Upload: \(rates.1)",
             "Received: \(Self.bytes(current.down))", "Sent: \(Self.bytes(current.up))",
-          ])
+          ], compact: compact)
       }
       previousNetwork = nil
       return Row(
@@ -292,7 +314,7 @@ final class SystemStats {
         })
       else {
         return Row(
-          name: "Battery", summary: "No battery", details: ["No internal battery reported"])
+          name: "Battery", summary: "No battery", details: ["No internal battery reported"], compact: "AC")
       }
       let current = (battery[kIOPSCurrentCapacityKey] as? NSNumber)?.doubleValue
       let max = (battery[kIOPSMaxCapacityKey] as? NSNumber)?.doubleValue
@@ -329,7 +351,7 @@ final class SystemStats {
       }
       return Row(
         name: "Battery", summary: "\(percent.map { "\($0)%" } ?? "Unavailable") · \(state)",
-        details: details)
+        details: details, compact: percent.map { "\($0)%🔋" })
     }
 
     static func services(_ name: String, _ body: (io_service_t) -> Void) {
@@ -446,7 +468,8 @@ private final class HIDTemperatures {
     summaries.append(
       hottest.map { "Hottest: \($0.0) · \(String(format: "%.1f°C", $0.1))" }
         ?? "No supported HID temperature sensors")
-    return SystemStats.Row(name: "Temperatures", summary: summary, details: summaries)
+    return SystemStats.Row(name: "Temperatures", summary: summary, details: summaries,
+      compact: hottest.map { String(format: "%.0f°C", $0.1) })
   }
   deinit {
     services.removeAll()

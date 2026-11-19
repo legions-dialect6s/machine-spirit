@@ -206,13 +206,25 @@ no image/title setter calls.
 default. With every segment off, a tiny dot keeps the menu reachable. The old
 Settings “show menu bar icon” control now toggles the skull segment.
 
-The menu order is **Stats → Terminals & tmux → Keep awake → Displays → Clipboard
-history… → Leader Key → Quit**, with section headers and no blank spacer items.
-Rectangle actions and Karabiner status/profile controls live under Leader Key.
-The sheol rows retain their revive, detach/moon and triple-tap ✕ ward; Save,
-Restore and the type-to-confirm Banish All panel still use the existing helpers.
+The top-level menu fits within roughly **600 points without scrolling**:
+**one-line stats summary → Terminals & tmux → Brightness → Keep awake → Clipboard
+history… ⌘⇧V → Leader Key → Quit**. The summary uses monospaced digits for CPU,
+GPU, RAM used %, hottest sensor, download/upload MB/s and battery charge.
+Its submenu contains the seven Stats rows below, each retaining its own details submenu.
 
-**Stats** has seven compact rows, each with a details submenu:
+Only the **eight most recently active sessions** appear at top level, across tmux
+and plain terminals; the rest live in **More…** with identical controls. Recency
+uses tmux session activity and plain-terminal tty modification time (last output);
+missing timestamps sort last. Rows stay fixed while tracking. Revive, detach/moon,
+and the triple-tap ✕ ward retain their behavior, including inside More….
+New-window actions and Open sheol ledger remain directly accessible.
+
+**Leader Key** contains settings, reload/reveal config, segment toggles, graph
+overlay, open board, Rectangle, Karabiner and clear unpinned clipboard history.
+**Leader Key → Session snapshots** holds Save, Restore and the type-to-confirm
+Banish All panel, using the existing helpers. There are no blank spacer items.
+
+**Stats** includes:
 
 - **CPU:** total usage, per-core usage and the top five processes (100% per core).
 - **GPU:** utilisation and available renderer/tiler/memory details.
@@ -233,22 +245,26 @@ Terminal rows refresh on opening and preserve the existing stable-row behavior
 while a menu is tracking. An unrecognised tmux protocol keeps cached counts.
 The clipboard change counter and keep-awake deadline share this same heartbeat.
 
-Detailed statistics run **only while the menu is open**, at 1 second on a serial
-background queue, updating rows in place. Closing stops that timer and releases
-the sensor readers. Network/disk baselines reset on each open, interface change,
-or counter reset. A single `ps` call supplies top processes while open; the
-closed-menu sampling path has no subprocesses. Stats.app remains independent;
+Summary statistics run **only while the main menu is open**, at 1 second on a
+serial background queue, updating rows in place. Per-core and top-process sampling
+runs only while the Stats submenu is open. Closing the main menu stops the timer
+and releases the sensor readers. Network/disk baselines reset on each open, interface change,
+or counter reset. A single `ps` call supplies top processes while Stats is open;
+the closed-menu sampling path has no subprocesses. Stats.app remains independent;
 you can quit it after comparing the readings you use. Reader references and MIT
 attribution are recorded in [FORK-NOTES](forks/FORK-NOTES.md).
 
-**Keep awake** offers Off, Indefinitely, 15 minutes, and 1/2/4/8 hours. **Keep display
+**Keep awake** is one row showing off, indefinitely, or time remaining; its submenu
+offers Off, Indefinitely, 15 minutes, and 1/2/4/8 hours. **Keep display
 on too** defaults on; turn it off to allow display sleep while keeping the system
 awake. **Keep awake at launch** defaults off. Expiry uses the shared heartbeat
-(with up to one tick of delay); remaining time refreshes when the menu opens.
+(with up to one tick of delay); remaining time updates while the menu is open.
 
-**Sync all displays** defaults on (`msBrightnessSync`): one **All displays** slider
-sets every screen to the same combined level. Turn sync off to reveal individual
-sliders. Built-in brightness uses DisplayServices; external brightness uses DDC/CI
+**Brightness** has one inline slider that always sets all displays together.
+Click its label or chevron for per-display sliders, **Sync all displays**, brightness
+key control and MonitorControl conflict handling. Sync defaults on
+(`msBrightnessSync`) and controls whether brightness keys adjust all displays;
+individual sliders remain available in the submenu. Built-in brightness uses DisplayServices; external brightness uses DDC/CI
 on Apple Silicon. Each display has its own serial queue and retains only the
 latest pending write, so a slow port cannot hold up the other screens.
 

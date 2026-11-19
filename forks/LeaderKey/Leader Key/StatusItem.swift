@@ -22,6 +22,9 @@ class StatusItem: NSObject, NSMenuDelegate {
   private var timer: Timer?
   private var lastRender: CompactBarState?
   private var statsRows: [String: NSMenuItem] = [:]
+  private var statsSummaryItem: NSMenuItem?
+  private var statsMenu: NSMenu?
+  private var menuIsOpen = false
   private var appearanceObservation: NSKeyValueObservation?
   var heartbeat: (() -> Void)?
   private let segments = ["Skull", "Sheol", "CPU", "Memory", "Awake"]
@@ -72,10 +75,6 @@ class StatusItem: NSObject, NSMenuDelegate {
     item.button?.toolTip =
       "Terminals · live tmux · detached tmux | CPU | memory pressure | keep-awake"
     system.onChange = { [weak self] in self?.updateStatusItemAppearance() }
-    system.rebuild = { [weak self] in
-      guard let self, self.stats.isOpen else { return }
-      self.buildMenu()
-    }
     sheol.onChange = { [weak self] in self?.updateStatusItemAppearance() }
     system.enable()
     stats.onUpdate = { [weak self] rows in self?.updateStats(rows) }
@@ -118,7 +117,7 @@ class StatusItem: NSObject, NSMenuDelegate {
 
   private func sample() {
     if enabledSegments.contains("CPU") || stats.isOpen { stats.sampleCPU() }
-    if enabledSegments.contains("Sheol") || stats.isOpen { sheol.sample() }
+    if enabledSegments.contains("Sheol") || menuIsOpen { sheol.sample() }
     if enabledSegments.contains("Memory") { pressure = MemoryPressure.read(details: false) }
     heartbeat?()
     system.checkExpiry()
@@ -140,7 +139,15 @@ class StatusItem: NSObject, NSMenuDelegate {
   private func buildMenu() {
     guard let menu = statusItem?.menu else { return }
     menu.removeAllItems()
-    menu.addItem(sectionHeader("Stats"))
+    let summary = NSMenuItem(title: "Stats: Measuring…", action: nil, keyEquivalent: "")
+    summary.toolTip = "CPU · GPU · RAM used · hottest sensor · network · battery. Open for details."
+    let statistics = NSMenu()
+    statistics.autoenablesItems = false
+    statistics.delegate = self
+    summary.submenu = statistics
+    statsMenu = statistics
+    statsSummaryItem = summary
+    menu.addItem(summary)
     statsRows.removeAll()
     for name in SystemStats.names {
       let row = NSMenuItem(title: name + ": Measuring…", action: nil, keyEquivalent: "")
@@ -151,12 +158,26 @@ class StatusItem: NSObject, NSMenuDelegate {
       details.addItem(pending)
       row.submenu = details
       statsRows[name] = row
-      menu.addItem(row)
+      statistics.addItem(row)
     }
     sheol.append(to: menu)
     system.append(to: menu)
-    menu.addItem(sectionHeader("Leader Key"))
+    menu.addItem(.separator())
+    let leader = NSMenuItem(title: "Leader Key", action: nil, keyEquivalent: "")
+    let leaderMenu = NSMenu()
+    leaderMenu.autoenablesItems = false
+    leader.submenu = leaderMenu
+    menu.addItem(leader)
+    appendLeaderOptions(to: leaderMenu)
+    menu.addItem(
+      NSMenuItem(
+        title: "Quit MachineSpirit Leader Key", action: #selector(NSApplication.terminate(_:)),
+        keyEquivalent: "q"))
+  }
+
+  private func appendLeaderOptions(to menu: NSMenu) {
     system.appendLeaderOptions(to: menu)
+    sheol.appendTools(to: menu)
     menu.addItem(actionItem("About", #selector(showAbout)))
     menu.addItem(actionItem("Settings…", #selector(showPreferences), key: ","))
     menu.addItem(actionItem("Reload config", #selector(reloadConfig)))
@@ -196,10 +217,6 @@ class StatusItem: NSObject, NSMenuDelegate {
     keys.submenu = keyMenu
     menu.addItem(keys)
     refreshKarabiner()
-    menu.addItem(
-      NSMenuItem(
-        title: "Quit MachineSpirit Leader Key", action: #selector(NSApplication.terminate(_:)),
-        keyEquivalent: "q"))
   }
 
   @objc private func toggleSegment(_ item: NSMenuItem) {
@@ -360,15 +377,36 @@ class StatusItem: NSObject, NSMenuDelegate {
   // MARK: - NSMenuDelegate
 
   func menuWillOpen(_ menu: NSMenu) {
-    buildMenu()
-    system.menuWillOpen()
-    stats.open()
+    if menu === statusItem?.menu {
+      menuIsOpen = true
+      buildMenu()
+      system.menuWillOpen()
+      stats.open()
+    } else if menu === statsMenu {
+      stats.setDetailsVisible(true)
+    }
   }
 
-  func menuDidClose(_ menu: NSMenu) { stats.close() }
+  func menuDidClose(_ menu: NSMenu) {
+    if menu === statusItem?.menu {
+      menuIsOpen = false
+      stats.close()
+    } else if menu === statsMenu {
+      stats.setDetailsVisible(false)
+    }
+  }
 
   /// Update existing rows, never rebuild the sheol controls under the pointer.
   private func updateStats(_ rows: [SystemStats.Row]) {
+    let order = ["CPU", "GPU", "Memory", "Temperatures", "Network ↓/↑", "Battery"]
+    let title = order.compactMap { name in
+      rows.first { $0.name == name }?.compactSummary
+    }.joined(separator: " · ")
+    if !title.isEmpty, statsSummaryItem?.title != title {
+      statsSummaryItem?.title = title
+      statsSummaryItem?.attributedTitle = NSAttributedString(
+        string: title, attributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: 13, weight: .regular)])
+    }
     for reading in rows {
       guard let row = statsRows[reading.name], let submenu = row.submenu else { continue }
       let title = reading.name + ": " + reading.summary
@@ -462,11 +500,6 @@ final class SheolMenuSection: NSObject {
 
   // Retains the ☠ BANISH ALL type-to-confirm panel while it's on screen.
   private var banishPanel: BanishAllPanel?
-
-  // Section-header items captured on menu build, so a banish can hide an
-  // emptied section in place (the ledger stays open across successive kills).
-  private weak var livingHeaderItem: NSMenuItem?
-  private weak var wanderingHeaderItem: NSMenuItem?
 
   /// The shared 2s heartbeat reads tmux's socket. Native terminal enumeration is
   /// throttled to 46s, matching the old 45s cost budget. Never attaches a client.
@@ -649,8 +682,6 @@ final class SheolMenuSection: NSObject {
     refreshCounts()
     menu.addItem(.msSectionHeader(title: "Terminals & tmux"))
 
-    let living = spirits.filter { !$0.isWandering }
-    let wandering = spirits.filter { $0.isWandering }
     let plainTerms = terminals.filter { !$0.isTmux }
 
     // Shared row width so the red ✕ (positioned at rowW-46) lines up across BOTH
@@ -675,75 +706,56 @@ final class SheolMenuSection: NSObject {
           }.max() ?? 160))
     let rowW = max(tmuxLabelW, termLabelW) + 116  // marker + name + moon + agent + ✕ + pad
 
-    menu.addItem(
-      sectionHeader("Sheol — \(living.count) living · \(wandering.count) wandering"))
-
-    menu.addItem(
-      actionRow(title: "＋  New tmux window", rowW: rowW, action: #selector(newTmuxWindow)))
-
-    if spirits.isEmpty {
-      let none = NSMenuItem(title: "No tmux sessions", action: nil, keyEquivalent: "")
+    // One shared budget across tmux and plain terminals. Freeze order while tracking:
+    // moving a live row beside a destructive button would make the ward unsafe.
+    var sessions: [(id: String, activity: TimeInterval, item: NSMenuItem)] = spirits.map {
+      ("tmux:" + $0.name, TimeInterval($0.activity), rowItem($0, labelW: tmuxLabelW, rowW: rowW))
+    }
+    for term in plainTerms {
+      var label = term.name.replacingOccurrences(of: "\n", with: " ")
+      if label.count > 52 { label = String(label.prefix(51)) + "…" }
+      let isITerm = !term.id.hasPrefix("app:")
+      let agent = agentKind(for: [term.job, term.procs].compactMap { $0 }.joined(separator: " "))
+      let item = NSMenuItem()
+      item.view = TerminalRow(
+        id: term.id, title: "❯  " + label, tty: term.tty,
+        canKill: isITerm, marker: isITerm ? .iterm : .other,
+        agent: agent, labelW: termLabelW, rowW: rowW, owner: self)
+      // tty modification time records terminal output; tmux exposes session_activity.
+      // Missing timestamps sort last, with stable IDs breaking ties.
+      let attributes = try? FileManager.default.attributesOfItem(atPath: term.tty)
+      let activity = (attributes?[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
+      sessions.append(("term:" + term.id, activity, item))
+    }
+    sessions.sort { $0.activity == $1.activity ? $0.id < $1.id : $0.activity > $1.activity }
+    for session in sessions.prefix(8) { menu.addItem(session.item) }
+    if sessions.count > 8 {
+      let more = NSMenuItem(title: "More…", action: nil, keyEquivalent: "")
+      let overflow = NSMenu()
+      overflow.autoenablesItems = false
+      for session in sessions.dropFirst(8) { overflow.addItem(session.item) }
+      more.submenu = overflow
+      menu.addItem(more)
+    } else if sessions.isEmpty {
+      let none = NSMenuItem(title: "No terminals or tmux sessions", action: nil, keyEquivalent: "")
       none.isEnabled = false
       menu.addItem(none)
-    } else {
-      // Names sized to this section's widest label; rowW is the SHARED width so
-      // the ✕ aligns with the terminal section.
-      let labelW = tmuxLabelW
-      livingHeaderItem = nil
-      wanderingHeaderItem = nil
-      if !living.isEmpty {
-        let h = sectionHeader("Living (attached)")
-        livingHeaderItem = h
-        menu.addItem(h)
-        for s in living { menu.addItem(rowItem(s, labelW: labelW, rowW: rowW)) }
-      }
-      if !wandering.isEmpty {
-        let h = sectionHeader("Sheol (wandering)")
-        wanderingHeaderItem = h
-        menu.addItem(h)
-        for s in wandering { menu.addItem(rowItem(s, labelW: labelW, rowW: rowW)) }
-      }
     }
-
-    let open = NSMenuItem(
-      title: "Open sheol ledger…", action: #selector(openLedger), keyEquivalent: "")
+    menu.addItem(actionRow(title: "＋  New tmux window", rowW: rowW, action: #selector(newTmuxWindow)))
+    menu.addItem(actionRow(title: "＋  New terminal window", rowW: rowW, action: #selector(newTerminalWindow)))
+    let open = NSMenuItem(title: "Open sheol ledger…", action: #selector(openLedger), keyEquivalent: "")
     open.target = self
     menu.addItem(open)
+    menu.addItem(.separator())
+  }
 
-    // ---- Terminals: every live NON-tmux terminal (tmux keeps its own lists
-    // above, so a session is never listed twice). Name click = focus; the red ✕
-    // closes it via the same triple-tap ◆◆◇ ward as the sheol banish. Only iTerm
-    // sessions get the ✕ (an "app:" row isn't a single session we can target).
-    // plainTerms + termLabelW + rowW were computed up top for shared ✕ alignment. ----
-    menu.addItem(sectionHeader("Terminals — \(plainTerms.count) live"))
-    menu.addItem(
-      actionRow(title: "＋  New terminal window", rowW: rowW, action: #selector(newTerminalWindow)))
-    if plainTerms.isEmpty {
-      let none = NSMenuItem(title: "No terminals", action: nil, keyEquivalent: "")
-      none.isEnabled = false
-      menu.addItem(none)
-    } else {
-      for term in plainTerms {
-        var label = term.name.replacingOccurrences(of: "\n", with: " ")
-        if label.count > 52 { label = String(label.prefix(51)) + "…" }
-        let isITerm = !term.id.hasPrefix("app:")  // iTerm rows get green $| + the ✕
-        // Detect from job AND the full tty process list, so an agent behind a
-        // wrapper (caffeinate / sourcekit-lsp / node foreground) is still flagged.
-        let agent = agentKind(for: [term.job, term.procs].compactMap { $0 }.joined(separator: " "))
-        let item = NSMenuItem()
-        item.view = TerminalRow(
-          id: term.id, title: "❯  " + label, tty: term.tty,
-          canKill: isITerm, marker: isITerm ? .iterm : .other,
-          agent: agent, labelW: termLabelW, rowW: rowW, owner: self)
-        menu.addItem(item)
-      }
-    }
-    // The terminal rows above are the last poll's; menuWillOpen kicks a fresh
-    // read so the NEXT open is current (mutating the open menu could shift a row
-    // under the cursor next to a ✕ — a data-loss hazard we deliberately avoid).
-
-    // ── session survival at the very bottom: snapshot age · save · restore · nuke
-    addSurvivalSection(to: menu)
+  func appendTools(to menu: NSMenu) {
+    let tools = NSMenuItem(title: "Session snapshots", action: nil, keyEquivalent: "")
+    let submenu = NSMenu()
+    submenu.autoenablesItems = false
+    addSurvivalSection(to: submenu)
+    tools.submenu = submenu
+    menu.addItem(tools)
   }
 
   /// Snapshot age + 💾 Save · ♻ Restore · ☠ BANISH ALL. Lives at the bottom of the
@@ -892,24 +904,9 @@ final class SheolMenuSection: NSObject {
     sender.wardTimer = timer
   }
 
-  /// Hide a just-banished row and collapse its section header if that was the
-  /// section's last row, leaving the ledger open for the next banish. Deferred
-  /// onto a .common-mode timer — the one dispatch this menu is proven to service
-  /// while open — so we don't restructure the menu inside its own event handler.
+  /// Retire only the clicked row, including inside More…, without shifting controls.
   private func retireRow(_ button: SheolRowButton) {
-    let t = Timer(timeInterval: 0.01, repeats: false) { [weak self, weak button] _ in
-      guard let self, let button, let menu = self.menu else { return }
-      button.enclosingMenuItem?.isHidden = true
-      func remaining(wandering: Bool) -> Int {
-        menu.items.filter {
-          guard let row = $0.view as? SheolRow, !$0.isHidden else { return false }
-          return row.isWandering == wandering
-        }.count
-      }
-      self.livingHeaderItem?.isHidden = remaining(wandering: false) == 0
-      self.wanderingHeaderItem?.isHidden = remaining(wandering: true) == 0
-    }
-    RunLoop.main.add(t, forMode: .common)
+    retireTerminalRow(button)
   }
 
   @objc private func openLedger() {
