@@ -29,6 +29,7 @@ struct ContentView: View {
       Divider().overlay(Theme.phosphorDim.opacity(0.4))
       main
       Divider().overlay(Theme.phosphorDim.opacity(0.4))
+      statsSection
       footer
     }
     .background(Theme.ground)
@@ -140,6 +141,26 @@ struct ContentView: View {
     )
     .contentShape(Rectangle())
     .simultaneousGesture(TapGesture().onEnded { state.focusedPane = pane })
+  }
+
+  @ViewBuilder private var statsSection: some View {
+    if state.stats.enabled {
+      let stats = state.stats.snapshot
+      VStack(alignment: .leading, spacing: 4) {
+        HStack {
+          Text("local · \(stats.totalFires) fires · \(stats.perDay[BindStats.day(Date()), default: 0]) today · ~\(stats.timeSavedLabel) saved")
+          Spacer()
+          Button("Reset stats") { state.stats.reset() }
+          Button("Disable") { state.stats.disable() }
+        }
+        Text(stats.topPaths.prefix(5).map { "\($0.key) ×\($0.value)" }.joined(separator: "  ·  "))
+          .lineLimit(1).truncationMode(.tail)
+        if let error = state.stats.persistenceError { Text(error).foregroundStyle(Theme.magenta) }
+      }
+      .font(.system(.caption, design: .monospaced))
+      .foregroundStyle(Theme.ash)
+      .padding(.horizontal, 14).padding(.vertical, 6)
+    }
   }
 
   private var footer: some View {

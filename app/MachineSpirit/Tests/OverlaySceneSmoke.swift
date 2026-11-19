@@ -27,9 +27,15 @@ import MachineSpiritKit
         let anchor = CGPoint(x: fraction.x * size.width, y: fraction.y * size.height)
         for (focus, ancestors) in groups {
           let start = CACurrentMediaTime()
-          let items = OverlayScene.layout(focus: focus, ancestors: ancestors, anchor: anchor, size: size, labelWidths: widths)
+          let items = OverlayScene.layout(focus: focus, ancestors: ancestors, anchor: anchor, size: size, labelWidths: widths, safeRect: CGRect(x: 0, y: 32, width: size.width, height: size.height - 100))
           worst = max(worst, (CACurrentMediaTime() - start) * 1000)
-          precondition(items[focus.id]?.center == anchor)
+          let safe = CGRect(x: 0, y: 32, width: size.width, height: size.height - 100)
+          if ancestors.isEmpty { precondition(items[focus.id]?.center == anchor) }
+          for (id, item) in items where id != root.id {
+            let disc = CGRect(x: item.center.x - 22 * item.scale, y: item.center.y - 22 * item.scale,
+              width: 44 * item.scale, height: 44 * item.scale)
+            precondition(safe.contains(disc), "Non-root outside visibleFrame: \(id)")
+          }
           precondition(items.count == 1 + ancestors.count + focus.children.count + focus.children.reduce(0) { $0 + $1.children.count })
           let radius = OverlayScene.backdropRadius(items: items, focus: anchor, labelWidths: widths)
           precondition(items.values.allSatisfy {
@@ -40,7 +46,7 @@ import MachineSpiritKit
             let item = items[child.id]!
             let width = widths[child.id]!
             let box = CGRect(x: item.center.x - width / 2, y: item.center.y - 24, width: width, height: 76)
-            precondition(CGRect(origin: .zero, size: size).contains(box), "Child off screen: \(child.id)")
+            precondition(safe.contains(box), "Child off screen: \(child.id)")
             precondition(!boxes.contains { $0.intersects(box) }, "Children overlap: \(focus.id), \(size), \(fraction)")
             boxes.append(box)
             for grandchild in child.children {

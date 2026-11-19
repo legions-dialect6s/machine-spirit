@@ -25,12 +25,18 @@ struct OverlayScene {
   }
 
   static func layout(focus: Node, ancestors: [Node], anchor: CGPoint,
-                     size: CGSize, labelWidths: [String: CGFloat]) -> [String: Item] {
+                     size: CGSize, labelWidths: [String: CGFloat], safeRect: CGRect? = nil) -> [String: Item] {
     struct Box {
       let x0: CGFloat, y0: CGFloat, x1: CGFloat, y1: CGFloat
       init(_ r: CGRect) { x0 = r.origin.x; y0 = r.origin.y; x1 = r.origin.x + r.size.width; y1 = r.origin.y + r.size.height }
     }
-    let safe = CGRect(origin: .zero, size: size).insetBy(dx: 5, dy: 5)
+    let safe = (safeRect ?? CGRect(origin: .zero, size: size)).insetBy(dx: 5, dy: 5)
+    // Only the actual root may occupy menu/Dock space. A focused letter must
+    // remain inside the safe frame, even when the session began in the bar.
+    let rootAnchor = anchor
+    let anchor = ancestors.isEmpty ? anchor : CGPoint(
+      x: min(max(anchor.x, safe.minX + 24), safe.maxX - 24),
+      y: min(max(anchor.y, safe.minY + 24), safe.maxY - 24))
     let dx = (size.width / 2 - anchor.x) / max(1, size.width / 2)
     let dy = (size.height / 2 - anchor.y) / max(1, size.height / 2)
     let radial = abs(dx) <= 0.35 && abs(dy) <= 0.35
@@ -56,6 +62,9 @@ struct OverlayScene {
       let (x0, x1, y0, y1) = cells(b)
       for y in y0...y1 { for x in x0...x1 { buckets[y * columns + x].append(b) } }
     }
+    if !ancestors.isEmpty {
+      reserve(CGRect(x: rootAnchor.x - 26, y: rootAnchor.y - 26, width: 52, height: 52))
+    }
     reserve(CGRect(x: anchor.x - 26, y: anchor.y - 26, width: 52, height: 52))
     func box(_ point: CGPoint, width: CGFloat, small: Bool) -> CGRect {
       CGRect(x: point.x - width / 2, y: point.y - (small ? 16 : 24),
@@ -63,7 +72,7 @@ struct OverlayScene {
     }
     func fits(_ rect: CGRect) -> Bool {
       let b = Box(rect)
-      guard b.x0 >= 5, b.y0 >= 5, b.x1 <= size.width - 5, b.y1 <= size.height - 5 else { return false }
+      guard b.x0 >= safe.minX, b.y0 >= safe.minY, b.x1 <= safe.maxX, b.y1 <= safe.maxY else { return false }
       let (x0, x1, y0, y1) = cells(b)
       for y in y0...y1 {
         for x in x0...x1 {
@@ -143,7 +152,7 @@ struct OverlayScene {
     // chain into available space instead of letting it disappear offscreen.
     var previous = focus.id
     for (i, ancestor) in ancestors.reversed().enumerated() {
-      let center = place(origin: anchor, angle: direction + .pi, radius: Double(i + 1) * 65,
+      let center = ancestor.id == ancestors.first?.id && !safe.contains(rootAnchor) ? rootAnchor : place(origin: anchor, angle: direction + .pi, radius: Double(i + 1) * 65,
                          width: 38, small: true, sector: 2 * .pi, heading: 0)
       reserve(box(center, width: 38, small: true))
       result[ancestor.id] = Item(center: center, scale: 0.65, opacity: 0.25,
