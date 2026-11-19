@@ -5,7 +5,10 @@ import SwiftUI
 final class AppDelegate: NSObject, NSApplicationDelegate {
   let state: AppState
 
-  init(state: AppState = AppState()) { self.state = state; super.init() }
+  init(state: AppState) { self.state = state; super.init() }
+  // NSApplicationDelegateAdaptor instantiates via the ObjC init(); a Swift
+  // default argument does not provide one (crashed at launch).
+  override convenience init() { self.init(state: AppState()) }
   var openBoardAction: (() -> Void)?
   private var overlay: TypingOverlay?
   private var closeObserver: NSObjectProtocol?
