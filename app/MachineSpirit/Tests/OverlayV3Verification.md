@@ -75,7 +75,7 @@ From `app/MachineSpirit` after the requested xcodebuild:
 
 ```sh
 swiftc -swift-version 6 -parse-as-library -I DerivedData/Build/Products/Debug \
-  Sources/OverlayScene.swift Tests/OverlaySceneSmoke.swift \
+  Sources/OverlayScene.swift Sources/NodePresentation.swift Tests/OverlaySceneSmoke.swift \
   DerivedData/Build/Products/Debug/MachineSpiritKit.o -o DerivedData/overlay-scene-smoke
 DerivedData/overlay-scene-smoke
 
@@ -97,3 +97,40 @@ Use `open --env MS_OVERLAY_DIAGNOSTICS=1 --stdout "$PWD/DerivedData/overlay.log"
 ## Limits / untested
 
 Actual 120/144 Hz frame pacing, transient flash-free behavior at every display frame, physical Caps Lock/Karabiner delivery, exclusive fullscreen/Space transitions, and display hot-unplug are not certified by these tests. The config-rebuild behavior was tested with an in-memory synthetic model, not by modifying the owner's live file. Extremely small screens or arbitrarily dense future configs can still exhaust collision-free area. Cold full rendering remains the main measured performance limitation.
+
+## Label and backdrop polish — 2026-11-19
+
+The board and overlay previously both used `Node.displayName`, so unlabeled live groups really did say `group` / `gate` in both views. The sidecar has no name field. `Sources/NodePresentation.swift` now supplies the shared board/overlay resolver: explicit nonblank label, existing action-derived display name, an unambiguous single-child continuation's name, then the node's key path. Only nodes without any of those retain a type word. Branch names are key paths, not invented semantic categories. `GraphView.swift` uses the same resolver without truncation; overlay chips use at most 22 Swift Characters including the ellipsis. All overlay strings, fonts and measured chip widths are still prepared during model rebuilds only.
+
+Live examples:
+
+| Path | Before | After (overlay) |
+|---|---|---|
+| `1` | gate | window first-third |
+| `s/i` | gate | invoke app-jump Signal |
+| `s/s` | group | s-s |
+| `s/l` | 😴 sleep | 😴 sleep |
+| `t/q` | ✕ kill selected tmux pane  ◆◆◆◆ | ✕ kill selected tmux … |
+
+`TypingOverlay.swift` owns one persistent radial `CAGradientLayer`, behind the edges and nodes and inside the existing fading scene. Its center follows the focused node; its circular radius covers the furthest visible disc/chip plus 32 points. It fades from black at 0.45 alpha to transparent, without a blur view, timer or drawing loop. Position and bounds use the existing presentation-value animation helper, including interrupted reopen. `OverlayScene.swift` computes its radius. This adds exactly one layer (1,332 for the current 166-node tree).
+
+Validation: requested Debug build succeeded; app relaunched from DerivedData. The updated geometry smoke passed all **960 layouts** using actual measured label widths, with backdrop coverage checks. The layer smoke passed naming priority/fallback/truncation assertions, exactly one radial layer behind the graph, focus centering, fade inheritance, persistent gradient identity through config rebuild, and all existing navigation/lifecycle checks. Navigation retains layer identities. `git diff --check -- app/MachineSpirit` passed. No live config writes or bind execution.
+
+Five final-build captures were opened and visually inspected:
+
+- `/private/tmp/ms-polish-center.png`: dense root over a busy browser, readable labels and radial dim.
+- `/private/tmp/ms-polish-group.png`: `s` children, explicit sleep label, Signal continuation name, `s-s` branch path.
+- `/private/tmp/ms-polish-corner.png`: root fan at the upper-left; another app's active menu overlaps part of the graph during this shared-desktop capture.
+- `/private/tmp/ms-polish-spam.png`: correct final `s` neighborhood after 50 show/hide pairs and 50 path changes.
+- `/private/tmp/ms-polish-reopen.png`: close interrupted by reopening at the upper-left; focus and backdrop relocated together, with no stale center fan in the settled capture.
+
+CPU: `top -l 6 -s 1 -stats pid,command,cpu`, excluding the first cumulative row. Shared desktop, other apps/workers active; WindowServer figures are whole-desktop observations, not overlay-only cost.
+
+| Sample | MachineSpirit (%) | WindowServer (%) |
+|---|---|---|
+| Visible, settled | 0.0, 0.0, 0.2, 0.0, 0.0 | 40.5, 20.7, 66.4, 13.6, 19.4 |
+| 80-navigation burst | 4.5, 6.9, 8.5, 6.3, 1.6 | 54.3, 52.7, 52.3, 55.6, 40.3 |
+| Hidden, settled | 0.0, 0.0, 0.0, 0.0, 0.0 | 12.4, 12.2, 9.8, 8.9, 9.7 |
+| Final rebuild/relaunch, hidden | **0.0, 0.0, 0.0, 0.0, 0.0** | 43.8, 45.5, 40.5, 35.4, 35.9 |
+
+The first three samples precede the final unnamed-child fallback edge-case fix; the final row is from the final running build. The app is left running with its overlay hidden. Build, smoke and raw CPU evidence lives in `DerivedData/overlay-polish-*`. No new frame-pacing or latency claim is made. All task edits are under `app/MachineSpirit/`; concurrent root/fork edits were left untouched. Nothing staged, committed or pushed.

@@ -188,6 +188,7 @@ private final class OverlayLayerView: NSView {
     let iconPath: String?
   }
   private let scene = CALayer()
+  private let backdrop = CAGradientLayer()
   private let edgeRoot = CALayer()
   private let nodeRoot = CALayer()
   private var visuals: [String: NodeLayers] = [:]
@@ -204,7 +205,7 @@ private final class OverlayLayerView: NSView {
   private let ease = CAMediaTimingFunction(controlPoints: 0.2, 0.9, 0.3, 1)
   private let mint = NSColor(calibratedRed: 0.29, green: 1, blue: 0.55, alpha: 1).cgColor
   override var isFlipped: Bool { true }
-  var layerCount: Int { 4 + visuals.count * 7 + edges.count }
+  var layerCount: Int { 5 + visuals.count * 7 + edges.count }
 
   override init(frame: NSRect) {
     super.init(frame: frame)
@@ -214,6 +215,13 @@ private final class OverlayLayerView: NSView {
     wantsLayer = true
     layerContentsRedrawPolicy = .never
     root.addSublayer(scene)
+    backdrop.type = .radial
+    backdrop.colors = [NSColor(calibratedWhite: 0, alpha: 0.45).cgColor,
+                       NSColor(calibratedWhite: 0, alpha: 0).cgColor]
+    backdrop.locations = [0, 1]
+    backdrop.startPoint = CGPoint(x: 0.5, y: 0.5)
+    backdrop.endPoint = CGPoint(x: 1, y: 1)
+    scene.addSublayer(backdrop)
     scene.addSublayer(edgeRoot)
     scene.addSublayer(nodeRoot)
     scene.opacity = 0
@@ -261,9 +269,9 @@ private final class OverlayLayerView: NSView {
         glyph.cornerRadius = 6
       }
       container.addSublayer(glyph)
-      let name = node.displayName
+      let name = node.overlayLabel
       let font = NSFont.monospacedSystemFont(ofSize: 12, weight: .medium)
-      let width = min(146, max(48, ceil((name as NSString).size(withAttributes: [.font: font]).width) + 16))
+      let width = max(48, ceil((name as NSString).size(withAttributes: [.font: font]).width) + 16)
       widths[node.id] = width
       let chip = CALayer()
       chip.frame = CGRect(x: -width / 2, y: 28, width: width, height: 22)
@@ -383,6 +391,9 @@ private final class OverlayLayerView: NSView {
     }
     visible = [focus]
     focusID = focus
+    backdrop.removeAllAnimations()
+    backdrop.position = anchor
+    backdrop.bounds = CGRect(x: 0, y: 0, width: 104, height: 104)
     animate(scene, "opacity", to: Float(1), duration: 0.12)
   }
 
@@ -390,6 +401,13 @@ private final class OverlayLayerView: NSView {
             first: Bool, back: Bool, splash: Bool) {
     let duration = back ? 0.09 : 0.14
     animate(scene, "opacity", to: Float(1), duration: 0.12)
+    // Cover the complete neighborhood, including label extents, with a soft
+    // margin beyond its furthest grandchild. A square keeps the dim circular.
+    let center = items[focus]?.center ?? anchor
+    let radius = OverlayScene.backdropRadius(items: items, focus: center, labelWidths: widths)
+    animate(backdrop, "position", to: NSValue(point: center), duration: duration)
+    animate(backdrop, "bounds", to: NSValue(rect: CGRect(x: 0, y: 0,
+      width: radius * 2, height: radius * 2)), duration: duration)
     for id in visible.subtracting(items.keys) {
       guard let v = visuals[id] else { continue }
       animate(v.container, "opacity", to: Float(0), duration: 0.09)

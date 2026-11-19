@@ -932,7 +932,7 @@ struct GraphView: View {
         }
 
         let label = context.resolve(
-          Text(node.displayName)
+          Text(node.boardLabel)
             .font(.system(size: 10.5 * max(sizeScale, 0.7), design: .monospaced))
             .foregroundStyle(
               recede

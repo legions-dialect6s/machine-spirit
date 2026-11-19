@@ -2,7 +2,7 @@ import AppKit
 import MachineSpiritKit
 
 // swiftc -swift-version 6 -parse-as-library -I DerivedData/Build/Products/Debug \
-// Sources/OverlayScene.swift Tests/OverlaySceneSmoke.swift \
+// Sources/OverlayScene.swift Sources/NodePresentation.swift Tests/OverlaySceneSmoke.swift \
 // DerivedData/Build/Products/Debug/MachineSpiritKit.o -o DerivedData/overlay-scene-smoke
 @main struct OverlaySceneSmoke {
   static func main() throws {
@@ -10,11 +10,15 @@ import MachineSpiritKit
     var groups: [(Node, [Node])] = []
     var widths: [String: CGFloat] = [:]
     func visit(_ n: Node, _ ancestors: [Node]) {
-      widths[n.id] = 146
+      widths[n.id] = max(48, ceil((n.overlayLabel as NSString).size(withAttributes:
+        [.font: NSFont.monospacedSystemFont(ofSize: 12, weight: .medium)]).width) + 16)
       if !n.children.isEmpty { groups.append((n, ancestors)) }
       for child in n.children { visit(child, ancestors + [n]) }
     }
     visit(root, [])
+    for id in ["root/1", "root/s/i", "root/s/s", "root/s/l", "root/t/q"] {
+      if let node = root.node(withID: id) { print("\(id): \(node.displayName) → \(node.overlayLabel)") }
+    }
     var cases = 0
     var worst = 0.0
     for size in [CGSize(width: 1728, height: 1117), CGSize(width: 1440, height: 900), CGSize(width: 2560, height: 1440)] {
@@ -27,10 +31,15 @@ import MachineSpiritKit
           worst = max(worst, (CACurrentMediaTime() - start) * 1000)
           precondition(items[focus.id]?.center == anchor)
           precondition(items.count == 1 + ancestors.count + focus.children.count + focus.children.reduce(0) { $0 + $1.children.count })
+          let radius = OverlayScene.backdropRadius(items: items, focus: anchor, labelWidths: widths)
+          precondition(items.values.allSatisfy {
+            hypot($0.center.x - anchor.x, $0.center.y - anchor.y) + 24 * $0.scale < radius
+          }, "Backdrop misses visible disc")
           var boxes: [CGRect] = []
           for child in focus.children {
             let item = items[child.id]!
-            let box = CGRect(x: item.center.x - 73, y: item.center.y - 24, width: 146, height: 76)
+            let width = widths[child.id]!
+            let box = CGRect(x: item.center.x - width / 2, y: item.center.y - 24, width: width, height: 76)
             precondition(CGRect(origin: .zero, size: size).contains(box), "Child off screen: \(child.id)")
             precondition(!boxes.contains { $0.intersects(box) }, "Children overlap: \(focus.id), \(size), \(fraction)")
             boxes.append(box)

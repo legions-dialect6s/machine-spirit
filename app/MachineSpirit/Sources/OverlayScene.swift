@@ -4,6 +4,17 @@ import MachineSpiritKit
 /// Geometry only. The overlay owns persistent CA layers; no drawing clock or
 /// SwiftUI objects live here. Coordinates are local, with y increasing down.
 struct OverlayScene {
+  static func backdropRadius(items: [String: Item], focus: CGPoint,
+                             labelWidths: [String: CGFloat]) -> CGFloat {
+    items.reduce(CGFloat(52)) { radius, entry in
+      let item = entry.value
+      let reach = item.label
+        ? hypot((labelWidths[entry.key] ?? 48) / 2, 50) * item.scale
+        : 24 * item.scale
+      return max(radius, hypot(item.center.x - focus.x, item.center.y - focus.y) + reach + 32)
+    }
+  }
+
   struct Item {
     var center: CGPoint
     var scale: CGFloat
