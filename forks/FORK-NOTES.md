@@ -68,14 +68,33 @@ carried; the SHAs below are the exact upstream commits captured.
   plan once destroyed the owner's live config (SESSION-LOG war story,
   2026-07-06). Never remove this guard; re-check it survives any upstream
   merge.
-- **LeaderKey — fire the board ping** (`[P2.5d]`, #36): `Controller.handleKey`
-  calls `fireBoardPing(actionKey:)` the instant an action executes (before
-  `hide()` clears `navigationPath`), sending
-  `machinespirit://fired?path=<group keys>/<action key>`. Hard contract: only
-  fires if MachineSpirit.app is ALREADY running (never launches it), opens
-  the URL with `activates = false` (no focus theft), swallows every failure —
-  it can never delay or break a bind. The app resolves the same structural
-  key path against its imported model and pulses that route.
+- **LeaderKey — board IPC and background launch**: bind execution posts
+  `com.machinespirit.leader.fired` with a string `path`; panel show/navigation/
+  clear/hide posts `com.machinespirit.leader.nav` with string `state`, `path`, and
+  global AppKit `screen` frame. Both use DistributedNotificationCenter with
+  immediate delivery. `msGraphOverlayEnabled` gates shown events; hidden always
+  posts. `UserState.navigationPath.didSet` covers keyboard, reset, and URL paths.
+  No board URL open or running-app lookup remains on the bind path. An installed
+  board (`com.machinespirit.MachineSpirit`) starts in the background at fork
+  launch unless `msLaunchBoardAtLogin` is false. Explicit board opening still
+  uses `machinespirit://board`, activating.
+- **LeaderKey — system menu**: exactly one additional status item combines
+  keep-awake and brightness, independently of the skull visibility preference.
+  `KeepAwake.swift` owns one IOPM assertion and one optional expiry timer;
+  `SystemStatusItem.swift` owns the menu; `BrightnessController.swift` owns
+  cached display state, the media-key tap, and one reusable nonactivating HUD;
+  `DisplayHardware.swift` resolves private APIs dynamically. All display I/O
+  uses one serial queue, and each display retains only its latest pending write.
+  The existing memory gauge also skips unchanged image/title assignments to
+  avoid redundant AppKit status-item replica redraws.
+  Topology changes invalidate callbacks; unchanged screen notifications keep
+  the cache. Wake and menu opening refresh readings. Ambiguous registry matches
+  and unsupported hardware fail closed, with no brightness slider enabled.
+- **MonitorControl attribution (MIT)**: registry matching and DDC protocol are
+  adapted/reimplemented from [Arm64DDC.swift](https://github.com/MonitorControl/MonitorControl/blob/main/MonitorControl/Support/Arm64DDC.swift).
+  Its copyright/MIT notice is retained in `DisplayHardware.swift`; no dependency
+  on the MonitorControl app or package is added. DisplayServices, IOAVService,
+  and optional CoreDisplay identity lookup are private API compatibility risks.
 - **LeaderKey — config hot-reload** (`[P2.4]`): `ConfigFileMonitor` (in
   `UserConfig.swift` — no new compile unit for the app target) watches the
   live config via a DispatchSource file-system object source, 300ms debounce,
@@ -89,8 +108,13 @@ carried; the SHAs below are the exact upstream commits captured.
 
 ## Signing
 
-Ad-hoc / free personal team is the Phase 1 posture. The exact incantation that
-worked gets recorded per fork above.
+The early build examples above use ad-hoc signing. The daily-driver Leader Key
+Release install must be re-signed with **MachineSpirit Local Codesign** at
+`~/Applications/MachineSpirit Leader Key.app`, as in `install.sh`, to preserve
+TCC identity across rebuilds. The existing LaunchAgent remains the only login
+mechanism. `reload-leaderkey.sh` uses a name-based `open -a "Leader Key"` and can
+resolve to a DerivedData build; verify the running executable afterward and
+restart the existing LaunchAgent if necessary.
 
 ## The fork as permanent daily driver (`[P2.6]`, owner machine)
 
@@ -120,3 +144,34 @@ tracked in MANUAL-WIRING):
 `pkill -f 'Applications/Leader Key.app'`; re-enable the cask's Launch-at-Login
 (open `/Applications/Leader Key.app`, toggle it on); it drives again. The new
 domain, LaunchAgent, and ~/Applications copy can all be deleted with no trace.
+
+## System menu verification (2026-11-19)
+
+- Release built with install.sh's flags into `DerivedData-Release`; deployed with
+  `ditto` and the existing local signing identity. No commit/staging/push.
+- `tools/SystemMenuSmoke.swift` compiles with `KeepAwake.swift` and
+  `DisplayHardware.swift`. `--awake` verified display/system assertion types,
+  Off release, and real 60-second expiry using the production assertion owner.
+  The shipping menu retains 15 minutes as its shortest duration. The installed
+  signed app also passed a launch-preference test: `pmset` showed a Leader Key
+  `PreventUserIdleDisplaySleep` assertion named `machine-spirit keep-awake`;
+  clean quit/restoring the original launch preference left no assertion.
+- Hardware smoke run: Built-in Retina Display read successfully; M28U DDC read
+  `current=0 max=100`, wrote the same value, and read back `0`. Samsung LC32G5xT
+  matched the registry but mostly did not answer, with one transient successful
+  app read. Its support is not considered verified; failed reads disable control.
+  Brightness was not intentionally changed from the values read.
+- `tools/ObserveLeaderIPC.swift` observed real shown/root, group (`s`, `f`),
+  hidden, and fired (`h`) events from the installed app. Payload values were
+  checked as Strings; observed screen was `0,1117,1920,1080`. These were triggered
+  through the fork's existing URL routes, not a physical F19 key.
+- Final installed runtime logged `status item created, visible=1` and
+  `brightness key event tap installed`; `codesign --verify --deep --strict` passed.
+- Final five-second `top` intervals measured 1.1% and 0.4% CPU (initial
+  cumulative sample 0.0%); this is a bounded observation, not a whole-session
+  performance guarantee. Earlier verification intervals reached 4.5%. A sample
+  showed mostly waiting plus AppKit status-item replica redraw work.
+- UI automation reached the launcher panel but could not expose menu-bar extras.
+  Visual icon/menu acceptance, slider dragging, physical media-key routing/HUD,
+  hot-plug, Intel fallback, and cold board launch remain manual checks. The board
+  worker's app files were not modified.

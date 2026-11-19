@@ -25,6 +25,7 @@ class AppDelegate: NSObject, NSApplicationDelegate,
   // readout of the VM's real stress level (distinct from Stats' RAM %), shown/
   // hidden with the skull.
   let memoryStatusItem = MemoryPressureStatusItem()
+  let systemStatusItem = SystemStatusItem()
   let config = UserConfig()
   // machine-spirit fork: hot-reload — config edits land without a restart.
   let configMonitor = ConfigFileMonitor()
@@ -60,6 +61,7 @@ class AppDelegate: NSObject, NSApplicationDelegate,
 
     NSApp.mainMenu = MainMenu()
 
+    SystemStatusItem.registerDefaults()
     config.ensureAndLoad()
     state = UserState(userConfig: config)
     controller = Controller(userState: state, userConfig: config)
@@ -122,9 +124,26 @@ class AppDelegate: NSObject, NSApplicationDelegate,
       memoryStatusItem.disable()
     }
 
+    systemStatusItem.overlayChanged = { [weak self] in self?.controller?.overlayPreferenceChanged()
+    }
+    systemStatusItem.enable()
+    launchBoardIfNeeded()
+
     // Activation policy is managed solely by the Settings window
 
     registerGlobalShortcuts()
+  }
+
+  private func launchBoardIfNeeded() {
+    let bundleID = "com.machinespirit.MachineSpirit"
+    guard UserDefaults.standard.bool(forKey: "msLaunchBoardAtLogin"),
+      !NSWorkspace.shared.runningApplications.contains(where: { $0.bundleIdentifier == bundleID }),
+      let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID)
+    else { return }
+    let configuration = NSWorkspace.OpenConfiguration()
+    configuration.activates = false
+    configuration.addsToRecentItems = false
+    NSWorkspace.shared.openApplication(at: url, configuration: configuration) { _, _ in }
   }
 
   func activate() {
@@ -173,6 +192,8 @@ class AppDelegate: NSObject, NSApplicationDelegate,
   }
 
   func applicationWillTerminate(_ notification: Notification) {
+    systemStatusItem.disable()
+    controller?.postBoardNavigation(hidden: true)
     // Config saves automatically on changes
   }
 

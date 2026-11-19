@@ -22,12 +22,19 @@ class Controller {
   var window: MainWindow!
   var cheatsheetWindow: NSWindow!
   private var cheatsheetTimer: Timer?
+  private var boardScreenFrame: NSRect = .zero
+  private var boardPanelShown = false
 
   private var cancellables = Set<AnyCancellable>()
 
   init(userState: UserState, userConfig: UserConfig) {
     self.userState = userState
     self.userConfig = userConfig
+    userState.navigationDidChange = { [weak self] in
+      guard let self else { return }
+      self.postBoardNavigation(
+        hidden: !self.boardPanelShown || self.userState.navigationPath.isEmpty)
+    }
 
     Task {
       for await value in Defaults.updates(.theme) {
@@ -71,13 +78,21 @@ class Controller {
     // `screen.center()`. `getNSScreen()` legitimately returns nil (pointer in a
     // gap for `.mouse`, no key window for `.activeWindow`), so chain to a real
     // screen and bail only when the Mac genuinely has no display at all.
-    guard let screen = Defaults[.screen].getNSScreen() ?? NSScreen.main ?? NSScreen.screens.first else {
+    guard let screen = Defaults[.screen].getNSScreen() ?? NSScreen.main ?? NSScreen.screens.first
+    else {
       Events.send(.didActivate)
       return
     }
+    boardScreenFrame = screen.frame
+    boardPanelShown = false
+    userState.navigationPath = []
+    userState.display = nil
+    boardPanelShown = true
     window.show(on: screen) {
       Events.send(.didActivate)
     }
+
+    postBoardNavigation(hidden: false)
 
     if !window.hasCheatsheet || userState.isShowingRefreshState {
       return
@@ -93,6 +108,8 @@ class Controller {
   }
 
   func hide(afterClose: (() -> Void)? = nil) {
+    boardPanelShown = false
+    postBoardNavigation(hidden: true)
     guard let window else {
       afterClose?()
       return
@@ -148,7 +165,9 @@ class Controller {
     }
   }
 
-  func handleKey(_ key: String, withModifiers modifiers: NSEvent.ModifierFlags? = nil, execute: Bool = true) {
+  func handleKey(
+    _ key: String, withModifiers modifiers: NSEvent.ModifierFlags? = nil, execute: Bool = true
+  ) {
     if key == "?" {
       showCheatsheet()
       return
@@ -194,7 +213,7 @@ class Controller {
           }
         }
       }
-      // If execute is false, just stay visible showing the matched action
+    // If execute is false, just stay visible showing the matched action
     case .group(let group):
       if execute, let mods = modifiers, shouldRunGroupSequenceWithModifiers(mods) {
         hide {
@@ -351,34 +370,33 @@ class Controller {
     userState.clear()
   }
 
-  /// machine-spirit fork (#36): fire `machinespirit://fired?path=s/s/w/s`
-  /// so the board pulses the route of the bind that just ran. The path is
-  /// the group keys walked so far plus this action's key — the same
-  /// structural key path the app resolves against its imported model.
-  ///
-  /// Contract: this can NEVER delay or break a bind. It only fires if the
-  /// board is ALREADY running (never launches it), builds the URL without
-  /// activating anything, and swallows every failure.
-  private static let boardBundleID = "com.machinespirit.MachineSpirit"
+  /// Cheap IPC: no app lookup, launch, URL open, or focus change on the bind path.
   private func fireBoardPing(actionKey: String?) {
     guard let actionKey else { return }
-    let boardRunning = NSWorkspace.shared.runningApplications.contains {
-      $0.bundleIdentifier == Self.boardBundleID
-    }
-    guard boardRunning else { return }
+    let keys = userState.navigationPath.compactMap { $0.key } + [actionKey]
+    DistributedNotificationCenter.default().postNotificationName(
+      Notification.Name("com.machinespirit.leader.fired"), object: nil,
+      userInfo: ["path": keys.joined(separator: "/")], deliverImmediately: true)
+  }
 
-    var keys = userState.navigationPath.compactMap { $0.key }
-    keys.append(actionKey)
+  func postBoardNavigation(hidden: Bool) {
+    guard hidden || (UserDefaults.standard.object(forKey: "msGraphOverlayEnabled") as? Bool ?? true)
+    else { return }
+    let frame = boardScreenFrame
+    let screen = [frame.origin.x, frame.origin.y, frame.width, frame.height]
+      .map { String(Int($0)) }.joined(separator: ",")
+    DistributedNotificationCenter.default().postNotificationName(
+      Notification.Name("com.machinespirit.leader.nav"), object: nil,
+      userInfo: [
+        "state": hidden ? "hidden" : "shown",
+        "path": userState.navigationPath.compactMap { $0.key }.joined(separator: "/"),
+        "screen": screen,
+      ], deliverImmediately: true)
+  }
 
-    var components = URLComponents()
-    components.scheme = "machinespirit"
-    components.host = "fired"
-    components.queryItems = [URLQueryItem(name: "path", value: keys.joined(separator: "/"))]
-    guard let url = components.url else { return }
-
-    let config = NSWorkspace.OpenConfiguration()
-    config.activates = false  // pulse without stealing focus from the user
-    NSWorkspace.shared.open(url, configuration: config) { _, _ in }
+  func overlayPreferenceChanged() {
+    postBoardNavigation(
+      hidden: !boardPanelShown || !UserDefaults.standard.bool(forKey: "msGraphOverlayEnabled"))
   }
 
   private func openURL(_ action: Action) {

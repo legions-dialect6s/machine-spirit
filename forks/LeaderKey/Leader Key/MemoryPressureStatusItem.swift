@@ -111,17 +111,22 @@ final class MemoryPressureStatusItem: NSObject, NSMenuDelegate {
   private func updateButton() {
     guard let button = statusItem?.button else { return }
     let p = reading.pressurePercent
-    button.image = Self.gaugeImage(percent: p, tint: reading.levelColor)
-    button.title = " \(p)%"
-    button.toolTip =
+    // AppKit redraws status-item replicas on every display when these setters
+    // run, even for the same cached image/title. Leave unchanged visuals alone.
+    let image = Self.gaugeImage(percent: p, tint: reading.levelColor)
+    if button.image !== image { button.image = image }
+    let title = " \(p)%"
+    if button.title != title { button.title = title }
+    let toolTip =
       "Memory pressure: \(reading.levelName) · \(p)% "
       + "(RAM available \(reading.availablePercent)%)\n"
       + "Used \(Self.fmt(reading.used)) of \(Self.fmt(reading.total)) · "
       + "Cached \(Self.fmt(reading.cached))"
       + (reading.swapTotal > 0 ? " · Swap \(Self.fmt(reading.swapUsed))" : "")
+    if button.toolTip != toolTip { button.toolTip = toolTip }
   }
 
-  /// Built gauge images cached by bucket+tint. The 2 s poll repaints the button
+  /// Built gauge images cached by bucket+tint. The 2 s poll refreshes the reading
   /// every tick, but the image only has 5 buckets × 3 tint states, so on a
   /// steady machine the SF Symbol lookup + tint (the one nontrivial allocation
   /// here) is done once and reused. Images are immutable and this is only ever

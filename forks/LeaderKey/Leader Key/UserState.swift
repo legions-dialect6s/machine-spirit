@@ -7,7 +7,10 @@ final class UserState: ObservableObject {
 
   @Published var display: String?
   @Published var isShowingRefreshState: Bool
-  @Published var navigationPath: [Group] = []
+  var navigationDidChange: (() -> Void)?
+  @Published var navigationPath: [Group] = [] {
+    didSet { navigationDidChange?() }
+  }
 
   var currentGroup: Group? {
     return navigationPath.last
