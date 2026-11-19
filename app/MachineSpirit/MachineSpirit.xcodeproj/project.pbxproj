@@ -8,7 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		019F7D79E1E876626E11B9A2 /* GraphView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98EAE5FFEBA7D1FAEEF81FAE /* GraphView.swift */; };
-		259C47702BFA8908157D476D /* TreeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DC0B070810C9852F3EE3437 /* TreeView.swift */; };
+		2783C8C8E6335417108C3E82 /* TypingOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB996D2207146A3239C199E7 /* TypingOverlay.swift */; };
 		29CA3C829C1BB591EF6C2938 /* ITermColors.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9B9B3AF4EADBCCCF104CC61 /* ITermColors.swift */; };
 		4761260309A45D32C4754ECA /* PenForm.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8436DE853B6E96250F95BCFF /* PenForm.swift */; };
 		78AD8841C80E6169F5C5772E /* IconStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 271503FD6BBFFFE7B766D1E8 /* IconStore.swift */; };
@@ -17,13 +17,16 @@
 		B759736072FF493ADEB723E2 /* MachineSpiritKit in Frameworks */ = {isa = PBXBuildFile; productRef = 5BCD9078BC72C5F027120B5B /* MachineSpiritKit */; };
 		BAFAFC9DCF47C32765544359 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41BA055CA9A05CA859DBB7D0 /* ContentView.swift */; };
 		BE57E0EF7193D2A3D2729107 /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = 383308A772C0DF9986165544 /* SwiftTerm */; };
+		DE1E4416918E309ED3644824 /* ConfigWatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8FE015A691BDC6F292D49AE /* ConfigWatcher.swift */; };
 		E0E3D8FE2EF7DA38AFF1B4C0 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 32D65BB0E4B6A0D0BB110E46 /* Assets.xcassets */; };
+		EE9DC96225DDD378E7F5B9E5 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03C338F8057743822B0E18EA /* AppDelegate.swift */; };
 		EFBAA750BEEE2D52CB8BC739 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D03F1A0DE367DED4735C5E1 /* AppState.swift */; };
 		F38442DA220CA4A379FAFC8B /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE260BAD489CB9D25CE5394B /* Theme.swift */; };
 		FF7001114F0F6CE852FA0578 /* SheolService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C61D57EF5E1027553CA1962 /* SheolService.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		03C338F8057743822B0E18EA /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		0C61D57EF5E1027553CA1962 /* SheolService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SheolService.swift; sourceTree = "<group>"; };
 		271503FD6BBFFFE7B766D1E8 /* IconStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IconStore.swift; sourceTree = "<group>"; };
 		32D65BB0E4B6A0D0BB110E46 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -31,10 +34,11 @@
 		5D03F1A0DE367DED4735C5E1 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
 		724FBCC190FD8D5C54BA1753 /* MachineSpiritKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = MachineSpiritKit; path = ../../kit/MachineSpiritKit; sourceTree = SOURCE_ROOT; };
 		8436DE853B6E96250F95BCFF /* PenForm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PenForm.swift; sourceTree = "<group>"; };
-		8DC0B070810C9852F3EE3437 /* TreeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TreeView.swift; sourceTree = "<group>"; };
 		98EAE5FFEBA7D1FAEEF81FAE /* GraphView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphView.swift; sourceTree = "<group>"; };
+		AB996D2207146A3239C199E7 /* TypingOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TypingOverlay.swift; sourceTree = "<group>"; };
 		AE260BAD489CB9D25CE5394B /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		B1F0834B774E421E8A0CFB21 /* LedgerPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LedgerPane.swift; sourceTree = "<group>"; };
+		C8FE015A691BDC6F292D49AE /* ConfigWatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigWatcher.swift; sourceTree = "<group>"; };
 		D78116A2645238BBF41D3FF7 /* MachineSpiritApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MachineSpiritApp.swift; sourceTree = "<group>"; };
 		E9D11E59FDFE782CBF1FB7B0 /* MachineSpirit.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MachineSpirit.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		F9B9B3AF4EADBCCCF104CC61 /* ITermColors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ITermColors.swift; sourceTree = "<group>"; };
@@ -64,7 +68,9 @@
 		7746AEE7D6B8C6DEE1A62BA0 /* Sources */ = {
 			isa = PBXGroup;
 			children = (
+				03C338F8057743822B0E18EA /* AppDelegate.swift */,
 				5D03F1A0DE367DED4735C5E1 /* AppState.swift */,
+				C8FE015A691BDC6F292D49AE /* ConfigWatcher.swift */,
 				41BA055CA9A05CA859DBB7D0 /* ContentView.swift */,
 				98EAE5FFEBA7D1FAEEF81FAE /* GraphView.swift */,
 				271503FD6BBFFFE7B766D1E8 /* IconStore.swift */,
@@ -74,7 +80,7 @@
 				8436DE853B6E96250F95BCFF /* PenForm.swift */,
 				0C61D57EF5E1027553CA1962 /* SheolService.swift */,
 				AE260BAD489CB9D25CE5394B /* Theme.swift */,
-				8DC0B070810C9852F3EE3437 /* TreeView.swift */,
+				AB996D2207146A3239C199E7 /* TypingOverlay.swift */,
 			);
 			path = Sources;
 			sourceTree = "<group>";
@@ -175,7 +181,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				EE9DC96225DDD378E7F5B9E5 /* AppDelegate.swift in Sources */,
 				EFBAA750BEEE2D52CB8BC739 /* AppState.swift in Sources */,
+				DE1E4416918E309ED3644824 /* ConfigWatcher.swift in Sources */,
 				BAFAFC9DCF47C32765544359 /* ContentView.swift in Sources */,
 				019F7D79E1E876626E11B9A2 /* GraphView.swift in Sources */,
 				29CA3C829C1BB591EF6C2938 /* ITermColors.swift in Sources */,
@@ -185,7 +193,7 @@
 				4761260309A45D32C4754ECA /* PenForm.swift in Sources */,
 				FF7001114F0F6CE852FA0578 /* SheolService.swift in Sources */,
 				F38442DA220CA4A379FAFC8B /* Theme.swift in Sources */,
-				259C47702BFA8908157D476D /* TreeView.swift in Sources */,
+				2783C8C8E6335417108C3E82 /* TypingOverlay.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

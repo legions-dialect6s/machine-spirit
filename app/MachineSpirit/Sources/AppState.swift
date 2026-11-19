@@ -4,14 +4,11 @@ import MachineSpiritKit
 import Observation
 
 enum FocusedPane: Hashable {
-  case directory
   case graph
   case ledger
 }
 
-/// The one source of truth. Selection lives here and ONLY here — the
-/// directory and the node graph render side by side as projections of it,
-/// so walking with the keyboard moves both at once.
+/// App-lifetime model shared by the optional board and typing overlay.
 @Observable
 @MainActor
 final class AppState {
@@ -20,13 +17,41 @@ final class AppState {
   var focusedPane: FocusedPane = .graph
   var importError: String?
 
-  /// Disclosure state for the directory — programmatic so navigation can
-  /// unfold the path to the selection. "root" is the leader-key parent row
-  /// (one per hotkey; more leaders are a future concern), open by default.
-  var expandedIDs: Set<String> = ["root"]
+  var boardOpen = false
+  var boardMinimumContentHeight: CGFloat = 288
+  var overlayVisible = false
+  var overlayNodeID: String?
+  @ObservationIgnored weak var boardWindow: NSWindow?
 
-  /// The directory pane collapses to give the board the whole window.
-  var directoryCollapsed = false
+  func start() {
+    communeWithLiveConfig()
+    loadSidecar()
+    installKeyMonitor()
+    installScrollMonitor()
+    startConfigWatch()
+    wakeBoard()
+  }
+
+  func closeBoard() {
+    boardOpen = false
+    ledgerOpen = false
+    focusedPane = .graph
+    sheolPollTask?.cancel()
+    sheolPollTask = nil
+    cancelGlide()
+    saveSidecar()
+    sleepIfHidden()
+  }
+
+  func sleepIfHidden() {
+    guard !boardOpen, !overlayVisible else { return }
+    settleTask?.cancel()
+    settleTask = nil
+    boardAwake = false
+    bindFireCleanup?.cancel()
+    bindFireCleanup = nil
+    bindFire = nil
+  }
 
   // MARK: - Graph viewport (shared so keys, slider, and gestures agree)
 
@@ -42,7 +67,7 @@ final class AppState {
   @ObservationIgnored var graphFrame: CGRect = .zero
 
   /// Reference instant for the boot/refresh growth animation — traces grow
-  /// out of the center toward the rim, the directory cascades in.
+  /// out of the center toward the rim.
   var bootStamp = Date() {
     didSet { wakeBoard() }
   }
@@ -68,11 +93,12 @@ final class AppState {
   /// body, so the clock would never pause (the 100%-CPU idle bug). Instead
   /// this observed flag flips false once the board has been calm for
   /// `settleDelay`, which re-renders the view with the clock paused.
-  private(set) var boardAwake = true
+  private(set) var boardAwake = false
   @ObservationIgnored private var settleTask: Task<Void, Never>?
   private let settleDelay: TimeInterval = 5
 
   func wakeBoard() {
+    guard boardOpen || overlayVisible else { return }
     if !boardAwake { boardAwake = true }
     guard settleTask == nil else { return }  // the running settle re-reads the deadline
     settleTask = Task { [weak self] in
@@ -94,7 +120,7 @@ final class AppState {
 
   @ObservationIgnored private var glideTask: Task<Void, Never>?
 
-  /// Organic lerp of the graph viewport — smoothstep, ~a third of a second,
+  /// Ease-out of the graph viewport over roughly a quarter second,
   /// the win-lerp lineage. Direct gestures cancel it.
   func glide(toPan target: CGSize, zoom targetZoom: CGFloat? = nil) {
     glideTask?.cancel()
@@ -102,11 +128,11 @@ final class AppState {
     let fromZoom = zoom
     let toZoom = min(max(targetZoom ?? zoom, minZoom), maxZoom)
     glideTask = Task { [weak self] in
-      let steps = 22
+      let steps = 16
       for step in 1...steps {
         guard let self, !Task.isCancelled else { return }
         let t = Double(step) / Double(steps)
-        let eased = t * t * (3 - 2 * t)  // smoothstep
+        let eased = 1 - pow(1 - t, 3)  // ~0.25s ease-out
         let previous = self.pan
         self.pan = CGSize(
           width: fromPan.width + (target.width - fromPan.width) * eased,
@@ -140,7 +166,8 @@ final class AppState {
   func installKeyMonitor() {
     guard keyMonitor == nil else { return }
     keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-      guard let self else { return event }
+      guard let self, self.boardOpen,
+        (event.window ?? NSApp.keyWindow) === self.boardWindow else { return event }
       let modifiers = event.modifierFlags.intersection([.command, .option, .control, .shift])
 
       // A focused text field (the pen's form) owns the keyboard outright —
@@ -156,9 +183,8 @@ final class AppState {
       // trap the keyboard forever.
       if event.keyCode == 48, modifiers.isEmpty {
         switch self.focusedPane {
-        case .directory: self.focusedPane = .graph
-        case .graph: self.focusedPane = self.ledgerOpen ? .ledger : .directory
-        case .ledger: self.focusedPane = .directory
+        case .graph: self.focusedPane = self.ledgerOpen ? .ledger : .graph
+        case .ledger: self.focusedPane = .graph
         }
         if self.focusedPane != .ledger,
           let responder = NSApp.keyWindow?.firstResponder,
@@ -190,7 +216,6 @@ final class AppState {
       switch event.keyCode {
       case 53:  // esc — the walk returns home: root centered, default view
         self.selectedNodeID = nil
-        self.glide(toPan: .zero, zoom: 0.4)
         return nil
       case 51:  // delete — one step back up
         self.stepUp()
@@ -218,7 +243,6 @@ final class AppState {
     let anchor = selectedNodeID.flatMap { root.node(withID: $0) } ?? root
     if let hit = match(typed, in: anchor) {
       selectedNodeID = hit.id
-      revealSelectionInTree()
       return true
     }
     // Consume the key anyway when a node is selected — a mistyped key at
@@ -230,7 +254,7 @@ final class AppState {
   private func zoomKeyed(by factor: CGFloat) {
     let newZoom = min(max(zoom * factor, minZoom), maxZoom)
     if let id = selectedNodeID, let model = displayModel,
-      let position = RadialLayout.layout(root: model).positions[id]
+      let position = nodeOverrides[id] ?? RadialLayout.layout(root: model).positions[id]
     {
       glide(
         toPan: CGSize(width: -position.x * newZoom, height: -position.y * newZoom),
@@ -248,7 +272,7 @@ final class AppState {
     communeWithLiveConfig()
     Task { spirits = await SheolService.list() }
     refreshFlashing = true
-    bootStamp = Date()  // regrow the traces, re-cascade the directory
+    bootStamp = Date()  // regrow the traces
     disturb()
     Task { [weak self] in
       try? await Task.sleep(for: .milliseconds(1600))
@@ -275,7 +299,7 @@ final class AppState {
     guard scrollMonitor == nil else { return }
     scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) {
       [weak self] event in
-      guard let self, let window = event.window,
+      guard let self, self.boardOpen, let window = event.window, window === self.boardWindow,
         let contentHeight = window.contentView?.bounds.height
       else { return event }
       // Window coords are bottom-left; SwiftUI global frames are top-left.
@@ -324,15 +348,6 @@ final class AppState {
     let parts = id.split(separator: "/").map(String.init)
     guard parts.count > 2 else { return [] }
     return (2..<parts.count).map { parts[0..<$0].joined(separator: "/") }
-  }
-
-  /// Unfold the path to the current selection — and the selection itself,
-  /// so a selected parent shows its children without another click.
-  func revealSelectionInTree() {
-    guard let selectedNodeID else { return }
-    expandedIDs.formUnion(Self.ancestorIDs(of: selectedNodeID))
-    expandedIDs.insert(selectedNodeID)
-    expandedIDs.insert("root")
   }
 
   // MARK: - Dragged node positions (the sidecar earns its keep)
@@ -402,18 +417,9 @@ final class AppState {
   /// stale paths are ignored in silence — the ping must never break
   /// anything, on either side of the wire.
   func fireBind(atPath path: String) {
-    guard fireKnobs.enabled, let model = displayModel else { return }
-    let keys = path.hasPrefix("root")
-      ? path.split(separator: "/").dropFirst()
-      : path.split(separator: "/")[...]
-    guard !keys.isEmpty else { return }
-    var route = [model.id]
-    var current = model
-    for key in keys {
-      guard let child = current.children.first(where: { $0.key == String(key) }) else { return }
-      route.append(child.id)
-      current = child
-    }
+    guard let route = route(atPath: path), route.count > 1 else { return }
+    selectedNodeID = route.last
+    guard fireKnobs.enabled, boardOpen || overlayVisible else { return }
     bindFire = BindFire(route: route, stamp: Date())
     disturb()
     bindFireCleanup?.cancel()
@@ -423,6 +429,20 @@ final class AppState {
       guard let self, !Task.isCancelled else { return }
       self.bindFire = nil
     }
+  }
+
+  /// Resolve both IPC transports through the same exact key-path grammar.
+  func route(atPath path: String) -> [String]? {
+    guard var current = displayModel else { return nil }
+    var keys = path.split(separator: "/").map(String.init)
+    if keys.first == current.id { keys.removeFirst() }
+    var route = [current.id]
+    for key in keys {
+      guard let child = current.children.first(where: { $0.key == key }) else { return nil }
+      route.append(child.id)
+      current = child
+    }
+    return route
   }
 
   // MARK: - The pen (6b): the app writes the live config
@@ -468,7 +488,6 @@ final class AppState {
         underGroupID: parentID)
       try inscribe(next)
       selectedNodeID = parentID + "/" + key
-      revealSelectionInTree()
       // The board celebrates its own first written bind: pulse the route.
       fireBind(atPath: parentID + "/" + key)
     } catch {
@@ -493,9 +512,8 @@ final class AppState {
   private func inscribe(_ next: Node) throws {
     let report = try ConfigWriter().write(next, to: LeaderKeyImporter.liveConfigURL)
     communeWithLiveConfig()
-    // The pen just wrote this truth — record its mtime so the live-config
-    // watcher doesn't treat our own write as an out-of-band edit and re-import.
-    lastConfigMTime = Self.configMTime()
+    // The pen already imported this write; suppress the matching watch event.
+    configWatcher?.acknowledgeCurrent()
     penError = nil
     penMark = PenMark(lines: report.summary, backupPath: report.backupPath)
     disturb()
@@ -551,26 +569,15 @@ final class AppState {
         pan = CGSize(width: saved.panX, height: saved.panY)
       }
     }
-    terminationObserver = NotificationCenter.default.addObserver(
-      forName: NSApplication.willTerminateNotification, object: nil, queue: .main
-    ) { [weak self] _ in
-      MainActor.assumeIsolated {
-        self?.saveSidecar()
-        self?.shutdown()
-      }
-    }
   }
 
   func shutdown() {
     if let keyMonitor { NSEvent.removeMonitor(keyMonitor); self.keyMonitor = nil }
     if let scrollMonitor { NSEvent.removeMonitor(scrollMonitor); self.scrollMonitor = nil }
-    if let terminationObserver {
-      NotificationCenter.default.removeObserver(terminationObserver)
-      self.terminationObserver = nil
-    }
     glideTask?.cancel()
     sheolPollTask?.cancel()
-    configPollTask?.cancel()
+    configWatcher?.stop()
+    configWatcher = nil
     bindFireCleanup?.cancel()
     settleTask?.cancel()
     penFadeTask?.cancel()
@@ -641,7 +648,6 @@ final class AppState {
   var spirits: [Spirit] = []
 
   @ObservationIgnored private var sheolPollTask: Task<Void, Never>?
-  @ObservationIgnored private var terminationObserver: NSObjectProtocol?
 
   /// What the views render. (Identical to `model` since the owner ruled
   /// spirits out of the config graph; kept as the views' single entry
@@ -671,11 +677,11 @@ final class AppState {
   )
 
   func startSheolPolling() {
-    guard sheolPollTask == nil else { return }
+    guard boardOpen, sheolPollTask == nil else { return }
     sheolPollTask = Task { [weak self] in
       while !Task.isCancelled {
         let spirits = await SheolService.list()
-        guard let self else { return }
+        guard let self, !Task.isCancelled, self.boardOpen else { return }
         if self.spirits != spirits { self.spirits = spirits }
         try? await Task.sleep(for: .seconds(2))
       }
@@ -684,35 +690,16 @@ final class AppState {
 
   // MARK: - Live config watch — both surfaces stay in step
 
-  @ObservationIgnored private var configPollTask: Task<Void, Never>?
-  @ObservationIgnored fileprivate var lastConfigMTime: Date?
+  @ObservationIgnored private var configWatcher: ConfigWatcher?
 
-  /// Re-import the live config whenever it changes underneath us — an edit in
-  /// the fork's Settings UI, a hand edit, or another machine-spirit surface —
-  /// so the graph and the launcher never drift. A cheap mtime poll: robust
-  /// against the atomic replace (write-temp-then-rename) that defeats
-  /// fd-based watchers. The pen's own writes are excluded (see `inscribe`).
-  func startConfigPolling() {
-    guard configPollTask == nil else { return }
-    lastConfigMTime = Self.configMTime()
-    configPollTask = Task { [weak self] in
-      while !Task.isCancelled {
-        try? await Task.sleep(for: .milliseconds(1200))
-        guard let self else { return }
-        let mtime = Self.configMTime()
-        if let mtime, mtime != self.lastConfigMTime {
-          self.lastConfigMTime = mtime
-          self.communeWithLiveConfig()
-          self.bootStamp = Date()  // regrow the traces so a live edit is felt
-          self.disturb()
-        }
-      }
+  func startConfigWatch() {
+    guard configWatcher == nil else { return }
+    configWatcher = ConfigWatcher(url: LeaderKeyImporter.liveConfigURL) { [weak self] in
+      guard let self else { return }
+      self.communeWithLiveConfig()
+      self.bootStamp = Date()
+      self.disturb()
     }
-  }
-
-  fileprivate static func configMTime() -> Date? {
-    (try? FileManager.default.attributesOfItem(
-      atPath: LeaderKeyImporter.liveConfigURL.path))?[.modificationDate] as? Date
   }
 
   // MARK: - Launcher control (open the fork from the app, for testing)

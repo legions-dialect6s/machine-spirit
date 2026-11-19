@@ -1,47 +1,63 @@
 import AppKit
-import MachineSpiritKit
 import SwiftUI
 
 @main
 struct MachineSpiritApp: App {
-  @State private var state = AppState()
+  @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
+  @Environment(\.openWindow) private var openWindow
 
   var body: some Scene {
-    WindowGroup("machine-spirit") {
-      ContentView()
-        .environment(state)
+    let _ = delegate.openBoardAction = { openWindow(id: "board") }
+    Window("machine-spirit", id: "board") {
+      BoardRoot(delegate: delegate)
+        .environment(delegate.state)
         .preferredColorScheme(.dark)
-        .task {
-          state.communeWithLiveConfig()
-          state.loadSidecar()
-          state.installKeyMonitor()
-          state.installScrollMonitor()
-          state.startSheolPolling()
-          state.startConfigPolling()
-          state.wakeBoard()  // arm the settle so the boot growth pauses the clock
-        }
-        // The fired ping (#36): machinespirit://fired?path=s/s/w/s —
-        // the board pulses the route of the bind that just ran. The
-        // existing window claims the event; without this, SwiftUI
-        // spawns a NEW window per incoming URL (the ghost-window bug).
-        .handlesExternalEvents(preferring: ["*"], allowing: ["*"])
-        .onOpenURL { url in
-          guard url.host() == "fired",
-            let path = URLComponents(url: url, resolvingAgainstBaseURL: false)?
-              .queryItems?.first(where: { $0.name == "path" })?.value
-          else { return }
-          state.fireBind(atPath: path)
-        }
     }
-    .defaultSize(width: 1440, height: 900)
+    .defaultLaunchBehavior(.suppressed)
+    .restorationBehavior(.disabled)
+    .defaultSize(width: 1000, height: 700)
     .commands {
-      // Open/relaunch the Leader Key launcher (the fork) from the app — the
-      // suite is two processes that share one live config; this is the bridge
-      // for testing a config edit or a fresh build without the terminal.
       CommandMenu("Launcher") {
-        Button("Relaunch Leader Key") { state.relaunchLauncher() }
-        Button("Open Leader Key Settings") { state.openLauncherSettings() }
+        Button("Open Board") { delegate.openBoard() }
+        Button("Relaunch Leader Key") { delegate.state.relaunchLauncher() }
+        Button("Open Leader Key Settings") { delegate.state.openLauncherSettings() }
       }
+    }
+  }
+}
+
+/// The scene may be cached by SwiftUI. Its expensive content is explicitly
+/// removed on close, so no hidden Canvas, terminal, or render clock survives.
+private struct BoardRoot: View {
+  @Environment(AppState.self) private var state
+  let delegate: AppDelegate
+
+  var body: some View {
+    Group {
+      if state.boardOpen { ContentView() }
+      else { Color.clear }
+    }
+    .frame(minWidth: 420, minHeight: state.boardMinimumContentHeight)
+    .background(BoardWindowReader(delegate: delegate))
+  }
+}
+
+private struct BoardWindowReader: NSViewRepresentable {
+  let delegate: AppDelegate
+
+  func makeNSView(context: Context) -> WindowReader {
+    let view = WindowReader()
+    view.onWindow = { [weak delegate] window in delegate?.attachBoard(window) }
+    return view
+  }
+
+  func updateNSView(_ view: WindowReader, context: Context) {}
+
+  final class WindowReader: NSView {
+    var onWindow: ((NSWindow) -> Void)?
+    override func viewDidMoveToWindow() {
+      super.viewDidMoveToWindow()
+      if let window { onWindow?(window) }
     }
   }
 }

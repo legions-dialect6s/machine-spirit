@@ -75,6 +75,30 @@ struct LedgerPane: View {
 struct LedgerTerminal: NSViewRepresentable {
   /// The live terminal view, so pane focus can hand it the keyboard.
   @MainActor static weak var current: LocalProcessTerminalView?
+  @MainActor private static var currentSession: Session?
+
+  /// SwiftTerm 1.5 does not expose its LocalProcess from the terminal view.
+  /// Capture only children created by this view, never a global sheol pidfile.
+  @MainActor final class Session {
+    var children: Set<pid_t> = []
+
+    func stop() {
+      for pid in children.intersection(LedgerTerminal.childPIDs())
+        where LedgerTerminal.commandLine(for: pid).contains("tmux-sheol.sh") {
+        kill(pid, SIGTERM)
+      }
+      children.removeAll()
+    }
+  }
+
+  func makeCoordinator() -> Session { Session() }
+
+  private static func childPIDs() -> Set<pid_t> {
+    var pids = [pid_t](repeating: 0, count: 256)
+    let count = proc_listchildpids(getpid(), &pids, Int32(pids.count * MemoryLayout<pid_t>.stride))
+    guard count > 0 else { return [] }
+    return Set(pids.prefix(Int(count)).filter { $0 > 0 })
+  }
 
   static func claimKeyboard() {
     DispatchQueue.main.async {
@@ -97,36 +121,30 @@ struct LedgerTerminal: NSViewRepresentable {
       "SHELL=/bin/zsh",
       "PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
     ]
+    let previousChildren = Self.childPIDs()
     terminal.startProcess(
       executable: "/bin/bash",
       args: [SheolService.helperPath("tmux-sheol.sh")],
       environment: environment,
       execName: nil)
+    context.coordinator.children = Self.childPIDs().subtracting(previousChildren)
+    Self.currentSession = context.coordinator
     return terminal
   }
 
   func updateNSView(_ nsView: LocalProcessTerminalView, context: Context) {}
 
-  /// The TUI's own single-instance doctrine, applied from the app side:
-  /// prefer the pidfile that tmux-sheol writes; broad pkill is only a stale-file fallback.
-  static func endTUI() {
-    let pidfile = FileManager.default.homeDirectoryForCurrentUser
-      .appendingPathComponent(".cache/machine-spirit/sheol.pid")
-    if let text = try? String(contentsOf: pidfile, encoding: .utf8),
-      let pid = Int32(text.trimmingCharacters(in: .whitespacesAndNewlines)),
-      commandLine(for: pid).contains("tmux-sheol.sh")
-    {
-      kill(pid, SIGTERM)
-      return
+  static func dismantleNSView(_ view: LocalProcessTerminalView, coordinator: Session) {
+    coordinator.stop()
+    if current === view {
+      current = nil
+      currentSession = nil
     }
-
-    let process = Process()
-    process.executableURL = URL(fileURLWithPath: "/usr/bin/pkill")
-    process.arguments = ["-f", "bin/tmux-sheol.sh"]
-    process.standardOutput = FileHandle.nullDevice
-    process.standardError = FileHandle.nullDevice
-    try? process.run()
   }
+
+  /// End only this board's embedded TUI; never signal another terminal or
+  /// tmux session. Closing the board also takes this path via dismantle.
+  static func endTUI() { currentSession?.stop() }
 
   private static func commandLine(for pid: Int32) -> String {
     let process = Process()

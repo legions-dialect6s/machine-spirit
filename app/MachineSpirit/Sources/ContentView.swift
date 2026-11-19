@@ -24,70 +24,64 @@ struct ContentView: View {
 
   var body: some View {
     VStack(spacing: 0) {
-      header
+      GeometryReader { geometry in header(compact: geometry.size.width < 640) }
+        .frame(height: 44)
       Divider().overlay(Theme.phosphorDim.opacity(0.4))
       main
       Divider().overlay(Theme.phosphorDim.opacity(0.4))
       footer
     }
     .background(Theme.ground)
-    .frame(minWidth: 1100, minHeight: 620)
+    .frame(minWidth: 420)
     .onAppear { typeTitle() }
+    .onDisappear { typingTask?.cancel() }
     .onChange(of: state.bootStamp) { typeTitle() }
   }
 
-  private var header: some View {
+  private func header(compact: Bool) -> some View {
     ZStack {
-      // The wordmark holds the center of the machine.
-      ZStack(alignment: .leading) {
-        Text(Self.fullTitle).hidden()  // reserve the full width
-        Text(typedTitle)
+      if !compact {
+        // The wordmark holds the center of the machine.
+        ZStack(alignment: .leading) {
+          Text(Self.fullTitle).hidden()  // reserve the full width
+          Text(typedTitle)
+        }
+        .font(.system(.title3, design: .monospaced).weight(.bold))
+        .foregroundStyle(Theme.phosphor)
       }
-      .font(.system(.title3, design: .monospaced).weight(.bold))
-      .foregroundStyle(Theme.phosphor)
 
       HStack(spacing: 10) {
-      Button {
-        state.directoryCollapsed.toggle()
-      } label: {
-        Label(
-          "directory", systemImage: state.directoryCollapsed ? "chevron.right" : "chevron.left"
-        )
-        .font(.system(.callout, design: .monospaced))
-      }
-      .buttonStyle(.plain)
-      .foregroundStyle(state.directoryCollapsed ? Theme.ash : Theme.phosphorDim)
-      .help(state.directoryCollapsed ? "show the directory" : "collapse the directory")
-      Spacer()
-      Button {
-        if state.ledgerOpen {
-          LedgerTerminal.endTUI()
-          state.ledgerOpen = false
-        } else {
-          state.ledgerOpen = true
+        Spacer()
+        Button {
+          if state.ledgerOpen {
+            LedgerTerminal.endTUI()
+            state.ledgerOpen = false
+          } else {
+            state.ledgerOpen = true
+          }
+        } label: {
+          Label("sheol", systemImage: "moon.haze")
+            .font(.system(.callout, design: .monospaced))
         }
-      } label: {
-        Label("sheol", systemImage: "moon.haze")
+        .buttonStyle(.plain)
+        .foregroundStyle(state.ledgerOpen ? Theme.magenta : Theme.magenta.opacity(0.7))
+        .help("the ledger, embedded — sheol stays a terminal; this just gives it a pane")
+        Button {
+          state.refresh()
+        } label: {
+          Label(
+            state.refreshFlashing ? "✓ refreshed" : "refresh",
+            systemImage: "arrow.trianglehead.2.clockwise"
+          )
           .font(.system(.callout, design: .monospaced))
-      }
-      .buttonStyle(.plain)
-      .foregroundStyle(state.ledgerOpen ? Theme.magenta : Theme.magenta.opacity(0.7))
-      .help("the ledger, embedded — sheol stays a terminal; this just gives it a pane")
-      Button {
-        state.refresh()
-      } label: {
-        Label(
-          state.refreshFlashing ? "✓ re-imported \((state.displayModel?.totalCount ?? 1) - 1) nodes" : "refresh",
-          systemImage: "arrow.trianglehead.2.clockwise"
-        )
-        .font(.system(.callout, design: .monospaced))
-      }
-      .buttonStyle(.plain)
-      .foregroundStyle(state.refreshFlashing ? Theme.phosphor : Theme.phosphorDim)
-      .animation(.easeOut(duration: 0.2), value: state.refreshFlashing)
-      .help("re-import the live Leader Key config — ⌘R")
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(state.refreshFlashing ? Theme.phosphor : Theme.phosphorDim)
+        .animation(.easeOut(duration: 0.2), value: state.refreshFlashing)
+        .help("re-import the live Leader Key config — ⌘R")
       }
     }
+    .lineLimit(1)
     .padding(.horizontal, 14)
     .padding(.vertical, 10)
   }
@@ -104,20 +98,13 @@ struct ContentView: View {
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity)
     } else if state.model != nil {
-      // The board gets the window; the directory opens at its narrowest and
-      // collapses entirely (the header button brings it back).
+      // Keep one split hierarchy at every width so resizing cannot recreate
+      // the embedded terminal. Both panes can fit inside a 420pt board.
       HSplitView {
-        if !state.directoryCollapsed {
-          pane(.directory, title: "directory") { TreeView() }
-            .frame(minWidth: 260, idealWidth: 260, maxWidth: 560)
-        }
-        // The huge ideal width makes HSplitView actually honor the
-        // directory's narrow ideal on first layout — the board is the star.
         pane(.graph, title: "node graph") { GraphView() }
-          .frame(minWidth: 480, idealWidth: 4000, maxWidth: .infinity)
+          .frame(minWidth: 160, maxWidth: .infinity)
         if state.ledgerOpen {
-          LedgerPane()
-            .frame(minWidth: 380, idealWidth: 440, maxWidth: 640)
+          LedgerPane().frame(minWidth: 220, idealWidth: 380)
         }
       }
     } else {
@@ -126,7 +113,7 @@ struct ContentView: View {
     }
   }
 
-  /// Both projections stay visible; the focused one wears the brighter rail.
+  /// The focused graph wears the brighter rail beside the optional ledger.
   private func pane<Content: View>(
     _ pane: FocusedPane, title: String, @ViewBuilder content: () -> Content
   ) -> some View {
@@ -183,6 +170,8 @@ struct ContentView: View {
         .font(.system(.caption, design: .monospaced))
         .foregroundStyle(Theme.ash.opacity(0.7))
     }
+    .lineLimit(1)
+    .truncationMode(.tail)
     .padding(.horizontal, 14)
     .padding(.vertical, 6)
   }

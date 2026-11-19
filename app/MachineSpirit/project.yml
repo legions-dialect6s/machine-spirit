@@ -30,6 +30,7 @@ targets:
     info:
       path: Info.plist
       properties:
+        LSUIElement: true
         CFBundleURLTypes:
           - CFBundleURLName: com.machinespirit.MachineSpirit
             CFBundleURLSchemes: [machinespirit]
