@@ -20,7 +20,8 @@ wrapper intentionally does not run SwiftPM on every invocation.
 
 ## Commands
 
-Every CLI command supports `--json`, including before the command. Errors exit 1,
+Every CLI command supports `--json`, including before the command. Errors exit 1
+(window misses described below exit 11),
 leave stdout empty, and print one line to stderr. `--` introduces literal positional
 arguments, e.g. `ms run --dry-run -- -/-`. `ms --help` lists syntax.
 
@@ -30,6 +31,11 @@ arguments, e.g. `ms run --dry-run -- -/-`. `ms --help` lists syntax.
 | `apps` | Regular running apps: name, bundle ID, PID, frontmost, hidden. |
 | `windows [--app NAME] [--all-spaces] [--all-layers]` | Window ID, app, PID, title, frame, screen ID, layer, z-order, on-screen flag. App filter is a case-insensitive name substring or exact bundle ID. |
 | `focus TARGET` | Activate an exact running app name/bundle ID, or raise a numeric window ID. Window focus may unminimize it. |
+| `mouse` | Mouse position, screen ID and screen/usable frames, in **AppKit** coordinates. |
+| `win place MODE [--app NAME]` | Place the focused window; modes and grow ladder below. |
+| `win tile-all` | Unhide regular apps, unminimize windows, tile standard windows across all displays. |
+| `win hide-all` | Hide every regular app, including Finder/frontmost, except Leader Key/MachineSpirit helpers. |
+| `win cycle [--app NAME]` | Raise the next standard window in ascending window-ID order, wrapping. |
 | `binds [--flat\|--tree] [--grep TEXT]` | Read the live config, including groups. Full keypath, label, type, value; case-insensitive search across all fields. Tree text is indented and search retains ancestors. JSON uses ordered rows with full paths in both modes. |
 | `run KEYPATH [--dry-run]` | Resolve a unique live leaf, launch its action, then post the board notification. Dry-run only returns the launch plan. |
 | `tmux [list]` | Installed `~/bin/sheol-core list --json`; JSON preserves its array/fields. Human output labels attached > 0 as living and 0 as wandering. |
@@ -40,7 +46,7 @@ arguments, e.g. `ms run --dry-run -- -/-`. `ms --help` lists syntax.
 | `clipboard [list [-n 20]\|get INDEX]` | Read-only history. Disabled unless `MS_ALLOW_CLIPBOARD=1`. Indices are zero-based, in persisted archive order. |
 | `mcp` | Newline-delimited JSON-RPC 2.0 over stdin/stdout. `--json` is accepted but does not change the wire protocol. |
 
-Frames use **global points, primary display top-left origin, y increasing
+Except for `mouse`, frames use **global points, primary display top-left origin, y increasing
 downward**. Secondary displays can have negative coordinates. Screens, windows,
 AX matching, and capture rectangles use the same convention. Screen IDs are
 Core Graphics IDs, not `screencapture -D` ordinals. A window's screen ID is the
@@ -57,6 +63,83 @@ Window focus uses public Accessibility APIs and matches PID + frame (within two
 points) + title when available. It fails on ambiguous matches rather than raising
 an arbitrary window. Refresh `windows` if the target moved or closed. App focus
 activates an already-running app; use an application bind to launch a cold app.
+
+## Window placement and mouse
+
+```sh
+bin/ms mouse --json
+bin/ms win place smart
+bin/ms win place step
+bin/ms win place center --app Safari --json
+bin/ms win cycle --app 'Unreal Editor'
+bin/ms win tile-all --json
+bin/ms win hide-all
+```
+
+All `win` commands require Accessibility on the calling process. Missing access
+prints `ms: Accessibility not granted to the calling process`, without prompting.
+`place` uses the frontmost app's focused window, falling back to its main window,
+then first standard window. `--app` accepts an exact running app name or bundle ID
+(case-insensitive). No target window is a miss (exit 11).
+
+`smart` selects the display under the mouse, falling back to the main screen.
+Within its usable frame, the outer 10% edge bands select halves; intersecting
+bands select quarters; the interior selects `amm`. Points over the menu bar or
+Dock clamp to the nearest edge. Named modes use the screen with the largest
+intersection with the current window:
+
+| Mode | Requested frame within the screen's visibleFrame |
+| --- | --- |
+| `amm` | Centered 90% width × 90% height |
+| `max` | Full usable frame, excluding menu bar and Dock |
+| `left`, `right`, `top`, `bottom` | Corresponding half |
+| `tl`, `tr`, `bl`, `br` | Corresponding quarter |
+| `center` | Keep size, clamp to usable area, center |
+| `fullscreen` | Request native fullscreen |
+
+`step` classifies all four current edges with tolerance `max(12pt, 2% of the
+screen's usable dimension)`. Quarters grow to the containing left/right half;
+halves grow to `amm`, then `max`, then native fullscreen. A step from fullscreen
+exits to `max`; the next step returns to `amm`. Unrecognized frames go to `amm`.
+The bounce marker is persisted atomically in `$TMPDIR/ms-win-place.json` with
+`windowKey`, `last`, `fromFullscreen`, and epoch `t`. It expires after ten minutes
+or a different window key. Keys use PID + uniquely matched CGWindowID, falling
+back to a stable AX-title hash (identical titles can collide). All other placements
+clear the bounce marker; tile-all clears the file.
+
+Exiting fullscreen waits only while the command is active: at most 1.2 seconds,
+checking every 50 ms. Other placements have no sleeps/retries. Frame writes are
+position → size → position to accommodate apps that clamp against the old position.
+JSON reports `status: "requested"` and the requested frame, not verified geometry:
+apps may silently clamp sizes or reject AX writes. Explicit write errors fail.
+
+`tile-all` reads each window's attributes in one AX batch, unminimizes it, and
+includes standard, non-fullscreen windows whose current size is at least 120×80.
+Windows start on the screen they mostly overlap; integer quotas proportional to
+usable display area move the smallest windows from overloaded screens. Each grid
+is ordered by current top-left position, with 6pt gaps and a widened final row.
+JSON includes successful requests and individual failures. Unresponsive apps can
+still affect total latency despite a 150ms AX messaging timeout; the 30-window
+performance target needs a live benchmark. No idle polling or background timers.
+
+`hide-all` returns the count of successful hide requests and failure count. Finder
+is hidden but its desktop remains. Bundle IDs beginning `com.machinespirit` and
+the names `Leader Key`/`MachineSpirit` are excluded. `cycle` unminimizes and raises
+the next standard window, then activates its app. At most one window exits 11;
+other errors exit 1. Stable order uses CGWindowIDs matched by PID, frame and title
+when available; ambiguous matches fail rather than picking an arbitrary window.
+Non-Cocoa apps must expose standard AX windows; they need no keyboard shortcut.
+
+`mouse` needs no Accessibility grant. It prints `x,y screen=ID`; JSON contains
+`{x,y,screen,frame,visibleFrame}`. These coordinates are **AppKit bottom-left,
+y increasing upward**, unlike `screens` and window output. Secondary display
+origins can be negative in either convention. One shared rectangle reflection
+converts using the primary screen's top edge, not the top of the desktop union.
+
+MCP exposes `win_place` (required `mode`, optional `app`), `win_tile_all`,
+`win_cycle` (optional `app`), and `mouse`, returning the same JSON as the CLI.
+Window tools are marked as mutations; `mouse` is read-only. A CLI miss becomes
+an MCP tool error without terminating the server.
 
 `stats.memoryPressurePercent` is explicitly an estimate:
 `100 * (1 - (free + inactive + speculative pages) / physical pages)`.
@@ -153,7 +236,7 @@ and [lifecycle](https://modelcontextprotocol.io/specification/2025-06-18/basic/l
 - **Screen Recording** on the invoking terminal or agent host: complete window
   titles and screenshots. Capture fails clearly when permission is missing;
   window enumeration can still return metadata. `ms` does not prompt for consent.
-- **Accessibility** on that host: raise/unminimize individual windows. Checked
+- **Accessibility** on that host: raise/unminimize individual windows and all `win` commands. Checked
   with `AXIsProcessTrusted`; app-only activation does not require it.
 - **Automation** may be required by sheol's iTerm integration or by individual
   user-authored binds. Those actions inherit the owner's existing setup.
@@ -187,7 +270,27 @@ errors, rejects stray stdout/notification replies, and checks clean EOF shutdown
 `--screenshot` checks PNG dimensions/base64 and private file mode, then deletes the
 capture. It does not print private window titles, run binds, or read clipboard data.
 
-Observed on the development Mac, 2026-11-19:
+Window-command wave verification, 2026-11-19:
+
+- Release build and all 16 Swift tests passed. Ten new tests cover coordinate
+  reflection, all nine mouse zones/boundaries, named frames, classification edge
+  tolerances, ladder transitions, state expiry/isolation, screen overlap,
+  proportional rebalancing, grids through 30 windows, and MCP schemas/arguments.
+- `bin/ms mouse --json` and `bin/ms screens --json` succeeded across three
+  displays, including negative origins. `win place center` and `win place amm`
+  succeeded on Finder with the existing Accessibility grant. Finder's resulting
+  almost-maximize frame matched within whole-point rounding. Both commands also
+  succeeded on T3 Code (Beta) after the final build.
+- Timed `amm` runs took **0.20s wall time** on Finder and **0.12s** on T3 Code.
+  These are individual observations, not a latency bound; the 150ms hold-command
+  aim was not met consistently across these two runs.
+- The updated MCP smoke test passed: 13 tools, parsed screen/window/mouse JSON,
+  window routing with nonexistent targets, error handling and clean EOF shutdown.
+- Live fullscreen transitions, non-Cocoa cycling, hide-all, and tile-all were not
+  exercised. The 30-window / 1.5s tiling target and missing-TCC behavior remain
+  unverified live. No permissions were changed or apps restarted/redeployed.
+
+Earlier baseline verification (before window commands), 2026-11-19:
 
 - Release build passed; six Swift tests passed (parsing, bind paths/argv, schema
   validation, geometry, MCP lifecycle/errors, clipboard archive decoding).

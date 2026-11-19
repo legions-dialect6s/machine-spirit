@@ -45,6 +45,13 @@ func toolSpecs(allowClipboard: Bool) -> [ToolSpec] {
     var result = [
         ToolSpec(name: "screens", description: "List display IDs, names, global frames, usable frames, scale, refresh rate (null if unknown/variable), main and built-in flags. Use before positioning or capturing windows. All geometry is in global points with primary display top-left origin and downward y. No special permission."),
         ToolSpec(name: "apps", description: "List running regular GUI apps with name, bundleId, pid, frontmost and hidden flags. Use to discover an exact target for focus. No special permission."),
+        ToolSpec(name: "mouse", description: "Mouse x,y and containing screen ID, frame and visibleFrame in AppKit global points (bottom-left origin, y up). No special permission."),
+        ToolSpec(name: "win_place", description: "Place the focused window (main/standard fallback). smart uses the mouse screen and edge/corner zones; step advances quarter, half, almost-maximize, maximize, fullscreen. Other modes use the window's current screen. Uses visibleFrame to avoid Dock/menu bar. Requires Accessibility. Returns requested geometry; apps may clamp sizes.", properties: [
+            "mode": ["type": "string", "enum": Placement.allCases.map(\.rawValue)],
+            "app": string("Exact running app name or bundle ID; defaults to frontmost.")], required: ["mode"], readOnly: false),
+        ToolSpec(name: "win_tile_all", description: "Unhide regular apps, unminimize their windows, and tile standard non-fullscreen windows across all screens proportional to usable area. Requires Accessibility. Returns requested frames and individual failures; apps may clamp sizes.", readOnly: false),
+        ToolSpec(name: "win_cycle", description: "Raise and unminimize the next standard window in stable CGWindowID order, wrapping. Requires Accessibility and unique WindowServer/AX matches. At most one window returns a miss (CLI exit 11).", properties: [
+            "app": string("Exact running app name or bundle ID; defaults to frontmost.")], readOnly: false),
         ToolSpec(name: "windows", description: "List WindowServer windows with id, app, pid, title, global frame, best-overlap screenId, layer, zOrder (zero is front), and onScreen. Defaults to on-screen layer-zero windows. Screen Recording permission on the terminal/agent host reveals titles; missing permission is reported once in notes. Other Spaces are best-effort; minimized/off-screen windows can appear with allSpaces.", properties: [
             "app": string("Case-insensitive app name substring or exact bundle ID."),
             "allSpaces": boolean("Include off-screen windows across Spaces where macOS exposes them."),
@@ -82,6 +89,9 @@ func toolArguments(_ name: String, _ args: [String: Any]) throws -> [String] {
         if args[key] as? Bool == true { result.append(flag) }
     }
     switch name {
+    case "win_place": result = ["place"] + result + ["--", value("mode")!]
+    case "win_tile_all": result = ["tile-all"]
+    case "win_cycle": result = ["cycle"] + result
     case "focus": result += ["--", value("target")!]
     case "run": result += ["--", value("path")!]
     case "binds": if let format = value("format") { result.append("--" + format) }
@@ -154,7 +164,8 @@ final class MCPServer {
                 if params["arguments"] != nil && !(params["arguments"] is [String: Any]) { throw Failure("arguments must be an object") }
                 let args = params["arguments"] as? [String: Any] ?? [:]
                 try spec.validate(args)
-                let output = try command(name, toolArguments(name, args))
+                let commandName = ["win_place", "win_tile_all", "win_cycle"].contains(name) ? "win" : name
+                let output = try command(commandName, toolArguments(name, args))
                 var content: [[String: Any]] = [["type": "text", "text": try jsonString(output.json)]]
                 if let path = output.imagePath { content.append(try screenshotImage(path)) }
                 return success(["content": content, "isError": false])

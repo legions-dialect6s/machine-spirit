@@ -56,7 +56,8 @@ try:
     send({"jsonrpc": "2.0", "method": "notifications/initialized"})
     result = call(2, "tools/list")
     names = [tool["name"] for tool in result["tools"]]
-    assert set(names) == {"screens", "apps", "windows", "focus", "binds", "run", "tmux", "stats", "screenshot"}
+    assert set(names) == {"screens", "apps", "windows", "focus", "binds", "run", "tmux", "stats", "screenshot",
+                          "mouse", "win_place", "win_tile_all", "win_cycle"}
     for tool in result["tools"]:
         assert tool["inputSchema"]["type"] == "object"
         assert tool["inputSchema"]["additionalProperties"] is False
@@ -74,6 +75,21 @@ try:
     result = call(6, "tools/call", {"name": "clipboard", "arguments": {}})
     assert result["isError"] is True
     print("disabled clipboard -> isError=true")
+    result = call(8, "tools/call", {"name": "mouse", "arguments": {}})
+    assert result["isError"] is False, result
+    payload = json.loads(result["content"][0]["text"])
+    assert {"x", "y", "screen", "frame", "visibleFrame"} <= payload.keys()
+    print("tools/call mouse -> isError=false; JSON parsed")
+    # Exercise mutation routing without moving any real window.
+    for identifier, name, arguments in [
+        (9, "win_place", {"mode": "center", "app": "ms-smoke-nonexistent-00000000"}),
+        (10, "win_cycle", {"app": "ms-smoke-nonexistent-00000000"}),
+    ]:
+        result = call(identifier, "tools/call", {"name": name, "arguments": arguments})
+        assert result["isError"] is True, result
+        error = json.loads(result["content"][0]["text"])["error"]
+        assert "no running app" in error or "Accessibility not granted" in error, error
+    print("window tools -> routed; nonexistent app rejected without mutation")
     if options.screenshot:
         result = call(7, "tools/call", {"name": "screenshot", "arguments": {}})
         assert result["isError"] is False, result
