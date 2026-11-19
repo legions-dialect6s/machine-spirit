@@ -69,7 +69,9 @@ final class SystemStats {
     var compact: String? = nil
 
     var compactSummary: String {
-      let label = ["Memory": "MEM", "Temperatures": "TEMP", "Network ↓/↑": "NET", "Battery": "BAT"][name] ?? name
+      let label =
+        ["Memory": "MEM", "Temperatures": "TEMP", "Network ↓/↑": "NET", "Battery": "BAT"][name]
+        ?? name
       return compact ?? "\(label) —"
     }
   }
@@ -85,6 +87,75 @@ final class SystemStats {
   var onUpdate: (([Row]) -> Void)?
   var cpuPercent: Int { cpu.cpuPercent }
   func sampleCPU() { cpu.sample() }
+
+  struct BarReading {
+    var gpu: Int?
+    var temperature: Int?
+    var download: Double?
+    var upload: Double?
+  }
+  private(set) var bar = BarReading()
+  var onBarUpdate: (() -> Void)?
+  private var barInFlight = false
+  private var barHasReaders = false
+  private var barGeneration = 0
+  private var barSensors: HIDTemperatures?
+  private var barNetwork = NetStats()
+
+  /// Called only by the existing 2s heartbeat. Sensor I/O never blocks AppKit.
+  func sampleBar(gpu: Bool, temperature: Bool, network: Bool) {
+    guard !barInFlight else { return }
+    guard gpu || temperature || network else {
+      if barHasReaders { stopBar() }
+      return
+    }
+    barHasReaders = true
+    barInFlight = true
+    let current = barGeneration
+    queue.async {
+      var reading = BarReading()
+      if gpu { reading.gpu = Self.gpuPercent() }
+      if temperature {
+        if self.barSensors == nil { self.barSensors = HIDTemperatures() }
+        reading.temperature = self.barSensors?.cpuTemperature().map { Int($0.rounded()) }
+      } else {
+        self.barSensors = nil
+      }
+      if network {
+        let rates = self.barNetwork.sample()
+        reading.download = rates?.down
+        reading.upload = rates?.up
+      } else {
+        self.barNetwork = NetStats()
+      }
+      DispatchQueue.main.async {
+        self.barInFlight = false
+        guard self.barGeneration == current else { return }
+        self.bar = reading
+        self.onBarUpdate?()
+      }
+    }
+  }
+
+  func stopBar() {
+    barHasReaders = false
+    barGeneration += 1
+    queue.async {
+      self.barSensors = nil
+      self.barNetwork = NetStats()
+    }
+  }
+
+  private static func gpuPercent() -> Int? {
+    var values: [Int] = []
+    DetailReader.services("IOAccelerator") { service in
+      guard let stats = DetailReader.property(service, "PerformanceStatistics") as? [String: Any],
+        let value = (stats["Device Utilization %"] ?? stats["GPU Activity(%)"]) as? NSNumber
+      else { return }
+      values.append(max(0, min(100, value.intValue)))
+    }
+    return values.max()
+  }
 
   // Worker-confined readers. Allocate/reset only on open, retain no sensor clients when closed.
   private var details: DetailReader?
@@ -185,7 +256,8 @@ final class SystemStats {
           name: "Memory",
           summary: "\(Self.bytes(memory.used)) used · \(memory.pressurePercent)% pressure",
           details: memoryDetails,
-          compact: memory.total > 0 ? "MEM \(Int((Double(memory.used) * 100 / Double(memory.total)).rounded()))%" : "MEM —"),
+          compact: memory.total > 0
+            ? "MEM \(Int((Double(memory.used) * 100 / Double(memory.total)).rounded()))%" : "MEM —"),
         network(), disk(), battery(), sensors.sample(),
       ]
     }
@@ -222,7 +294,9 @@ final class SystemStats {
         ?? SCDynamicStoreCopyValue(nil, "State:/Network/Global/IPv6" as CFString)) as? [String: Any]
       guard let primary = global?["PrimaryInterface"] as? String else {
         previousNetwork = nil
-        return Row(name: "Network ↓/↑", summary: "Offline", details: ["No primary interface"], compact: "NET offline")
+        return Row(
+          name: "Network ↓/↑", summary: "Offline", details: ["No primary interface"],
+          compact: "NET offline")
       }
       var interfaces: UnsafeMutablePointer<ifaddrs>?
       guard getifaddrs(&interfaces) == 0 else {
@@ -245,10 +319,13 @@ final class SystemStats {
         let rates = Self.rates(current, previousNetwork)
         var compact = "↓— ↑— MB/s"
         if let previous = previousNetwork, current.identity == previous.identity,
-          current.time > previous.time, current.down >= previous.down, current.up >= previous.up {
+          current.time > previous.time, current.down >= previous.down, current.up >= previous.up
+        {
           let elapsed = (current.time - previous.time) * 1_000_000
-          compact = String(format: "↓%.1f ↑%.1f MB/s",
-            Double(current.down - previous.down) / elapsed, Double(current.up - previous.up) / elapsed)
+          compact = String(
+            format: "↓%.1f ↑%.1f MB/s",
+            Double(current.down - previous.down) / elapsed,
+            Double(current.up - previous.up) / elapsed)
         }
         previousNetwork = current
         return Row(
@@ -314,7 +391,8 @@ final class SystemStats {
         })
       else {
         return Row(
-          name: "Battery", summary: "No battery", details: ["No internal battery reported"], compact: "AC")
+          name: "Battery", summary: "No battery", details: ["No internal battery reported"],
+          compact: "AC")
       }
       let current = (battery[kIOPSCurrentCapacityKey] as? NSNumber)?.doubleValue
       let max = (battery[kIOPSMaxCapacityKey] as? NSNumber)?.doubleValue
@@ -434,7 +512,7 @@ private final class HIDTemperatures {
       services = copy(client)?.takeRetainedValue() as? [CFTypeRef] ?? []
     #endif
   }
-  func sample() -> SystemStats.Row {
+  private func hidReadings() -> [(String, Double)] {
     var readings: [(String, Double)] = []
     if let property, let event, let value {
       for service in services {
@@ -447,7 +525,22 @@ private final class HIDTemperatures {
         }
       }
     }
-    readings += smc.sample()
+    return readings
+  }
+
+  func cpuTemperature() -> Double? {
+    let cpu = smc.sample(only: "CPU").map { $0.1 }
+    if !cpu.isEmpty { return cpu.reduce(0, +) / Double(cpu.count) }
+    let fallback = hidReadings().filter {
+      let name = $0.0.lowercased()
+      return name.hasPrefix("pacc") || name.hasPrefix("eacc") || name.contains("cpu")
+        || name.hasPrefix("soc mtr") || name.hasPrefix("pmgr soc die")
+    }.map { $0.1 }
+    return fallback.isEmpty ? nil : fallback.reduce(0, +) / Double(fallback.count)
+  }
+
+  func sample() -> SystemStats.Row {
+    let readings = hidReadings() + smc.sample()
     var summaries: [String] = []
     for group in ["CPU", "GPU", "SoC"] {
       let values = readings.filter {
@@ -468,12 +561,82 @@ private final class HIDTemperatures {
     summaries.append(
       hottest.map { "Hottest: \($0.0) · \(String(format: "%.1f°C", $0.1))" }
         ?? "No supported HID temperature sensors")
-    return SystemStats.Row(name: "Temperatures", summary: summary, details: summaries,
+    return SystemStats.Row(
+      name: "Temperatures", summary: summary, details: summaries,
       compact: hottest.map { String(format: "%.0f°C", $0.1) })
   }
   deinit {
     services.removeAll()
     client = nil
     if let library { dlclose(library) }
+  }
+}
+
+/// Total interface traffic, including VPN tunnels as requested. A tunneled byte
+/// can also appear on en*: this is interface throughput, not unique internet traffic.
+struct NetStats {
+  struct Counter {
+    let down: UInt64
+    let up: UInt64
+  }
+  private var previous: [String: Counter] = [:]
+  private var previousTime: TimeInterval?
+
+  mutating func update(_ counters: [String: Counter], at now: TimeInterval) -> (
+    down: Double, up: Double
+  )? {
+    defer {
+      previous = counters
+      previousTime = now
+    }
+    guard let time = previousTime, now > time else { return nil }
+    var down = 0.0
+    var up = 0.0
+    for (name, counter) in counters {
+      // New, removed, or reset interfaces re-prime independently, never spike.
+      guard let old = previous[name], counter.down >= old.down, counter.up >= old.up else {
+        continue
+      }
+      down += Double(counter.down - old.down)
+      up += Double(counter.up - old.up)
+    }
+    return (down / (now - time), up / (now - time))
+  }
+
+  mutating func sample() -> (down: Double, up: Double)? {
+    var interfaces: UnsafeMutablePointer<ifaddrs>?
+    guard getifaddrs(&interfaces) == 0 else {
+      previous = [:]
+      previousTime = nil
+      return nil
+    }
+    defer { freeifaddrs(interfaces) }
+    var counters: [String: Counter] = [:]
+    var cursor = interfaces
+    while let entry = cursor {
+      defer { cursor = entry.pointee.ifa_next }
+      let name = String(cString: entry.pointee.ifa_name)
+      guard name.hasPrefix("en") || name.hasPrefix("utun"),
+        entry.pointee.ifa_addr?.pointee.sa_family == UInt8(AF_LINK),
+        let raw = entry.pointee.ifa_data
+      else { continue }
+      let data = raw.assumingMemoryBound(to: if_data.self).pointee
+      counters[name] = Counter(down: UInt64(data.ifi_ibytes), up: UInt64(data.ifi_obytes))
+    }
+    return update(counters, at: ProcessInfo.processInfo.systemUptime)
+  }
+
+  /// Decimal B/s, K, M, G. Quantization prevents invisible changes starting a tween.
+  static func quantized(_ bytes: Double) -> Double {
+    let bytes = max(0, bytes.isFinite ? bytes : 0)
+    let unit = bytes >= 1e9 ? 1e9 : bytes >= 1e6 ? 1e6 : bytes >= 1e3 ? 1e3 : 1
+    let precision = unit > 1 && bytes / unit < 10 ? unit / 10 : unit
+    return (bytes / precision).rounded() * precision
+  }
+  static func text(_ bytes: Double) -> String {
+    let bytes = quantized(bytes)
+    let unit = bytes >= 1e9 ? 1e9 : bytes >= 1e6 ? 1e6 : bytes >= 1e3 ? 1e3 : 1
+    let suffix = unit == 1e9 ? "G" : unit == 1e6 ? "M" : unit == 1e3 ? "K" : "B/s"
+    return String(format: unit > 1 && bytes / unit < 10 ? "%.1f%@" : "%.0f%@", bytes / unit, suffix)
   }
 }
