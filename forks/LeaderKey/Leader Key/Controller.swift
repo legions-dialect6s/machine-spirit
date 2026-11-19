@@ -1,4 +1,5 @@
 import Cocoa
+import os.log
 import Combine
 import Defaults
 import SwiftUI
@@ -26,6 +27,18 @@ class Controller {
   private var boardPanelShown = false
 
   private var cancellables = Set<AnyCancellable>()
+
+  // MARK: machine-spirit hold mode
+  // When ⇪ (F19) is still physically held as an action fires, the (non-
+  // activating, so the target app keeps focus) panel stays key and routes
+  // further presses to the action's `hold` command until ⇪ is released.
+  private(set) var holdAction: Action?
+  private var holdPath: [String] = []
+  private var holdCount = 0
+  private var holdSpaceCount = 0
+  private var holdWatch: Timer?
+  private var lastFired: (key: String, at: Date, count: Int)?
+  static let leaderKeyCode: CGKeyCode = 80  // F19 (Karabiner maps ⇪ → F19)
 
   init(userState: UserState, userConfig: UserConfig) {
     self.userState = userState
@@ -109,6 +122,7 @@ class Controller {
   }
 
   func hide(afterClose: (() -> Void)? = nil) {
+    exitHold()
     boardPanelShown = false
     postBoardNavigation(hidden: true)
     guard let window else {
@@ -152,14 +166,32 @@ class Controller {
       }
     }
 
+    if holdAction != nil {
+      handleHoldKey(event)
+      return
+    }
+
     switch event.keyCode {
     case KeyHelpers.backspace.rawValue:
-      clear()
+      // machine-spirit: ⌫ steps back ONE level (not a full clear); at the
+      // root it stays open on the skull and just pulses it.
+      if !userState.navigationPath.isEmpty {
+        userState.navigationPath.removeLast()
+        userState.display = userState.navigationPath.last?.key
+      }
+      postFeedback("back")
       delay(1) {
         self.positionCheatsheetWindow()
       }
     case KeyHelpers.escape.rawValue:
-      window.resignKey()
+      // ⇪ ⎋ at the root: close, then un-capture the frontmost text field.
+      if userState.navigationPath.isEmpty {
+        hide {
+          CommandRunner.run("[ -x ~/bin/blur-field.sh ] && ~/bin/blur-field.sh; true") { _ in }
+        }
+      } else {
+        window.resignKey()
+      }
     default:
       guard let char = charForEvent(event) else { return }
       handleKey(char, withModifiers: event.modifierFlags)
@@ -206,6 +238,23 @@ class Controller {
         // navigationPath. Non-blocking, silent-failing: it must never
         // delay or break the bind.
         fireBoardPing(actionKey: action.key)
+        let path = userState.navigationPath.compactMap { $0.key } + [action.key ?? ""]
+        let pathKey = path.joined(separator: "/")
+        if action.quickRepeat == true, let hold = action.hold, let last = lastFired,
+          last.key == pathKey, Date().timeIntervalSince(last.at) < 1.5
+        {
+          // Tapped again quickly: continue the hold ladder instead.
+          let n = last.count + 1
+          lastFired = (pathKey, Date(), n)
+          hide { self.runHoldCommand(hold, n: n, key: action.key ?? "", path: pathKey) }
+          return
+        }
+        lastFired = (pathKey, Date(), 1)
+        if execute, Controller.leaderPhysicallyDown() {
+          runAction(action)
+          enterHold(action, path: path)
+          return
+        }
         if let mods = modifiers, isInStickyMode(mods) {
           runAction(action)
         } else {
@@ -226,6 +275,7 @@ class Controller {
       }
     case .none:
       window.notFound()
+      postFeedback("miss")
     }
 
     // Why do we need to wait here?
@@ -350,9 +400,19 @@ class Controller {
   private func runAction(_ action: Action) {
     switch action.type {
     case .application:
+      let appURL = URL(fileURLWithPath: action.value)
+      let wasRunning = NSWorkspace.shared.runningApplications.contains {
+        $0.bundleURL?.standardizedFileURL == appURL.standardizedFileURL
+      }
       NSWorkspace.shared.openApplication(
-        at: URL(fileURLWithPath: action.value),
-        configuration: NSWorkspace.OpenConfiguration())
+        at: appURL, configuration: NSWorkspace.OpenConfiguration()
+      ) { app, _ in
+        // Fresh launch: place its first window by the mouse (⇪ ␣ logic).
+        guard !wasRunning, let name = app?.localizedName else { return }
+        CommandRunner.run(
+          "for i in $(seq 1 30); do ~/bin/ms win place smart --app \(name.shellQuoted) >/dev/null 2>&1 && break; sleep 0.1; done; true"
+        ) { _ in }
+      }
     case .url:
       openURL(action)
     case .command:
@@ -371,6 +431,106 @@ class Controller {
 
   private func clear() {
     userState.clear()
+  }
+
+  // MARK: hold mode
+
+  static func leaderPhysicallyDown() -> Bool {
+    CGEventSource.keyState(.hidSystemState, key: leaderKeyCode)
+  }
+
+  private func enterHold(_ action: Action, path: [String]) {
+    holdAction = action
+    holdPath = path
+    holdCount = 0
+    holdSpaceCount = 0
+    postNav(state: "hold", path: path.joined(separator: "/"))
+    // Release detection: a cheap 50 ms keyState probe that exists ONLY while
+    // holding (Carbon key-up is not delivered to every path reliably).
+    holdWatch?.invalidate()
+    let timer = Timer(timeInterval: 0.05, repeats: true) { [weak self] _ in
+      guard let self, self.holdAction != nil else { return }
+      if !Controller.leaderPhysicallyDown() {
+        self.hide()
+      } else if let window = self.window, !window.isKeyWindow {
+        // An app the action activated took key; take it back while ⇪ is held.
+        window.makeKeyAndOrderFront(nil)
+      }
+    }
+    RunLoop.main.add(timer, forMode: .common)
+    holdWatch = timer
+  }
+
+  private func exitHold() {
+    holdWatch?.invalidate()
+    holdWatch = nil
+    holdAction = nil
+    holdPath = []
+  }
+
+  private func handleHoldKey(_ event: NSEvent) {
+    guard let action = holdAction else { return }
+    if event.keyCode == KeyHelpers.escape.rawValue {
+      hide()
+      return
+    }
+    guard let char = charForEvent(event) else { return }
+    let isSpace = event.keyCode == KeyHelpers.space.rawValue
+    let keyName = isSpace ? "space" : char
+    let keys = action.holdKeys ?? action.key ?? ""
+    let claimsKey = keys.contains(char) || (isSpace && keys.contains("space"))
+    let pathKey = holdPath.joined(separator: "/")
+
+    if let hold = action.hold, claimsKey {
+      holdCount += 1
+      postFeedback("hold", extra: ["n": String(holdCount), "key": keyName])
+      runHoldCommand(hold, n: holdCount, key: keyName, path: pathKey)
+    } else if isSpace {
+      // Universal: ␣ after ANY action places the frontmost window by the
+      // mouse (first press), then walks the grow ladder.
+      holdSpaceCount += 1
+      postFeedback("hold", extra: ["n": String(holdSpaceCount), "key": "space"])
+      let mode = holdSpaceCount == 1 ? "smart" : "step"
+      runHoldCommand("~/bin/ms win place \(mode)", n: holdSpaceCount, key: "space", path: pathKey)
+    } else {
+      // Any other key while ⇪ is held starts a fresh sequence from the root.
+      exitHold()
+      userState.clear()
+      postBoardNavigation(hidden: false)
+      handleKey(char, withModifiers: event.modifierFlags)
+    }
+  }
+
+  private func runHoldCommand(_ command: String, n: Int, key: String, path: String) {
+    let env = "export MS_HOLD_N=\(n) MS_HOLD_KEY=\(key.shellQuoted) MS_HOLD_PATH=\(path.shellQuoted); "
+    CommandRunner.run(env + command) { [weak self] result in
+      switch result.status {
+      case 10: self?.postFeedback("done", path: path)
+      case 11:
+        self?.postFeedback("miss", path: path)
+        if self?.window?.isVisible == true { self?.window.notFound() }
+      default: break
+      }
+    }
+  }
+
+  private func postNav(state: String, path: String) {
+    let frame = boardScreenFrame
+    let screen = [frame.origin.x, frame.origin.y, frame.width, frame.height]
+      .map { String(Int($0)) }.joined(separator: ",")
+    DistributedNotificationCenter.default().postNotificationName(
+      Notification.Name("com.machinespirit.leader.nav"), object: nil,
+      userInfo: ["state": state, "path": path, "screen": screen], deliverImmediately: true)
+  }
+
+  /// UI feedback for the overlay: miss | back | done | hold.
+  func postFeedback(_ kind: String, path: String? = nil, extra: [String: String] = [:]) {
+    var info = extra
+    info["kind"] = kind
+    info["path"] = path ?? userState.navigationPath.compactMap { $0.key }.joined(separator: "/")
+    DistributedNotificationCenter.default().postNotificationName(
+      Notification.Name("com.machinespirit.leader.feedback"), object: nil,
+      userInfo: info, deliverImmediately: true)
   }
 
   /// Cheap IPC: no app lookup, launch, URL open, or focus change on the bind path.
@@ -468,4 +628,9 @@ extension Screen {
       return NSScreen.main
     }
   }
+}
+
+extension String {
+  /// Single-quoted for /bin/sh.
+  var shellQuoted: String { "'" + replacingOccurrences(of: "'", with: "'\\''") + "'" }
 }

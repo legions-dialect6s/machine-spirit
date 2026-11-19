@@ -61,6 +61,9 @@ class MainWindow: PanelWindow, NSWindowDelegate {
   }
 
   func windowDidResignKey(_ notification: Notification) {
+    // Hold mode (⇪ still down): the fired action may activate its app; the
+    // hold watcher re-takes key, so don't tear the session down here.
+    if controller.holdAction != nil { return }
     controller.hide()
   }
 
@@ -74,6 +77,18 @@ class MainWindow: PanelWindow, NSWindowDelegate {
 
   override func keyDown(with event: NSEvent) {
     controller.keyDown(with: event)
+  }
+
+  // The theme's SwiftUI hosting view swallows ␣ (keyboard "press") before
+  // keyDown, so space binds (⇪ ␣ ␣, hold-␣) never fired. Route it directly.
+  override func sendEvent(_ event: NSEvent) {
+    if event.type == .keyDown, event.keyCode == KeyHelpers.space.rawValue,
+      !event.modifierFlags.contains(.command)
+    {
+      controller.keyDown(with: event)
+      return
+    }
+    super.sendEvent(event)
   }
 
   func show(on screen: NSScreen, after: (() -> Void)?) {

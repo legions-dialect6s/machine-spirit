@@ -517,6 +517,12 @@ struct Action: Item, Codable, Equatable {
   var label: String?
   var value: String
   var iconPath: String?
+  // machine-spirit hold mode: command re-run on each press of `holdKeys`
+  // (default: the action's own key) while ⇪ stays held after it fires.
+  var hold: String?
+  var holdKeys: String?
+  // A re-fire within ~1.5s counts as a hold press (⇪ ␣ ␣ tapped twice).
+  var quickRepeat: Bool?
 
   var displayName: String {
     guard let labelValue = label else { return bestGuessDisplayName }
@@ -539,11 +545,14 @@ struct Action: Item, Codable, Equatable {
       return value
     }
   }
-  private enum CodingKeys: String, CodingKey { case key, type, label, value, iconPath }
+  private enum CodingKeys: String, CodingKey {
+    case key, type, label, value, iconPath, hold, holdKeys, quickRepeat
+  }
 
   init(
     uiid: UUID = UUID(), key: String?, type: Type, label: String? = nil, value: String,
-    iconPath: String? = nil
+    iconPath: String? = nil, hold: String? = nil, holdKeys: String? = nil,
+    quickRepeat: Bool? = nil
   ) {
     self.uiid = uiid
     self.key = key
@@ -551,6 +560,9 @@ struct Action: Item, Codable, Equatable {
     self.label = label
     self.value = value
     self.iconPath = iconPath
+    self.hold = hold
+    self.holdKeys = holdKeys
+    self.quickRepeat = quickRepeat
   }
 
   init(from decoder: Decoder) throws {
@@ -561,6 +573,9 @@ struct Action: Item, Codable, Equatable {
     self.label = try c.decodeIfPresent(String.self, forKey: .label)
     self.value = try c.decode(String.self, forKey: .value)
     self.iconPath = try c.decodeIfPresent(String.self, forKey: .iconPath)
+    self.hold = try c.decodeIfPresent(String.self, forKey: .hold)
+    self.holdKeys = try c.decodeIfPresent(String.self, forKey: .holdKeys)
+    self.quickRepeat = try c.decodeIfPresent(Bool.self, forKey: .quickRepeat)
   }
 
   func encode(to encoder: Encoder) throws {
@@ -574,6 +589,9 @@ struct Action: Item, Codable, Equatable {
     try c.encode(value, forKey: .value)
     if let l = label, !l.isEmpty { try c.encode(l, forKey: .label) }
     try c.encodeIfPresent(iconPath, forKey: .iconPath)
+    try c.encodeIfPresent(hold, forKey: .hold)
+    try c.encodeIfPresent(holdKeys, forKey: .holdKeys)
+    try c.encodeIfPresent(quickRepeat, forKey: .quickRepeat)
   }
 }
 
@@ -647,7 +665,7 @@ enum ActionOrGroup: Codable, Equatable {
   }
 
   private enum CodingKeys: String, CodingKey {
-    case key, type, value, actions, label, iconPath
+    case key, type, value, actions, label, iconPath, hold, holdKeys, quickRepeat
   }
 
   var uiid: UUID {
@@ -670,7 +688,12 @@ enum ActionOrGroup: Codable, Equatable {
       self = .group(Group(key: key, label: label, iconPath: iconPath, actions: actions))
     default:
       let value = try container.decode(String.self, forKey: .value)
-      self = .action(Action(key: key, type: type, label: label, value: value, iconPath: iconPath))
+      self = .action(
+        Action(
+          key: key, type: type, label: label, value: value, iconPath: iconPath,
+          hold: try container.decodeIfPresent(String.self, forKey: .hold),
+          holdKeys: try container.decodeIfPresent(String.self, forKey: .holdKeys),
+          quickRepeat: try container.decodeIfPresent(Bool.self, forKey: .quickRepeat)))
     }
   }
 
@@ -691,6 +714,9 @@ enum ActionOrGroup: Codable, Equatable {
         try container.encodeIfPresent(action.label, forKey: .label)
       }
       try container.encodeIfPresent(action.iconPath, forKey: .iconPath)
+      try container.encodeIfPresent(action.hold, forKey: .hold)
+      try container.encodeIfPresent(action.holdKeys, forKey: .holdKeys)
+      try container.encodeIfPresent(action.quickRepeat, forKey: .quickRepeat)
     case .group(let group):
       // Always encode key in textual form for JSON
       if let keyValue = group.key {

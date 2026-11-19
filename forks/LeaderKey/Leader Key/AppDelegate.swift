@@ -143,6 +143,9 @@ class AppDelegate: NSObject, NSApplicationDelegate,
     // arrives before they exist — e.g. a leaderkey:// URL delivered at launch —
     // rather than trapping on the implicitly-unwrapped optionals.
     guard let controller, let window = controller.window else { return }
+    // Hold mode: ⇪ is already down; a repeat/second F19 press must not
+    // hide or reset the session mid-hold.
+    if controller.holdAction != nil { return }
 
     if window.isKeyWindow {
       switch Defaults[.reactivateBehavior] {
