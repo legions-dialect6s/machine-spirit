@@ -59,7 +59,7 @@ import Testing
     #expect((initialized?["result"] as? [String: Any])?["protocolVersion"] as? String == "2025-06-18")
     #expect(server.handle(#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#) == nil)
     let result = server.handle(#"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#)?["result"] as? [String: Any]
-    #expect((result?["tools"] as? [[String: Any]])?.count == 9)
+    #expect((result?["tools"] as? [[String: Any]])?.count == 13)
     let disabled = server.handle(#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"clipboard"}}"#)?["result"] as? [String: Any]
     #expect(disabled?["isError"] as? Bool == true)
     let wrongArgs = server.handle(#"{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"windows","arguments":{"allSpaces":1}}}"#)?["result"] as? [String: Any]

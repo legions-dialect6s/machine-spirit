@@ -3,7 +3,8 @@ import Darwin
 
 struct Failure: Error, LocalizedError {
     let message: String
-    init(_ message: String) { self.message = message }
+    let exitCode: Int32
+    init(_ message: String, exitCode: Int32 = 1) { self.message = message; self.exitCode = exitCode }
     var errorDescription: String? { message }
 }
 

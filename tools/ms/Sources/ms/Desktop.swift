@@ -23,8 +23,7 @@ func screens() -> Output {
         let id = screenID(screen)
         let rect = CGDisplayBounds(id)
         let visible = screen.visibleFrame
-        let visibleCG = CGRect(x: visible.minX, y: desktopTop - visible.maxY,
-                               width: visible.width, height: visible.height)
+        let visibleCG = flipScreenRect(visible, primaryTop: desktopTop)
         let hz = CGDisplayCopyDisplayMode(id)?.refreshRate ?? 0
         let main = id == CGMainDisplayID()
         let builtIn = CGDisplayIsBuiltin(id) != 0

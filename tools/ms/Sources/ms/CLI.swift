@@ -7,6 +7,10 @@ ms — structured access to this Mac (append --json for machine-readable output)
   apps
   windows [--app NAME] [--all-spaces] [--all-layers]
   focus <app-name|bundle-id|window-id>
+  mouse
+  win place <smart|step|amm|max|left|right|top|bottom|tl|tr|bl|br|center|fullscreen> [--app NAME]
+  win <tile-all|hide-all>
+  win cycle [--app NAME]
   binds [--flat|--tree] [--grep TEXT]
   run <keypath> [--dry-run]
   tmux [list | revive NAME | detach NAME]
@@ -23,6 +27,8 @@ func command(_ name: String, _ args: [String]) throws -> Output {
     case "apps": try Arguments(args).count(0); return apps()
     case "windows": return try windows(args)
     case "focus": return try focus(args)
+    case "mouse": try Arguments(args).count(0); return try mouse()
+    case "win": return try win(args)
     case "binds": return try binds(args)
     case "run": return try runBind(args)
     case "tmux": return try tmux(args)
@@ -55,7 +61,7 @@ struct MS {
             }
         } catch {
             FileHandle.standardError.write(Data(("ms: \(oneLine(error.localizedDescription))\n").utf8))
-            exit(1)
+            exit((error as? Failure)?.exitCode ?? 1)
         }
     }
 }
