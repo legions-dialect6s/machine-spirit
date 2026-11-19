@@ -13,7 +13,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     NSApp.setActivationPolicy(.accessory)
     installURLHandler()
     state.start()
-    overlay = TypingOverlay(state: state)
     let center = DistributedNotificationCenter.default()
     center.addObserver(self, selector: #selector(navigation(_:)),
       name: Notification.Name("com.machinespirit.leader.nav"), object: nil,
@@ -21,6 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     center.addObserver(self, selector: #selector(fired(_:)),
       name: Notification.Name("com.machinespirit.leader.fired"), object: nil,
       suspensionBehavior: .deliverImmediately)
+    overlay = TypingOverlay(state: state)
   }
 
   func applicationDidFinishLaunching(_ notification: Notification) {

@@ -12,7 +12,8 @@ enum FocusedPane: Hashable {
 @Observable
 @MainActor
 final class AppState {
-  var model: Node?
+  var model: Node? { didSet { if model != oldValue { overlayConfigChanged?() } } }
+  @ObservationIgnored var overlayConfigChanged: (() -> Void)?
   var selectedNodeID: String?
   var focusedPane: FocusedPane = .graph
   var importError: String?

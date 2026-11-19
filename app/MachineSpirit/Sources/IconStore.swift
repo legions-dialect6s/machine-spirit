@@ -7,6 +7,23 @@ import SwiftUI
 @MainActor
 enum IconStore {
   private static var icons: [String: Image] = [:]
+  private static var cgImages: [String: CGImage] = [:]
+  static var onCGImageAvailable: ((String, CGImage) -> Void)?
+
+  /// Shared raster cache for the render-server overlay. No per-show image
+  /// conversion or workspace lookup; favicon arrivals update existing layers.
+  static func cgImage(forPath path: String, state: AppState? = nil) -> CGImage? {
+    if let image = cgImages[path] { return image }
+    if path.hasPrefix("favicon:") {
+      fetchFavicon(String(path.dropFirst("favicon:".count)), key: path, state: state)
+      return nil
+    }
+    let source = NSWorkspace.shared.icon(forFile: path)
+    var rect = CGRect(x: 0, y: 0, width: 128, height: 128)
+    let image = source.cgImage(forProposedRect: &rect, context: nil, hints: nil)
+    cgImages[path] = image
+    return image
+  }
   private static var tints: [String: Color] = [:]
 
   /// The terminal whose icon fronts command nodes — iTerm when present.
@@ -80,6 +97,11 @@ enum IconStore {
       else { return }
       nsImage.size = NSSize(width: 64, height: 64)
       icons[key] = Image(nsImage: nsImage)
+      var rect = CGRect(x: 0, y: 0, width: 64, height: 64)
+      if let image = nsImage.cgImage(forProposedRect: &rect, context: nil, hints: nil) {
+        cgImages[key] = image
+        onCGImageAvailable?(key, image)
+      }
       tints[key] = tint(ofImage: nsImage)
       state?.iconEpoch += 1
       state?.disturb()

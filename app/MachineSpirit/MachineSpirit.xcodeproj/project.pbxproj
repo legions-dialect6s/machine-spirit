@@ -13,6 +13,7 @@
 		4761260309A45D32C4754ECA /* PenForm.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8436DE853B6E96250F95BCFF /* PenForm.swift */; };
 		78AD8841C80E6169F5C5772E /* IconStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 271503FD6BBFFFE7B766D1E8 /* IconStore.swift */; };
 		86F32D191CB8DA83C493D46F /* MachineSpiritApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D78116A2645238BBF41D3FF7 /* MachineSpiritApp.swift */; };
+		989B5E562D7D3E40A4F22669 /* OverlayScene.swift in Sources */ = {isa = PBXBuildFile; fileRef = D84D34F9CD342ECBD163572B /* OverlayScene.swift */; };
 		B73295F72D15BE4A17C570F3 /* LedgerPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1F0834B774E421E8A0CFB21 /* LedgerPane.swift */; };
 		B759736072FF493ADEB723E2 /* MachineSpiritKit in Frameworks */ = {isa = PBXBuildFile; productRef = 5BCD9078BC72C5F027120B5B /* MachineSpiritKit */; };
 		BAFAFC9DCF47C32765544359 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41BA055CA9A05CA859DBB7D0 /* ContentView.swift */; };
@@ -40,6 +41,7 @@
 		B1F0834B774E421E8A0CFB21 /* LedgerPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LedgerPane.swift; sourceTree = "<group>"; };
 		C8FE015A691BDC6F292D49AE /* ConfigWatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigWatcher.swift; sourceTree = "<group>"; };
 		D78116A2645238BBF41D3FF7 /* MachineSpiritApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MachineSpiritApp.swift; sourceTree = "<group>"; };
+		D84D34F9CD342ECBD163572B /* OverlayScene.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverlayScene.swift; sourceTree = "<group>"; };
 		E9D11E59FDFE782CBF1FB7B0 /* MachineSpirit.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MachineSpirit.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		F9B9B3AF4EADBCCCF104CC61 /* ITermColors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ITermColors.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -77,6 +79,7 @@
 				F9B9B3AF4EADBCCCF104CC61 /* ITermColors.swift */,
 				B1F0834B774E421E8A0CFB21 /* LedgerPane.swift */,
 				D78116A2645238BBF41D3FF7 /* MachineSpiritApp.swift */,
+				D84D34F9CD342ECBD163572B /* OverlayScene.swift */,
 				8436DE853B6E96250F95BCFF /* PenForm.swift */,
 				0C61D57EF5E1027553CA1962 /* SheolService.swift */,
 				AE260BAD489CB9D25CE5394B /* Theme.swift */,
@@ -190,6 +193,7 @@
 				78AD8841C80E6169F5C5772E /* IconStore.swift in Sources */,
 				B73295F72D15BE4A17C570F3 /* LedgerPane.swift in Sources */,
 				86F32D191CB8DA83C493D46F /* MachineSpiritApp.swift in Sources */,
+				989B5E562D7D3E40A4F22669 /* OverlayScene.swift in Sources */,
 				4761260309A45D32C4754ECA /* PenForm.swift in Sources */,
 				FF7001114F0F6CE852FA0578 /* SheolService.swift in Sources */,
 				F38442DA220CA4A379FAFC8B /* Theme.swift in Sources */,

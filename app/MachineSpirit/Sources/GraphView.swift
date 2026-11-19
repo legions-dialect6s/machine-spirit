@@ -7,17 +7,10 @@ import SwiftUI
 /// (roots move their whole tree; ⌘-click gathers a group; ⌘-drag on space
 /// rubber-bands one), drag space to pan. Positions and viewport persist.
 struct GraphView: View {
-  enum Mode { case board, overlay }
-  var mode: Mode = .board
   @Environment(AppState.self) private var state
   @State private var cachedLayout: GraphLayout?
 
-  private var focusedID: String? {
-    guard mode == .overlay else { return state.selectedNodeID }
-    if let id = state.overlayNodeID, state.model?.node(withID: id) != nil { return id }
-    return state.model?.id
-  }
-
+  private var focusedID: String? { state.selectedNodeID }
 
   @GestureState private var pinchFactor: CGFloat = 1
 
@@ -49,7 +42,7 @@ struct GraphView: View {
     GeometryReader { geometry in
       let model = renderModel
       let layout = cachedLayout
-      let roots: [Node] = model.map { mode == .overlay ? [$0] : [$0, AppState.auxLeader] } ?? []
+      let roots: [Node] = model.map { [$0, AppState.auxLeader] } ?? []
       let spelledWords = model.map { chainWords(in: $0) } ?? [:]
 
       // 60fps while anything moves or rings (smooth, never stepping); a
@@ -59,17 +52,18 @@ struct GraphView: View {
       // A live fired-bind pulse (#36) holds the clock awake — reading
       // bindFire here is also what wakes a paused board when the ping lands.
       let firing = state.bindFire != nil
+      let paused = !state.boardOpen || (!state.boardAwake && !firing)
       TimelineView(
-        .animation(minimumInterval: 1.0 / 60.0, paused: !(mode == .overlay ? state.overlayVisible : state.boardOpen) || (!state.boardAwake && !firing))
+        .animation(minimumInterval: 1.0 / 60.0, paused: paused)
       ) { timeline in
         Canvas { context, size in
           guard let model, let layout else { return }
           _ = state.iconEpoch  // favicons arriving repaint the board
-          let transform = canvasTransform(viewport: size, layout: layout)
+          let transform = canvasTransform(viewport: size)
           let glow = glowSet(in: model)
           let pulse = Pulse(
             now: timeline.date,
-            bootStamp: mode == .overlay ? .distantPast : state.bootStamp,
+            bootStamp: state.bootStamp,
             lastDisturbance: state.lastDisturbance,
             energy: state.flowEnergy,
             maxRadius: max(layout.width / 2, 1),
@@ -131,17 +125,17 @@ struct GraphView: View {
           }
         }
       }
-      .background(mode == .overlay ? Color.clear : Theme.ground)
+      .background(Theme.ground)
       .onGeometryChange(for: CGRect.self) { proxy in
         proxy.frame(in: .global)
       } action: { frame in
-        if mode == .board { state.graphFrame = frame }
+        state.graphFrame = frame
       }
       .contentShape(Rectangle())
-      .gesture(dragGesture(layout: layout, viewport: geometry.size), including: mode == .board ? .all : .none)
-      .simultaneousGesture(zoomGesture, including: mode == .board ? .all : .none)
+      .gesture(dragGesture(layout: layout, viewport: geometry.size))
+      .simultaneousGesture(zoomGesture)
       .onTapGesture { location in
-        guard mode == .board, let layout else { return }
+        guard let layout else { return }
         let transform = canvasTransform(viewport: geometry.size)
         let hitID = hitTest(location, in: layout, transform: transform)
         let commandHeld = NSApp.currentEvent?.modifierFlags.contains(.command) ?? false
@@ -161,72 +155,35 @@ struct GraphView: View {
           state.selectedNodeID = nil
         }
       }
-      .allowsHitTesting(mode == .board)
       .onAppear {
         rebuildLayout()
-        if mode == .board { centerBoard(animated: false) }
+        centerBoard(animated: false)
       }
       .onChange(of: state.selectedNodeID) {
-        if mode == .board { centerBoard(animated: true) }
-      }
-      .onChange(of: state.overlayNodeID) {
-        if mode == .overlay { rebuildLayout() }
+        centerBoard(animated: true)
       }
       .onChange(of: state.model) { rebuildLayout() }
       .onChange(of: state.nodeOverrides) {
-        if mode == .board { rebuildLayout() }
+        rebuildLayout()
       }
     }
     .clipped()
     .overlay(alignment: .topTrailing) {
-      if mode == .board {
-        ViewThatFits(in: .horizontal) {
-          zoomControls
-          ScrollView(.horizontal, showsIndicators: false) { zoomControls }
-            .frame(height: 36)
-        }
+      ViewThatFits(in: .horizontal) {
+        zoomControls
+        ScrollView(.horizontal, showsIndicators: false) { zoomControls }
+          .frame(height: 36)
       }
     }
   }
 
-  /// A small projection of the same model feeds the same renderer. Unrelated
-  /// branches never enter the overlay's edge/obstacle/label loops.
   private var renderModel: Node? {
-    guard let model = state.displayModel, mode == .overlay else { return state.displayModel }
-    let focus = focusedID ?? model.id
-    func project(_ node: Node) -> Node? {
-      var copy = node
-      if node.id == focus {
-        copy.children = node.children.map { child in
-          var leaf = child
-          leaf.children = []
-          return leaf
-        }
-        return copy
-      }
-      copy.children = node.children.compactMap(project)
-      return copy.children.isEmpty ? nil : copy
-    }
-    return project(model) ?? model
+    state.displayModel
   }
 
   private func rebuildLayout() {
     guard let model = renderModel else { cachedLayout = nil; return }
-    if mode == .board { cachedLayout = combinedLayout(for: model); return }
-    let focus = model.node(withID: focusedID ?? model.id) ?? model
-    var layout = RadialLayout.layout(root: focus, ringStep: 170, minSpacing: 40)
-    // Ancestors are context, placed above the current group. Its immediate
-    // children retain a readable ring independent of the persisted board zoom.
-    var ancestors: [Node] = []
-    var current = model
-    while current.id != focus.id, let next = current.children.first {
-      ancestors.append(current)
-      current = next
-    }
-    for (index, ancestor) in ancestors.reversed().enumerated() {
-      layout.positions[ancestor.id] = .init(x: -180, y: -90 - Double(index) * 65)
-    }
-    cachedLayout = layout
+    cachedLayout = combinedLayout(for: model)
   }
 
   private func centerBoard(animated: Bool) {
@@ -370,7 +327,7 @@ struct GraphView: View {
 
   // MARK: - Viewport math
 
-  private var effectiveZoom: CGFloat { mode == .overlay ? 1 : state.zoom * pinchFactor }
+  private var effectiveZoom: CGFloat { state.zoom * pinchFactor }
 
   /// Far out, nodes shrink — but never vanish.
   private var nodeScale: CGFloat { min(1, max(0.42, 0.5 + effectiveZoom * 0.55)) }
@@ -396,20 +353,7 @@ struct GraphView: View {
     }
   }
 
-  private func canvasTransform(viewport: CGSize, layout: GraphLayout? = nil) -> CanvasTransform {
-    if mode == .overlay {
-      let center = layout?.positions[focusedID ?? "root"] ?? .init(x: 0, y: 0)
-      let positions = layout?.positions.values.map { $0 } ?? []
-      let extentX = positions.map { abs($0.x - center.x) }.max() ?? 1
-      let extentY = positions.map { abs($0.y - center.y) }.max() ?? 1
-      // Fit positions, keeping glyphs at readable size even on smaller displays.
-      let scale = max(0.1, min(1,
-        (viewport.width / 2 - 120) / max(extentX, 1),
-        (viewport.height / 2 - 35) / max(extentY, 1)))
-      return CanvasTransform(scale: scale, offset: CGSize(
-        width: viewport.width / 2 - center.x * scale,
-        height: viewport.height / 2 - center.y * scale))
-    }
+  private func canvasTransform(viewport: CGSize) -> CanvasTransform {
     return CanvasTransform(
       scale: effectiveZoom,
       offset: CGSize(
@@ -838,7 +782,7 @@ struct GraphView: View {
 
       let center = transform.apply(position)
       let inert = node.status.isInert
-      let selected = node.id == focusedID || (mode == .board && state.multiSelection.contains(node.id))
+      let selected = node.id == focusedID || state.multiSelection.contains(node.id)
       let lit = glow?.contains(node.id) ?? true
       let recede = glow != nil && !lit
       let isLeaderRoot = node.id == root.id
@@ -896,7 +840,7 @@ struct GraphView: View {
 
       guard birth > 0.6 else { return }
 
-      let word = mode == .overlay ? nil : chainWords[node.id]
+      let word = chainWords[node.id]
       let hasIcon = !inert && IconStore.iconPath(for: node) != nil
       // The full keystroke order, one font, bracketed and dashed — [c-s-s]
       // — legible at a glance.
@@ -972,7 +916,7 @@ struct GraphView: View {
       }
 
       // Labels never hide — the board is for reading.
-      if mode == .overlay || !isLeaderRoot || node.id == "mb4" {
+      if !isLeaderRoot || node.id == "mb4" {
         let angle = atan2(position.y, position.x)
         let anchor: UnitPoint =
           cos(angle) > 0.35 ? .leading : (cos(angle) < -0.35 ? .trailing : .center)
