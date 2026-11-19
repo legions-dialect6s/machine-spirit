@@ -39,7 +39,9 @@ if command -v tmux >/dev/null 2>&1; then
 	# real "this is hardened" proof). `\;` chains the option-set onto the session.
 	# (Auto-save is a launchd timer, not a status-right hook, so nothing else needs
 	# to live here — see config/tmux/tmux.conf.)
-	exec tmux new -A -s "$name" \; set-option status-right ' ⛧ tmux ⛧ '
+	exec tmux new -A -s "$name" \; set-option status-right ' ⛧ tmux ⛧ ' \
+		\; set-option status-left-length 40 \
+		\; set-option status-left '[#{?#{e|>=:#{client_width},70},#{session_name},#{=12:session_name}}] '
 else
 	printf 'tmux is not installed — run:  brew install tmux\n'
 	exec "${SHELL:-/bin/zsh}"

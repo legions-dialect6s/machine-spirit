@@ -6,6 +6,9 @@
 -- Space. Windows parked on OTHER Spaces aren't pulled forward — macOS/Mission
 -- Control doesn't allow yanking windows across Spaces programmatically.
 try
+	do shell script (quoted form of ((system attribute "HOME") & "/bin/terminals-core")) & " reap >/dev/null 2>&1 &"
+end try
+try
 	tell application "iTerm2" to activate
 	tell application "System Events"
 		tell application process "iTerm2"

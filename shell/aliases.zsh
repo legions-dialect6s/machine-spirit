@@ -30,7 +30,7 @@ ccshots() {
       done
   echo "\n(newest ${max} of last ${mins}m — more: ccshots <min> <count>)"
 }
-alias ccwatch="$HOME/projects/ccshots/cc-image-watch.sh $HOME/projects"
+alias ccwatch="${(q)${${(%):-%x}:A:h}}/cc-image-watch.sh"
 # Hotkey-window-only greeting (see splash/splash.zsh). iTerm sets
 # ITERM_PROFILE in the environment at launch, so it's visible here during
 # .zshrc — unlike the profile's "Send text at start", which runs after

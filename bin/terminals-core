@@ -8,6 +8,7 @@
 #   terminals-core list --json   the same as a JSON array {id,tty,name,isTmux}
 #   terminals-core focus <id>    raise that session (iTerm: its window; other
 #                                apps: activate the app)
+#   terminals-core reap [--dry-run]  close idle, unused iTerm login shells
 #
 # iTerm2 sessions come through its scripting API (stable per-session id + tty +
 # name, and pure-`select` window raise — no System Events grant needed). Any
@@ -30,6 +31,118 @@ export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 [[ "${LC_ALL:-${LANG:-}}" == *[Uu][Tt][Ff]* ]] || export LC_ALL="en_US.UTF-8"
 
 US=$'\x1f'
+
+# Fail closed: only a foreground login shell, optionally its /usr/bin/login
+# supervisor, can be unused. Any other tty process (including background jobs,
+# tmux clients on ANY socket, or nested shells) disqualifies it. Re-evaluated by
+# the AppleScript immediately before close, rather than using the ledger cache.
+reap_check() {
+  local dev=${1:-} times modified accessed now idle processes
+  [[ "$dev" == /dev/ttys<-> && -c "$dev" && -O "$dev" ]] || return 1
+  times=$(/usr/bin/stat -f '%m %a' "$dev" 2>/dev/null) || return 1
+  read -r modified accessed <<< "$times"
+  [[ "$modified" == <-> && "$accessed" == <-> ]] || return 1
+  zmodload zsh/datetime
+  now=$EPOCHSECONDS
+  idle=$(( now - (modified > accessed ? modified : accessed) ))
+  (( idle >= 180 )) || return 1
+  processes=$(/bin/ps -t "${dev#/dev/}" -o pid=,ppid=,pgid=,tpgid=,comm=,args= 2>/dev/null) || return 1
+  print -r -- "$processes" | /usr/bin/awk '
+    $5 ~ /^-(zsh|bash|sh|fish|ksh|tcsh|csh)$/ && $3 == $4 && $4 > 0 {
+      shells++; parent=$2; next
+    }
+    $5 == "/usr/bin/login" { logins++; loginpid=$1; next }
+    { other++ }
+    END { exit !(shells == 1 && other == 0 &&
+                 (logins == 0 || (logins == 1 && loginpid == parent))) }
+  ' || return 1
+  print -r -- "$idle"
+}
+
+if [[ "${1:-}" == reap ]]; then
+  # Internal read-only probe used by the AppleScript below. No iTerm calls.
+  if [[ "${2:-}" == --check && $# == 3 ]]; then
+    reap_check "$3"
+    exit $?
+  fi
+  [[ $# == 1 || ( $# == 2 && "$2" == --dry-run ) ]] || {
+    print -u2 'usage: terminals-core reap [--dry-run]'; exit 2
+  }
+  dry=${2:-}
+  stamp="${TMPDIR:-/tmp}/ms-reap.stamp"
+  # Dry runs neither consume nor obey the real-run throttle. flock also covers
+  # the launcher's and opener's simultaneous requests, and releases on crashes.
+  if [[ "$dry" != --dry-run ]]; then
+    umask 077
+    zmodload zsh/system || exit 1
+    zmodload zsh/datetime
+    [[ ! -L "$stamp.lock" && ! -L "$stamp" ]] || exit 1
+    : >> "$stamp.lock" || exit 1
+    zsystem flock -t 0 -f reapfd "$stamp.lock" 2>/dev/null || exit 0
+    last=$(/usr/bin/stat -f %m "$stamp" 2>/dev/null) || last=0
+    (( EPOCHSECONDS - last < 60 )) && exit 0
+    touch "$stamp" || exit 1
+  fi
+  /usr/bin/osascript - "${0:A}" "$dry" <<'OSA'
+-- Resolve IDs anew on each close: session/tab indexes shift when one closes.
+on reapSession(sessionID, checker, dryRun)
+  if not (application "iTerm2" is running) then return missing value
+  tell application "iTerm2"
+    repeat with w in windows
+      repeat with t in tabs of w
+        repeat with s in sessions of t
+          if (id of s) is sessionID then
+            try
+              set profileName to profile name of s
+              if (is hotkey window of w) or profileName is "Hotkey Window" or profileName is "" then return missing value
+              set dev to tty of s
+              set idleSeconds to do shell script checker & quoted form of dev
+              if dryRun then
+                return "candidate " & sessionID & " tty=" & dev & " profile=" & profileName & " idle=" & idleSeconds & "s" & linefeed
+              end if
+              close s
+              return ""
+            on error
+              return missing value
+            end try
+          end if
+        end repeat
+      end repeat
+    end repeat
+  end tell
+  return missing value
+end reapSession
+
+on run argv
+  set checker to quoted form of (item 1 of argv) & " reap --check "
+  set dryRun to (item 2 of argv) is "--dry-run"
+  set n to 0
+  set report to ""
+  if application "iTerm2" is running then
+    tell application "iTerm2"
+      set candidates to {}
+      repeat with w in windows
+        repeat with t in tabs of w
+          repeat with s in sessions of t
+            set end of candidates to id of s
+          end repeat
+        end repeat
+      end repeat
+    end tell
+    repeat with sessionID in candidates
+      set resultLine to my reapSession(contents of sessionID, checker, dryRun)
+      if resultLine is not missing value then
+        set report to report & resultLine
+        set n to n + 1
+      end if
+    end repeat
+  end if
+  if dryRun then return report & "Would reap " & n & " session(s)."
+  return "Reaped " & n & " session(s)."
+end run
+OSA
+  exit $?
+fi
 
 json_escape() {
   local s=$1
@@ -270,7 +383,7 @@ OSA
     exit 0
     ;;
   *)
-    print -u2 "terminals-core: list [--json] | focus <id> | kill <id> | new"
+    print -u2 "terminals-core: list [--json] | focus <id> | kill <id> | new | reap [--dry-run]"
     exit 0
     ;;
 esac

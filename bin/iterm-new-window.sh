@@ -8,6 +8,8 @@
 # Leader Key (the crash-fix convention). The Leader Key bind also routes this
 # through run-quiet.sh for belt-and-suspenders.
 [ "$#" -eq 0 ] && exit 0
+HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+( "$HERE/terminals-core" reap >/dev/null 2>&1 & )
 /usr/bin/osascript >/dev/null 2>&1 - "$@" <<'OSA'
 on run argv
 	set cmd to ""

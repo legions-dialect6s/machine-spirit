@@ -9,5 +9,8 @@
 #
 # See tmux-session.sh for the hard constraint (tmux must be the parent from
 # launch — you can't retrofit a running process).
-name="$("$HOME/bin/tmux-name.sh")"
-exec "$HOME/bin/iterm-new-window.sh" "$HOME/bin/tmux-session.sh" "$name"
+# An optional name lets tmux-hold track the exact session this launcher opens.
+HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+name="${1:-$("$HERE/tmux-name.sh")}"
+( "$HERE/terminals-core" reap >/dev/null 2>&1 & )
+exec "$HERE/iterm-new-window.sh" "$HERE/tmux-session.sh" "$name"

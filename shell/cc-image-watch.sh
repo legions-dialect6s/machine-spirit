@@ -9,9 +9,10 @@ export PATH="$HOME/.iterm2:/bin:/usr/bin:/usr/local/bin:/opt/homebrew/bin:$PATH"
 #
 # Run it in its own dedicated iTerm pane and leave it going.
 #
-#   ./cc-image-watch.sh                       # watches ~/projects
+#   ./cc-image-watch.sh                       # watches ~/projects + CC scratch
+#   ./cc-image-watch.sh here                  # cwd + its CC scratch directory
 #   ./cc-image-watch.sh ~/projects/moldforge  # scope to one project
-#   ./cc-image-watch.sh ~/projects /private/tmp/claude-501  # add CC scratchpads
+#   ./cc-image-watch.sh ~/projects /private/tmp/claude-$(id -u)
 #
 # Env:
 #   CC_IMG_WIDTH   max render width (default 500px) so contact sheets don't blow up the pane
@@ -23,7 +24,22 @@ if ! command -v imgcat >/dev/null 2>&1; then
   echo "Need imgcat: iTerm2 → Install Shell Integration, and run this inside an iTerm pane." >&2; exit 1
 fi
 
-if (( $# )); then DIRS=("$@"); else DIRS=("$HOME/projects"); fi
+scratch="/private/tmp/claude-$(id -u)"
+if [[ "${1:-}" == here ]]; then
+  (( $# == 1 )) || { print -u2 'usage: ccwatch [here | directory …]'; exit 1; }
+  # Create the future scratch root too: fswatch cannot watch a missing path.
+  project_scratch="$scratch/${PWD//\//-}"
+  mkdir -p -- "$project_scratch" || exit 1
+  DIRS=("$PWD" "$project_scratch")
+elif (( $# )); then
+  DIRS=("$@")
+else
+  mkdir -p -- "$scratch" || exit 1
+  DIRS=("$HOME/projects" "$scratch")
+fi
+for watch_dir in "${DIRS[@]}"; do
+  [[ -d "$watch_dir" ]] || { print -u2 -- "Not a directory: $watch_dir"; exit 1; }
+done
 WIDTH="${CC_IMG_WIDTH:-500px}"
 
 typeset -A SEEN
