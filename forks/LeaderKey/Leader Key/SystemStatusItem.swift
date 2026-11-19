@@ -1,8 +1,11 @@
 import Cocoa
 import os.log
 
-final class SystemStatusItem: NSObject, NSMenuDelegate {
-  private var statusItem: NSStatusItem?
+final class SystemMenuSection: NSObject {
+  private weak var menu: NSMenu?
+  var onChange: (() -> Void)?
+  var rebuild: (() -> Void)?
+  var isAwake: Bool { awake.minutes != 0 }
   private let awake = KeepAwake()
   private let brightness = BrightnessController()
   private var masterRow: BrightnessMenuRow?
@@ -25,36 +28,24 @@ final class SystemStatusItem: NSObject, NSMenuDelegate {
   }
 
   func enable() {
-    guard statusItem == nil else { return }
     Self.registerDefaults()
-    let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-    item.autosaveName = "MachineSpiritSystem"
-    let menu = NSMenu()
-    menu.autoenablesItems = false
-    menu.delegate = self
-    item.menu = menu
-    item.button?.toolTip = "System — keep-awake and brightness"
-    item.button?.setAccessibilityLabel("System — keep-awake and brightness")
-    statusItem = item
-    os_log("System menu: status item created, visible=%d", item.isVisible ? 1 : 0)
-    awake.onChange = { [weak self] in self?.updateAwake() }
+    awake.onChange = { [weak self] in
+      self?.updateAwake()
+      self?.onChange?()
+    }
     brightness.onChange = { [weak self] in self?.updateDisplays() }
-    buildMenu(menu)
     brightness.start()
     if UserDefaults.standard.bool(forKey: "msKeepAwakeAtLaunch") { awake.start(minutes: -1) }
-    updateAwake()
   }
 
   func disable() {
     awake.stop()
     brightness.stop()
-    if let statusItem { NSStatusBar.system.removeStatusItem(statusItem) }
-    statusItem = nil
   }
+  func checkExpiry() { awake.checkExpiry() }
 
-  func menuWillOpen(_ menu: NSMenu) {
-    brightness.installTap()  // allow a newly granted Accessibility permission to take effect
-    buildMenu(menu)
+  func menuWillOpen() {
+    brightness.installTap()
     brightness.refresh()
   }
 
@@ -69,11 +60,11 @@ final class SystemStatusItem: NSObject, NSMenuDelegate {
     return item
   }
 
-  private func buildMenu(_ menu: NSMenu) {
-    menu.removeAllItems()
+  func append(to menu: NSMenu) {
+    self.menu = menu
     sessionItems.removeAll()
     rows.removeAll()
-    _ = add("Keep awake", action: nil, to: menu)
+    menu.addItem(.msSectionHeader(title: "Keep awake"))
     for (minutes, title) in durations {
       let item = add(title, action: #selector(selectDuration(_:)), to: menu)
       item.tag = minutes
@@ -85,8 +76,7 @@ final class SystemStatusItem: NSObject, NSMenuDelegate {
     _ = add(
       "Keep awake at launch", action: #selector(toggleLaunch(_:)), to: menu,
       checked: UserDefaults.standard.bool(forKey: "msKeepAwakeAtLaunch"))
-    menu.addItem(.separator())
-    _ = add("Displays", action: nil, to: menu)
+    menu.addItem(.msSectionHeader(title: "Displays"))
     _ = add(
       "Sync all displays", action: #selector(toggleSync(_:)), to: menu, checked: brightness.sync)
     masterRow = nil
@@ -111,7 +101,6 @@ final class SystemStatusItem: NSObject, NSMenuDelegate {
       menu.addItem(item)
     }
     if brightness.displays.isEmpty { _ = add("No displays", action: nil, to: menu) }
-    menu.addItem(.separator())
     let title =
       (brightness.sync
         ? "Brightness keys control all displays" : "Brightness keys control external under mouse")
@@ -124,24 +113,20 @@ final class SystemStatusItem: NSObject, NSMenuDelegate {
     conflict.isEnabled = !NSRunningApplication.runningApplications(
       withBundleIdentifier: "app.monitorcontrol.MonitorControl"
     ).isEmpty
-    menu.addItem(.separator())
     _ = add("Clipboard history…", action: #selector(openClipboard), to: menu)
     let clear = add("Clear history", action: #selector(clearHistory), to: menu)
     clear.toolTip = "Remove unpinned clipboard entries; pinned entries are kept."
-    menu.addItem(.separator())
+    updateAwake()
+  }
+
+  func appendLeaderOptions(to menu: NSMenu) {
     _ = add("Open machine-spirit board", action: #selector(openBoard), to: menu)
     _ = add(
       "Graph overlay while typing", action: #selector(toggleOverlay(_:)), to: menu,
       checked: UserDefaults.standard.bool(forKey: "msGraphOverlayEnabled"))
-    updateAwake()
   }
 
   private func updateAwake() {
-    let image = NSImage(
-      systemSymbolName: awake.minutes == 0 ? "bolt" : "bolt.fill",
-      accessibilityDescription: awake.minutes == 0 ? "Keep-awake off" : "Keep-awake active")
-    image?.isTemplate = true
-    statusItem?.button?.image = image
     for (minutes, title) in durations {
       sessionItems[minutes]?.state = awake.minutes == minutes ? .on : .off
       var label = title
@@ -157,15 +142,15 @@ final class SystemStatusItem: NSObject, NSMenuDelegate {
     if brightness.sync {
       if let masterRow {
         masterRow.updateMaster(brightness.masterLevel)
-      } else if let menu = statusItem?.menu {
-        buildMenu(menu)
+      } else if self.menu != nil {
+        rebuild?()
       }
       return
     }
     let ids = Set(brightness.displays.map { $0.id })
     let changedDisplays = brightness.displays.contains { rows[$0.id]?.display !== $0 }
-    if ids != Set(rows.keys) || changedDisplays, let menu = statusItem?.menu {
-      buildMenu(menu)
+    if ids != Set(rows.keys) || changedDisplays, self.menu != nil {
+      rebuild?()
     } else {
       for display in brightness.displays { rows[display.id]?.update(display) }
     }
@@ -173,7 +158,7 @@ final class SystemStatusItem: NSObject, NSMenuDelegate {
 
   @objc private func toggleSync(_ item: NSMenuItem) {
     brightness.sync.toggle()
-    if let menu = statusItem?.menu { buildMenu(menu) }
+    if self.menu != nil { rebuild?() }
   }
   @objc private func quitMonitorControl() {
     NSRunningApplication.runningApplications(

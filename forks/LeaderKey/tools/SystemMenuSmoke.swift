@@ -33,7 +33,11 @@ struct SystemMenuSmoke {
       print("OFF: no machine-spirit assertion")
       awake.start(minutes: 1)
       print("TIMED: \(assertions())")
-      RunLoop.main.run(until: Date().addingTimeInterval(61))
+      let deadline = Date().addingTimeInterval(61)
+      while Date() < deadline {
+        RunLoop.main.run(until: Date().addingTimeInterval(0.5))
+        awake.checkExpiry()
+      }
       precondition(awake.minutes == 0 && assertions().isEmpty)
       print("EXPIRY: assertion released after 60 seconds")
     } else {

@@ -317,6 +317,7 @@ class Controller {
   }
 
   private func showCheatsheet() {
+    guard !UserDefaults.standard.bool(forKey: "msGraphOverlayEnabled") else { return }
     if !window.hasCheatsheet {
       return
     }
@@ -326,6 +327,7 @@ class Controller {
 
   private func scheduleCheatsheet() {
     cheatsheetTimer?.invalidate()
+    guard !UserDefaults.standard.bool(forKey: "msGraphOverlayEnabled") else { return }
 
     cheatsheetTimer = Timer.scheduledTimer(
       withTimeInterval: Double(Defaults[.cheatsheetDelayMS]) / 1000.0, repeats: false
@@ -396,6 +398,10 @@ class Controller {
   }
 
   func overlayPreferenceChanged() {
+    if UserDefaults.standard.bool(forKey: "msGraphOverlayEnabled") {
+      cheatsheetTimer?.invalidate()
+      cheatsheetWindow?.orderOut(nil)
+    }
     window?.updateOverlayAppearance()
     postBoardNavigation(
       hidden: !boardPanelShown || !UserDefaults.standard.bool(forKey: "msGraphOverlayEnabled"))

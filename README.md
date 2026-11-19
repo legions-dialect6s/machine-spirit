@@ -31,10 +31,8 @@ Everything else in this repo follows from that: additive not replacing, portable
 - **Spatial window grid** ([Rectangle](https://rectangleapp.com/) driven from Leader Key via its URL scheme) — the window keys mirror screen positions: `⇪ q q q` top-left, `⇪ x x x` bottom half, `⇪ b b b` center third, and so on. Grow/shrink is a smooth eased animation from a small AppleScript, not an instant jump. See [Window management](#window-management).
 - **iTerm2** — terminal-first workflow, splits, and a custom color scheme. See [`config/iterm2/`](config/iterm2/).
 - **Hotkey-window splash** ([`shell/splash/`](shell/splash/)) — every summon of the hotkey terminal boots a randomized, typed-out splash: blackletter banners in five scripts, an ASCII skull or dragon, fastfetch, a quote from a 54-deep rotation, and blinking unicode charms. See [Terminal splash](#terminal-splash) below.
-- **One skull menu for three tools** — the fork's menu-bar item is a skull (pupils light up when you summon) whose dropdown folds Leader Key, Rectangle (window actions via its URL scheme), and Karabiner (live status + profile via `karabiner_cli`) into one labeled menu; Rectangle's and Karabiner's own icons are hidden. Ice / Thaw still hides clutter, with [Stats](https://github.com/exelban/stats) for monitoring. See [The launcher fork](#the-launcher--machinespirit-leader-key-fork).
-- **System menu** — one bolt icon for keep-awake and synchronized brightness across all displays, with combined hardware/software dimming and a brightness HUD on every screen. See [System menu](#system-menu-keep-awake--brightness).
+- **One compact menu bar item** — skull summon glow, disjoint terminal/tmux counts, CPU %, memory pressure %, and keep-awake dot; every segment is toggleable. One menu folds in native Stats, terminal controls, keep-awake, brightness, clipboard history, and Leader Key/Rectangle/Karabiner controls. See [Menu bar](#menu-bar).
 - **Clipboard history** — native searchable text, rich text, files and images; summon with `⌘⇧V` or `⇪ k`, pin favorites and paste into the previous app. See [Clipboard history](#clipboard-history).
-- **Memory-pressure gauge** — a native menu-bar readout of the machine's real memory *pressure* (`100 − kern.memorystatus_level`), not RAM usage: a gauge whose needle and color escalate green → orange → red with the kernel's VM pressure level. It's syscall-cheap (one `sysctl` + one `host_statistics64`, no subprocess) and event-driven off a `DispatchSourceMemoryPressure`, so it flips the instant pressure changes; the dropdown breaks down App / Wired / Compressed / Cached / Free / Swap. Complements Stats' RAM % — pressure is the signal that actually predicts a stall. See [The launcher fork](#the-launcher--machinespirit-leader-key-fork).
 - **macOS tweaks** — snappier window resize and animation via reversible `defaults` writes.
 - **No dead-end dialogs** — a failed keybind (e.g. resizing an app that refuses it) silently does nothing instead of throwing a focus-stealing macOS alert that blocks the launcher. See [Command reliability](#command-reliability--no-focus-stealing-dialogs).
 - **tmux protection + sheol** (experimental) — `⇪ t t` opens a pane running inside tmux (one window, status bar + **TMUX** badge), so its work survives the window closing; `⇪ t q q q q` kills just the tmux pane you're looking at (a four-tap ward). `⇪ t m u x` opens **sheol**, a necromancer's ledger of your tmux "spirits" — living (attached) vs wandering the underworld (detached), auto-refreshing — where you **revive** (`r`, reattach in a new window), **commune** (`c`, peek in place), or **banish** (`d·d·d`, destroy forever). Banishing from the skull menu's ledger now **keeps the menu open**, so you can clear several in a row. See [tmux protection & sheol](#tmux-protection--sheol-experimental).
@@ -179,22 +177,74 @@ Rectangle does the window math; Leader Key drives it through Rectangle's URL sch
 
 The launcher is a **hard-fork of [Leader Key](https://github.com/mikker/LeaderKey)** ([`forks/LeaderKey`](forks/LeaderKey), MIT), built from source and run as the daily driver — the same [design goal](HANDOFF-NOTES.md) as owning Rectangle: a small, learnable app we control end-to-end (it fires the board's live pulse, and it's where per-keystroke hooks will land). It reads the **exact same** config as stock (`~/Library/Application Support/Leader Key/config.json`), so every bind is unchanged — it's a drop-in.
 
+The app identifies itself as **MachineSpirit Leader Key** in Privacy panes and
+Activity Monitor. Its executable remains `Leader Key`, its bundle ID remains
+`com.machinespirit.leader-key`, and it runs from
+`~/Applications/MachineSpirit Leader Key.app`. Rebuilds use the stable
+**MachineSpirit Local Codesign** certificate.
+
 What the fork adds over stock:
 
 - **Self-healing daily driver.** A LaunchAgent ([`config/leader-key/com.machinespirit.leader-key.plist`](config/leader-key/com.machinespirit.leader-key.plist)) starts it at login and relaunches it **if it ever crashes** (`KeepAlive` / `SuccessfulExit=false`), while respecting a deliberate Quit. `install.sh` builds the fork from source and installs the agent.
-- **One skull menu, three tools.** The menu-bar icon is a skull (idle = hollow stare, summoned = pupils light up) whose dropdown has three labeled sections: **Leader Key** (native), **Rectangle** (window actions via the `rectangle://` scheme), and **Karabiner** (live *● Active* status + current profile via the official `karabiner_cli` — never rebuilt, per design cache #4). Rectangle's and Karabiner's own icons are hidden (`macos-defaults.sh` + `karabiner.json` `global.show_in_menu_bar`), so one skull replaces three icons.
-- **Memory-pressure gauge** ([`MemoryPressureStatusItem.swift`](forks/LeaderKey/Leader%20Key/MemoryPressureStatusItem.swift)). A second menu-bar item surfaces the one system stat worth a permanent glance: **memory pressure**, not RAM %. On macOS, RAM "usage" runs high by design (the kernel hoards free pages as file cache), so it's a poor stress signal; pressure — how hard the VM is compressing/swapping/reclaiming — is what actually predicts a stall. The headline number is `100 − kern.memorystatus_level` (the kernel's own available-memory figure, the same one jetsam uses); a gauge needle tracks it and the tint escalates **green → orange → red** off `kern.memorystatus_vm_pressure_level`. Every read is a couple of syscalls (`sysctlbyname` + one `host_statistics64`) — no `/usr/bin` subprocess, no Stats-style polling — and level changes arrive event-driven via a `DispatchSourceMemoryPressure`, so it reacts instantly while the 2 s timer just keeps the % lively. The dropdown breaks memory down App / Wired / Compressed / Cached files / Free / Swap and links to Activity Monitor. It rides the skull's show/hide (same `showMenuBarIcon` toggle) and is deliberately **separate from Stats** — Stats keeps showing RAM %, this owns pressure.
 - **Crash fix.** Stock's summon path fell back to a display-less `NSScreen()` when no screen resolved (pointer in a gap between displays, or a display sleep/wake mid-summon) and trapped in AppKit — a real "my hotkeys just died" bug. The fork uses a proper fallback chain and guards the async window-init races.
 
 **Crowded menu bar:** macOS puts a newly-added status item in the hidden overflow first. If the skull isn't visible, ⌘-drag it left of the clock once — macOS remembers the spot.
 
-## System menu (keep-awake + brightness)
+## Menu bar
 
-The Leader Key fork starts one **bolt** menu-bar item at launch. Its filled icon
-means keep-awake is active: choose Off, Indefinitely, 15 minutes, or 1/2/4/8 hours.
-**Keep display on too** defaults on; turn it off to let the display sleep while
-keeping the system awake. **Keep awake at launch** defaults off. Timed sessions
-use a single expiry timer; remaining time refreshes when the menu opens.
+The fork owns **one** status item. Its image packs these segments with 4-point
+spacing: the skull (green while summoned), `t·l·d` (non-tmux terminals, attached
+tmux sessions, detached tmux sessions), CPU %, memory pressure %, and a small dot
+when keep-awake is active. Digits are monospaced; the three-pixel underline below
+memory pressure uses the existing normal/warning/critical level color. Normal
+rendering adopts the menu-bar foreground; the green skull and warning colors
+remain visible in light and dark appearances. Unchanged rendered content causes
+no image/title setter calls.
+
+**Leader Key → Menu bar** toggles **Skull / Sheol / CPU / Memory / Awake**
+(`msBarSkull`, `msBarSheol`, `msBarCPU`, `msBarMemory`, `msBarAwake`), all on by
+default. With every segment off, a tiny dot keeps the menu reachable. The old
+Settings “show menu bar icon” control now toggles the skull segment.
+
+The menu order is **Stats → Terminals & tmux → Keep awake → Displays → Clipboard
+history… → Leader Key → Quit**, with section headers and no blank spacer items.
+Rectangle actions and Karabiner status/profile controls live under Leader Key.
+The sheol rows retain their revive, detach/moon and triple-tap ✕ ward; Save,
+Restore and the type-to-confirm Banish All panel still use the existing helpers.
+
+**Stats** has seven compact rows, each with a details submenu:
+
+- **CPU:** total usage, per-core usage and the top five processes (100% per core).
+- **GPU:** utilisation and available renderer/tiler/memory details.
+- **Memory:** used, app, wired, compressed, cached, free and swap; pressure is
+  `100 − kern.memorystatus_level`, distinct from RAM usage.
+- **Network ↓/↑:** primary-interface download/upload rates and byte totals.
+- **Disk:** Data-volume free/total space and aggregate physical-disk read/write rates.
+- **Battery:** charge %, power/charging state, time estimate, cycles and health.
+- **Temperatures:** CPU/GPU/SoC averages where available, plus the hottest sensor.
+  Apple Silicon uses HID sensors, with read-only SMC fallback for known M4 CPU/GPU
+  keys. Missing sensors explicitly say **Unavailable**; no guessed SoC reading.
+
+One **2-second timer, 0.5-second tolerance**, drives the bar's CPU, memory pressure
+and sheol sampling. tmux is read over its local socket without attaching a client
+or launching a process; native iTerm Apple Events and other-terminal discovery
+are throttled to 46 seconds. Menu actions keep using `sheol-core`/`terminals-core`.
+Terminal rows refresh on opening and preserve the existing stable-row behavior
+while a menu is tracking. An unrecognised tmux protocol keeps cached counts.
+The clipboard change counter and keep-awake deadline share this same heartbeat.
+
+Detailed statistics run **only while the menu is open**, at 1 second on a serial
+background queue, updating rows in place. Closing stops that timer and releases
+the sensor readers. Network/disk baselines reset on each open, interface change,
+or counter reset. A single `ps` call supplies top processes while open; the
+closed-menu sampling path has no subprocesses. Stats.app remains independent;
+you can quit it after comparing the readings you use. Reader references and MIT
+attribution are recorded in [FORK-NOTES](forks/FORK-NOTES.md).
+
+**Keep awake** offers Off, Indefinitely, 15 minutes, and 1/2/4/8 hours. **Keep display
+on too** defaults on; turn it off to allow display sleep while keeping the system
+awake. **Keep awake at launch** defaults off. Expiry uses the shared heartbeat
+(with up to one tick of delay); remaining time refreshes when the menu opens.
 
 **Sync all displays** defaults on (`msBrightnessSync`): one **All displays** slider
 sets every screen to the same combined level. Turn sync off to reveal individual
@@ -220,7 +270,8 @@ it is never quit automatically.
 
 **Open machine-spirit board** explicitly activates the board. **Graph overlay
 while typing** defaults on; the launcher theme becomes transparent while its panel
-continues capturing keys (the delayed cheatsheet remains visible). Navigation and fired-bind notifications use local
+continues capturing keys. Both delayed and key-triggered cheatsheets stay hidden
+while the overlay is enabled; disabling the overlay restores their normal behavior. Navigation and fired-bind notifications use local
 distributed IPC without opening board URLs. The fork starts an installed board
 in the background at launch unless `msLaunchBoardAtLogin` is false. No additional
 login mechanism is installed. The optional Amphetamine/MonitorControl casks are
@@ -231,7 +282,7 @@ verifying the features you use on your displays.
 
 ![Native clipboard panel with test entries](forks/LeaderKey/docs/clipboard-panel.png)
 
-Press **⌘⇧V**, **⇪ k**, or **System → Clipboard history…**. The single dark panel
+Press **⌘⇧V**, **⇪ k**, or **Menu bar → Clipboard history…**. The single dark panel
 opens at the pointer and stays inside that display. `v` was already occupied by
 VLC/VMware, so `k` is the free top-level clipboard bind. The hotkey is configurable
 in Leader Key **Settings → General → Clipboard history**. Both
@@ -253,7 +304,7 @@ Data stays on this Mac in
 `~/Library/Application Support/MachineSpirit/clipboard/` (`index.json` and PNGs).
 The folder is owner-only, with atomic, debounced background writes. Clipboard
 payloads are read only when the change counter changes; the idle check runs every
-0.5 seconds with 0.25 seconds of tolerance. Oversized payloads (text >8 MiB, RTF
+2 seconds with 0.5 seconds of tolerance, sharing the menu-bar heartbeat. Oversized payloads (text >8 MiB, RTF
 >16 MiB, source images >64 MiB) are skipped to bound memory use. Ordinary copied
 secrets without a sensitive marker can still enter history; this is local storage,
 not an encrypted vault.

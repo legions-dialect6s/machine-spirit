@@ -7,6 +7,11 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		BA3300000000000000000042 /* Stats-LICENSE.txt in Resources */ = {isa = PBXBuildFile; fileRef = BA3300000000000000000041; };
+		BA3300000000000000000032 /* SMC.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA3300000000000000000031; };
+		BA3300000000000000000022 /* SheolReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA3300000000000000000021; };
+		BA3300000000000000000012 /* CompactBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA3300000000000000000011; };
+		BA3300000000000000000002 /* SystemStats.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA3300000000000000000001; };
 		115AA5BF2DA521C600C17E18 /* ActionIcon.swift in Sources */ = {isa = PBXBuildFile; fileRef = 115AA5BE2DA521C200C17E18 /* ActionIcon.swift */; };
 		115AA5C22DA546D500C17E18 /* SymbolPicker in Frameworks */ = {isa = PBXBuildFile; productRef = 115AA5C12DA546D500C17E18 /* SymbolPicker */; };
 		130196C62D73B3DE0093148B /* Breadcrumbs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 130196C52D73B3DC0093148B /* Breadcrumbs.swift */; };
@@ -76,6 +81,11 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		BA3300000000000000000041 /* Stats-LICENSE.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "Stats-LICENSE.txt"; sourceTree = SOURCE_ROOT; };
+		BA3300000000000000000031 /* SMC.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SMC.swift; sourceTree = "<group>"; };
+		BA3300000000000000000021 /* SheolReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SheolReader.swift; sourceTree = "<group>"; };
+		BA3300000000000000000011 /* CompactBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompactBar.swift; sourceTree = "<group>"; };
+		BA3300000000000000000001 /* SystemStats.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemStats.swift; sourceTree = "<group>"; };
 		115AA5BE2DA521C200C17E18 /* ActionIcon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionIcon.swift; sourceTree = "<group>"; };
 		130196C52D73B3DC0093148B /* Breadcrumbs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Breadcrumbs.swift; sourceTree = "<group>"; };
 		423632142D678F4400878D92 /* TestPlan.xctestplan */ = {isa = PBXFileReference; lastKnownFileType = text; path = TestPlan.xctestplan; sourceTree = "<group>"; };
@@ -217,6 +227,10 @@
 				427C182C2BD31F9500955B98 /* Settings.swift */,
 				427C18262BD31E2E00955B98 /* StatusItem.swift */,
 				A1B2C3D40000000000000001 /* MemoryPressureStatusItem.swift */,
+				BA3300000000000000000031 /* SMC.swift */,
+				BA3300000000000000000021 /* SheolReader.swift */,
+				BA3300000000000000000011 /* CompactBar.swift */,
+				BA3300000000000000000001 /* SystemStats.swift */,
 				C11B00000000000000000001 /* ClipboardHistory.swift */,
 				C11B00000000000000000003 /* ClipboardPanel.swift */,
 				B0175A000000000000000007 /* SystemStatusItem.swift */,
@@ -260,6 +274,7 @@
 			isa = PBXGroup;
 			children = (
 				4279AFEA2C6A08B100952A83 /* Info.plist */,
+				BA3300000000000000000041 /* Stats-LICENSE.txt */,
 				423632142D678F4400878D92 /* TestPlan.xctestplan */,
 				427C17F02BD311B500955B98 /* Preview Content */,
 				427C17F32BD311B500955B98 /* Leader_Key.entitlements */,
@@ -394,6 +409,7 @@
 				427C18352BD3232200955B98 /* Main.storyboard in Resources */,
 				427C17F22BD311B500955B98 /* Preview Assets.xcassets in Resources */,
 				427C17EF2BD311B500955B98 /* Assets.xcassets in Resources */,
+				BA3300000000000000000042 /* Stats-LICENSE.txt in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -465,6 +481,10 @@
 				427C18502BD6652500955B98 /* Util.swift in Sources */,
 				427C182A2BD31E2E00955B98 /* StatusItem.swift in Sources */,
 				A1B2C3D40000000000000002 /* MemoryPressureStatusItem.swift in Sources */,
+				BA3300000000000000000032 /* SMC.swift in Sources */,
+				BA3300000000000000000022 /* SheolReader.swift in Sources */,
+				BA3300000000000000000012 /* CompactBar.swift in Sources */,
+				BA3300000000000000000002 /* SystemStats.swift in Sources */,
 				C11B00000000000000000002 /* ClipboardHistory.swift in Sources */,
 				C11B00000000000000000004 /* ClipboardPanel.swift in Sources */,
 				B0175A000000000000000008 /* SystemStatusItem.swift in Sources */,
@@ -643,7 +663,7 @@
 				DEVELOPMENT_ASSET_PATHS = "\"Leader Key/Support/Preview Content\"";
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = "Leader Key/Support/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "MachineSpirit Leader Key";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
@@ -679,7 +699,7 @@
 				DEVELOPMENT_ASSET_PATHS = "\"Leader Key/Support/Preview Content\"";
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = "Leader Key/Support/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "MachineSpirit Leader Key";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";

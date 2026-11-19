@@ -17,15 +17,6 @@ class AppDelegate: NSObject, NSApplicationDelegate,
   var controller: Controller!
 
   let statusItem = StatusItem()
-  // machine-spirit fork: the sheol tmux nag (design cache #15) — a second
-  // menu-bar item showing "active, invisible" session counts, shown/hidden
-  // with the skull.
-  let sheolStatusItem = SheolStatusItem()
-  // machine-spirit fork: the menu-bar memory-pressure gauge — a syscall-cheap
-  // readout of the VM's real stress level (distinct from Stats' RAM %), shown/
-  // hidden with the skull.
-  let memoryStatusItem = MemoryPressureStatusItem()
-  let systemStatusItem = SystemStatusItem()
   let clipboardHistory = ClipboardHistory()
   lazy var clipboardPanel = ClipboardPanel(history: clipboardHistory)
   private var previousFrontmost: NSRunningApplication?
@@ -65,7 +56,7 @@ class AppDelegate: NSObject, NSApplicationDelegate,
 
     NSApp.mainMenu = MainMenu()
 
-    SystemStatusItem.registerDefaults()
+    SystemMenuSection.registerDefaults()
     config.ensureAndLoad()
     state = UserState(userConfig: config)
     controller = Controller(userState: state, userConfig: config)
@@ -105,43 +96,28 @@ class AppDelegate: NSObject, NSApplicationDelegate,
       // initial:false — the block below sets the initial state explicitly, so
       // this stream only needs to react to later toggles (no redundant double-init).
       for await value in Defaults.updates(.showMenuBarIcon, initial: false) {
-        if value {
-          self.statusItem.enable()
-          self.sheolStatusItem.enable()
-          self.memoryStatusItem.enable()
-        } else {
-          self.statusItem.disable()
-          self.sheolStatusItem.disable()
-          self.memoryStatusItem.disable()
-        }
+        self.statusItem.setSkullVisible(value)
       }
     }
 
-    // Initialize status items according to current preference
-    if Defaults[.showMenuBarIcon] {
-      statusItem.enable()
-      sheolStatusItem.enable()
-      memoryStatusItem.enable()
-    } else {
-      statusItem.disable()
-      sheolStatusItem.disable()
-      memoryStatusItem.disable()
-    }
-
-    systemStatusItem.overlayChanged = { [weak self] in self?.controller?.overlayPreferenceChanged()
+    statusItem.system.overlayChanged = { [weak self] in self?.controller?.overlayPreferenceChanged()
     }
     previousFrontmost = NSWorkspace.shared.frontmostApplication
     activationObserver = NSWorkspace.shared.notificationCenter.addObserver(
       forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
     ) { [weak self] notification in
-      guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
-        app.processIdentifier != ProcessInfo.processInfo.processIdentifier else { return }
+      guard
+        let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey]
+          as? NSRunningApplication,
+        app.processIdentifier != ProcessInfo.processInfo.processIdentifier
+      else { return }
       self?.previousFrontmost = app
     }
     clipboardHistory.start()
-    systemStatusItem.showClipboard = { [weak self] in self?.showClipboardHistory() }
-    systemStatusItem.clearClipboard = { [weak self] in self?.clipboardHistory.clearUnpinned() }
-    systemStatusItem.enable()
+    statusItem.system.showClipboard = { [weak self] in self?.showClipboardHistory() }
+    statusItem.system.clearClipboard = { [weak self] in self?.clipboardHistory.clearUnpinned() }
+    statusItem.heartbeat = { [weak self] in self?.clipboardHistory.poll() }
+    statusItem.enable()
     launchBoardIfNeeded()
 
     // Activation policy is managed solely by the Settings window
@@ -212,14 +188,18 @@ class AppDelegate: NSObject, NSApplicationDelegate,
 
   func showClipboardHistory() {
     let current = NSWorkspace.shared.frontmostApplication
-    let target = current?.processIdentifier == ProcessInfo.processInfo.processIdentifier ? previousFrontmost : current
+    let target =
+      current?.processIdentifier == ProcessInfo.processInfo.processIdentifier
+      ? previousFrontmost : current
     controller?.hide { [weak self] in self?.clipboardPanel.show(previousApplication: target) }
   }
 
   func applicationWillTerminate(_ notification: Notification) {
     clipboardHistory.stop()
-    if let activationObserver { NSWorkspace.shared.notificationCenter.removeObserver(activationObserver) }
-    systemStatusItem.disable()
+    if let activationObserver {
+      NSWorkspace.shared.notificationCenter.removeObserver(activationObserver)
+    }
+    statusItem.disable()
     controller?.postBoardNavigation(hidden: true)
     // Config saves automatically on changes
   }

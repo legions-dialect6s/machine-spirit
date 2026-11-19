@@ -53,9 +53,9 @@ carried; the SHAs below are the exact upstream commits captured.
   Tests target unchanged). This is what makes the fork a distinct app to
   macOS — its own TCC/Accessibility grant, its own LaunchServices entry (so
   `open` never bounces to the cask), and its own UserDefaults domain. Display name is
-  **"MachineSpirit Leader Key"** (CFBundleDisplayName) so it's
+  **"MachineSpirit Leader Key"** (CFBundleDisplayName and CFBundleName) so it's
   distinguishable from the cask's "Leader Key" in the TCC panes; the
-  binary/CFBundleName stay "Leader Key". Consequence: the new domain starts EMPTY, so the
+  binary stays "Leader Key" (v3). Consequence: a new domain starts EMPTY, so the
   install seeds it from the cask's domain (F19 activation lives under
   `KeyboardShortcuts_navigate` = carbonKeyCode 80).
 - **LeaderKey — summon sigil indicator** (`[P1.7]`): `Themes/Mini.swift` renders
@@ -78,18 +78,42 @@ carried; the SHAs below are the exact upstream commits captured.
   board (`com.machinespirit.MachineSpirit`) starts in the background at fork
   launch unless `msLaunchBoardAtLogin` is false. Explicit board opening still
   uses `machinespirit://board`, activating.
-- **LeaderKey — system menu**: exactly one additional status item combines
-  keep-awake and brightness, independently of the skull visibility preference.
-  `KeepAwake.swift` owns one IOPM assertion and one optional expiry timer;
-  `SystemStatusItem.swift` owns the menu; `BrightnessController.swift` owns
-  cached display state, the media-key tap, and reusable nonactivating HUDs per screen;
-  `DisplayHardware.swift` resolves private APIs dynamically. Display I/O
-  uses one serial queue per display, and each retains only its latest pending write.
-  The existing memory gauge also skips unchanged image/title assignments to
-  avoid redundant AppKit status-item replica redraws.
-  Topology changes invalidate callbacks; unchanged screen notifications keep
-  the cache. Wake and menu opening refresh readings. Ambiguous registry matches
-  and unsupported hardware use software dimming without sending uncertain DDC writes.
+- **LeaderKey — compact menu (v3)**: `StatusItem.swift` is the sole NSStatusItem
+  owner. `CompactBar.swift` renders one scale-aware image, comparing visible
+  content before assigning it. `SystemStatusItem.swift` is now a section builder;
+  `MemoryPressureStatusItem.swift` is a pure kernel reader. Sheol controls remain
+  in a section builder with their original targets/wards. All five `msBar*`
+  segment preferences default on. The former show-icon preference controls only
+  the skull; the single system menu remains reachable.
+  `KeepAwake.swift` retains one IOPM assertion; its deadline and the clipboard
+  change counter now use the bar's two-second heartbeat. Clipboard capture can
+  take roughly two seconds (previously half a second).
+  Brightness keeps its existing per-display serial queues and latest-write
+  coalescing. No hardware write is triggered by a stats refresh.
+- **LeaderKey — Stats readers (v3)**: `SystemStats.swift` samples total CPU with
+  host_processor_info deltas every 2s (0.5s tolerance). GPU/VM details, top five
+  processes, primary-interface network rates, physical-disk rates, battery and
+  temperatures run only during menu tracking, at 1s with in-flight coalescing and
+  generation checks. `ps` is used once per open-menu sample because unprivileged
+  proc_pidinfo omits some system processes. Counter resets/interface changes and
+  fresh menu openings re-prime deltas. IOHID sensors fail soft; `SMC.swift` adds
+  read-only known-M4 CPU/GPU fallback, never fan control or privileged helpers.
+- **Stats attribution (MIT)**: native readers/SMC ABI and sensor-key mappings
+  reference/adapt [exelban/Stats](https://github.com/exelban/stats), shallow clone
+  `8bf536fe1752cf6d126426ef504a7a94b2489974` (2026-11-19). Copyright (c) 2019
+  Serhiy Mytrovtsiy; full notice retained in `LeaderKey/Stats-LICENSE.txt`.
+  No dependency on the Stats app is added, and it is never quit automatically.
+- **LeaderKey — native sheol reads (v3)**: `SheolReader.swift` uses the read-only
+  tmux v8 local-socket protocol and native Apple Events, avoiding helper launches
+  while closed. UTF-8 client flags preserve the list field separators. It never
+  creates a server or attaches to a session. Native non-iTerm discovery mirrors
+  terminals-core's login-shell/owning-app scan. Actions and open-menu enrichment
+  still use the established helpers. Protocol incompatibility retains cached
+  counts. tmux 3.7b protocol references and Nicholas Marriott's ISC notice are
+  retained in `SheolReader.swift`.
+- **LeaderKey — overlay cheatsheet exclusion (v3)**: both scheduling and the
+  shared show method check `msGraphOverlayEnabled`; enabling the overlay also
+  hides an already-open cheatsheet. The false path preserves the previous rules.
 - **MonitorControl attribution (MIT)**: registry matching and DDC protocol are
   adapted/reimplemented from [Arm64DDC.swift](https://github.com/MonitorControl/MonitorControl/blob/main/MonitorControl/Support/Arm64DDC.swift).
   Its copyright/MIT notice is retained in `DisplayHardware.swift`; no dependency
@@ -271,3 +295,71 @@ domain, LaunchAgent, and ~/Applications copy can all be deleted with no trace.
   was interrupted by repeated launcher activations/current-app changes; it is
   not counted as a pass. Storage copy/replay and installed Option-Return copy
   were verified separately. No TCC permissions were silently granted/reset.
+
+## Fork v3 verification (2026-11-19)
+
+- Clean Release builds used the documented flags, stable install path and
+  **MachineSpirit Local Codesign**. `codesign --verify --deep --strict` passed;
+  signature authority was `MachineSpirit Local Codesign`. The LaunchAgent's
+  running executable remained `~/Applications/MachineSpirit Leader Key.app/Contents/MacOS/Leader Key`.
+  `defaults read …/Contents/Info CFBundleName` and CFBundleDisplayName both returned
+  `MachineSpirit Leader Key`; CFBundleExecutable returned `Leader Key`, and
+  CFBundleIdentifier remained `com.machinespirit.leader-key`. Generated Info.plist
+  was disabled for the app target because Xcode otherwise overwrote CFBundleName
+  from PRODUCT_NAME; required app keys are explicit in the source Info.plist.
+- Accessibility reported exactly **1** menu-bar item. The combined item measured
+  **128 × 24 points**; disabling CPU reduced width to **98**, and enabling it
+  restored **128**. The CPU preference was restored on. Summoning visibly turned
+  the skull green. Keep-awake Indefinitely created a real Leader Key
+  `PreventUserIdleDisplaySleep` assertion and showed the dot; Off released it.
+- Installed URL routes emitted shown/root, group `s`, and hidden notifications.
+  With overlay enabled, delayed activation plus `?` showed only the 200 × 200
+  input panel; no cheatsheet window. With overlay disabled, `?` showed the
+  **580 × 812** cheatsheet again. Overlay was restored on.
+- `tools/SheolSmoke.swift`: native socket/Apple Event counts matched the existing
+  helpers at **1·8·0**, with no double-counted tmux terminals. Original row targets,
+  moon/revive actions, triple-tap wards and the Banish All confirmation remain in
+  the section builder. No live session was killed/detached for verification.
+- `tools/StatsSmoke.swift`: rate baselines, counter resets, interface changes and
+  open/close/reopen passed; **6** updates were delivered, none while closed.
+  Installed menu exposed all seven rows with working detail submenus and live
+  refresh. Example readings: GPU 28%, memory 27.27 GB / 48 GB with 17% pressure,
+  battery 80%, 53 cycles and 92% design health. CPU/GPU temperature averages and
+  hottest sensor worked through the M4 SMC fallback. SoC average was unavailable;
+  AC power had no meaningful time-to-empty estimate.
+- `tools/SystemMenuSmoke.swift --awake`: display/system assertion types, Off,
+  and a real 60-second expiry passed using the production deadline checker.
+  `tools/ClipboardSmoke.swift` passed sensitive-type filters, dedup/pins, RTF,
+  file URLs, size/count caps, image replay, persistence, cleanup and fuzzy search
+  on its isolated pasteboard and temporary storage.
+- Screenshots were captured and **viewed**: `/private/tmp/ms-bar-right.png`
+  shows the tight skull/counts/CPU/pressure item; `/private/tmp/ms-bar-summoned.png`
+  shows the green skull; `/private/tmp/ms-bar-awake.png` shows the active dot;
+  `/private/tmp/ms-menu.png` shows seven Stats rows above the existing terminal
+  controls and brightness slider. The full menu scrolls on the tested screen;
+  its lower Leader Key/Quit section was checked through accessibility.
+  `/private/tmp/ms-bar.png` is the requested origin-based bar capture; the active
+  item moved between displays, so the right-side crop uses its actual AX bounds.
+  Screenshots remain outside the public repo.
+
+CPU observations: `top -l 6 -s 2 -stats pid,command,cpu -pid …` before (four items)
+and after (one item, menu closed). These are means/ranges over the five interval
+samples, discarding top's initial cumulative sample. The machine remained busy
+with unrelated work and Stats.app running, so this is **not a controlled system
+idle benchmark or a causal performance claim**.
+
+| Process | Before mean (range) | After mean (range) |
+|---|---:|---:|
+| Leader Key | 0.46% (0.0–0.8) | 1.26% (0.5–3.0) |
+| SystemUIServer | 52.80% (35.9–76.6) | 1.56% (0.0–5.2) |
+| WindowServer | 63.32% (56.3–69.9) | 41.98% (30.5–52.2) |
+| ControlCenter | 1.16% (0.3–2.4) | 9.36% (0.5–17.5) |
+
+Raw logs: `/private/tmp/ms-cpu-before.txt`, `/private/tmp/ms-cpu-after.txt`.
+Final build log: `/private/tmp/ms-v3-final-build.log`. No staging, commit or push.
+The concurrent worker's `app/` tree was not edited. Stats.app remained running.
+
+Not exercised: physical F19 routing, destructive sheol controls, actual
+brightness changes/media-key routing, hot-plug/wake, Intel/other Apple Silicon
+sensor fallbacks, or final clipboard paste into another app. The full Xcode test
+suite was not run; the existing config-directory XCTest sandbox remains intact.

@@ -2,10 +2,9 @@ import Cocoa
 import IOKit.pwr_mgt
 import os.log
 
-/// Owns exactly one assertion and one deadline. No periodic work.
+/// Owns one assertion and one deadline. The status bar heartbeat checks expiry.
 final class KeepAwake {
   private var assertion: IOPMAssertionID = 0
-  private var expiry: DispatchSourceTimer?
   private(set) var minutes: Int = 0  // -1 = indefinitely, 0 = off
   private(set) var deadline: Date?
   var onChange: (() -> Void)?
@@ -26,11 +25,7 @@ final class KeepAwake {
     guard replaceAssertion() else { return }
     if minutes > 0 {
       deadline = Date().addingTimeInterval(Double(minutes) * 60)
-      let timer = DispatchSource.makeTimerSource(queue: .main)
-      timer.schedule(deadline: .now() + Double(minutes) * 60)
-      timer.setEventHandler { [weak self] in self?.stop() }
-      expiry = timer
-      timer.resume()
+
     }
     onChange?()
   }
@@ -53,14 +48,16 @@ final class KeepAwake {
     return true
   }
 
+  func checkExpiry() {
+    if let deadline, deadline <= Date() { stop() }
+  }
+
   private func releaseAssertion() {
     if assertion != 0 { IOPMAssertionRelease(assertion) }
     assertion = 0
   }
 
   func stop() {
-    expiry?.cancel()
-    expiry = nil
     releaseAssertion()
     minutes = 0
     deadline = nil
@@ -68,7 +65,6 @@ final class KeepAwake {
   }
 
   deinit {
-    expiry?.cancel()
     releaseAssertion()
   }
 }

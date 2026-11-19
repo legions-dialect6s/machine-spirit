@@ -55,7 +55,6 @@ final class ClipboardHistory {
   private let pasteboard: NSPasteboard
   let directory: URL
   private let io = DispatchQueue(label: "com.machinespirit.clipboard-storage", qos: .utility)
-  private var timer: Timer?
   private var saveWork: DispatchWorkItem?
   private var lastChange: Int
   private var epoch = 0
@@ -122,15 +121,10 @@ final class ClipboardHistory {
         self.poll()
       }
     }
-    let timer = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in self?.poll() }
-    timer.tolerance = 0.25
-    RunLoop.main.add(timer, forMode: .common)
-    self.timer = timer
+
   }
 
   func stop() {
-    timer?.invalidate()
-    timer = nil
     saveWork?.cancel()
     saveWork = nil
     if loaded { persist() }
