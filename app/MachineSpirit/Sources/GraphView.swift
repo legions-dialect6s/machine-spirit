@@ -157,7 +157,10 @@ struct GraphView: View {
       }
       .onAppear {
         rebuildLayout()
-        centerBoard(animated: false)
+        if !state.boardHasAppeared {
+          centerBoard(animated: false)
+          state.boardHasAppeared = true
+        }
       }
       .onChange(of: state.selectedNodeID) {
         centerBoard(animated: true)

@@ -18,7 +18,11 @@ final class AppState {
   var focusedPane: FocusedPane = .graph
   var importError: String?
 
+  let stats: StatsStore
+
+  init(stats: StatsStore = StatsStore()) { self.stats = stats }
   var boardOpen = false
+  var boardHasAppeared = false
   var boardMinimumContentHeight: CGFloat = 288
   var overlayVisible = false
   var overlayNodeID: String?
@@ -33,14 +37,14 @@ final class AppState {
     wakeBoard()
   }
 
-  func closeBoard() {
+  func closeBoard(persist: Bool = true) {
     boardOpen = false
     ledgerOpen = false
     focusedPane = .graph
     sheolPollTask?.cancel()
     sheolPollTask = nil
     cancelGlide()
-    saveSidecar()
+    if persist { saveSidecar() }
     sleepIfHidden()
   }
 
@@ -420,7 +424,7 @@ final class AppState {
   func fireBind(atPath path: String) {
     guard let route = route(atPath: path), route.count > 1 else { return }
     selectedNodeID = route.last
-    guard fireKnobs.enabled, boardOpen || overlayVisible else { return }
+    guard fireKnobs.enabled, boardOpen else { return }
     bindFire = BindFire(route: route, stamp: Date())
     disturb()
     bindFireCleanup?.cancel()
