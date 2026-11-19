@@ -163,7 +163,12 @@ enum TerminalReader {
     guard let ids = property("ID  "), let ttys = property("Stty"), let names = property("pnam"),
       ids.count == ttys.count, ids.count == names.count
     else { return nil }
-    return ids.indices.map { Terminal(id: ids[$0], tty: ttys[$0], name: names[$0]) }
+    let profiles = property("Pfnm")
+    return ids.indices.map { index in
+      let hotkey = profiles?.count == ids.count && profiles?[index] == "Hotkey Window"
+      return Terminal(
+        id: ids[index], tty: ttys[index], name: hotkey ? "Hotkey Terminal" : names[index])
+    }
   }
 }
 
@@ -212,5 +217,16 @@ extension TerminalReader {
       }
     }
     return result
+  }
+}
+
+/// terminals-core labels the iTerm hotkey window "Hotkey Terminal" (possibly
+/// hidden or with a task suffix); native/profile names may still be "Hotkey Window".
+enum TerminalProtection {
+  static func isHotkey(name: String) -> Bool {
+    let name = name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    return name == "hotkey window" || name.hasPrefix("hotkey window (")
+      || name.hasPrefix("hotkey window ·") || name == "hotkey terminal"
+      || name.hasPrefix("hotkey terminal (") || name.hasPrefix("hotkey terminal ·")
   }
 }

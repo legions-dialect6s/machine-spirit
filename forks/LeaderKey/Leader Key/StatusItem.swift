@@ -21,13 +21,16 @@ class StatusItem: NSObject, NSMenuDelegate {
   private var pressure = MemoryPressure.Reading()
   private var timer: Timer?
   private var lastRender: CompactBarState?
+  private let numbers = NumberTween()
   private var statsRows: [String: NSMenuItem] = [:]
   private var statsSummaryItem: NSMenuItem?
   private var statsMenu: NSMenu?
   private var menuIsOpen = false
   private var appearanceObservation: NSKeyValueObservation?
   var heartbeat: (() -> Void)?
-  private let segments = ["Skull", "Sheol", "CPU", "Memory", "Awake"]
+  private let segments = [
+    "Skull", "Sheol", "CPU", "GPU", "Memory", "Temperature", "Network", "Awake",
+  ]
   private var enabledSegments = Set<String>()
   private var backingScale: CGFloat = 2
 
@@ -73,10 +76,12 @@ class StatusItem: NSObject, NSMenuDelegate {
     item.menu = menu
     item.button?.setAccessibilityLabel("MachineSpirit — stats, terminals and system controls")
     item.button?.toolTip =
-      "Terminals · live tmux · detached tmux | CPU | memory pressure | keep-awake"
+      "TERM · TMUX · SHEOL | CPU · GPU · RAM used · CPU temperature | NET: en*/utun* B/s | keep-awake"
     system.onChange = { [weak self] in self?.updateStatusItemAppearance() }
     sheol.onChange = { [weak self] in self?.updateStatusItemAppearance() }
     system.enable()
+    numbers.onFrame = { [weak self] in self?.renderStatusItem() }
+    stats.onBarUpdate = { [weak self] in self?.updateStatusItemAppearance() }
     stats.onUpdate = { [weak self] rows in self?.updateStats(rows) }
     sample()
     let timer = Timer(timeInterval: 2, repeats: true) { [weak self] _ in self?.sample() }
@@ -118,7 +123,11 @@ class StatusItem: NSObject, NSMenuDelegate {
   private func sample() {
     if enabledSegments.contains("CPU") || stats.isOpen { stats.sampleCPU() }
     if enabledSegments.contains("Sheol") || menuIsOpen { sheol.sample() }
-    if enabledSegments.contains("Memory") { pressure = MemoryPressure.read(details: false) }
+    if enabledSegments.contains("Memory") { pressure = MemoryPressure.read() }
+    stats.sampleBar(
+      gpu: enabledSegments.contains("GPU"),
+      temperature: enabledSegments.contains("Temperature"),
+      network: enabledSegments.contains("Network"))
     heartbeat?()
     system.checkExpiry()
     updateStatusItemAppearance()
@@ -129,6 +138,8 @@ class StatusItem: NSObject, NSMenuDelegate {
     timer = nil
     system.disable()
     stats.close()
+    stats.stopBar()
+    numbers.stop()
     cancellables.removeAll()
     appearanceObservation = nil
     if let item = statusItem { NSStatusBar.system.removeStatusItem(item) }
@@ -405,7 +416,8 @@ class StatusItem: NSObject, NSMenuDelegate {
     if !title.isEmpty, statsSummaryItem?.title != title {
       statsSummaryItem?.title = title
       statsSummaryItem?.attributedTitle = NSAttributedString(
-        string: title, attributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: 13, weight: .regular)])
+        string: title,
+        attributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: 13, weight: .regular)])
     }
     for reading in rows {
       guard let row = statsRows[reading.name], let submenu = row.submenu else { continue }
@@ -427,23 +439,54 @@ class StatusItem: NSObject, NSMenuDelegate {
   }
 
   private func updateStatusItemAppearance() {
+    guard statusItem != nil else { return }
+    var targets: [String: Double] = [:]
+    if enabledSegments.contains("CPU") { targets["cpu"] = Double(stats.cpuPercent) }
+    if enabledSegments.contains("GPU") { targets["gpu"] = stats.bar.gpu.map(Double.init) }
+    if enabledSegments.contains("Memory"), pressure.total > 0 {
+      targets["ram"] = (Double(pressure.used) * 100 / Double(pressure.total)).rounded()
+    }
+    if enabledSegments.contains("Temperature") {
+      targets["temp"] = stats.bar.temperature.map(Double.init)
+    }
+    if enabledSegments.contains("Network") {
+      targets["down"] = stats.bar.download.map(NetStats.quantized)
+      targets["up"] = stats.bar.upload.map(NetStats.quantized)
+    }
+    if enabledSegments.contains("Sheol") {
+      for (index, count) in sheol.counts.split(separator: "·").enumerated() {
+        targets["count\(index)"] = Double(count)
+      }
+    }
+    numbers.set(targets)
+    renderStatusItem()
+  }
+
+  private func renderStatusItem() {
     guard let button = statusItem?.button else { return }
     func enabled(_ segment: String) -> Bool { enabledSegments.contains(segment) }
+    func integer(_ key: String) -> Int? { numbers.value(key).map { Int($0.rounded()) } }
     let skull = enabled("Skull")
-    let memory = enabled("Memory")
+    let counts =
+      enabled("Sheol")
+      ? (0..<3).map { String(integer("count\($0)") ?? 0) }.joined(separator: "·") : ""
+    let network: String? =
+      enabled("Network")
+      ? "↓\(numbers.value("down").map(NetStats.text) ?? "—") ↑\(numbers.value("up").map(NetStats.text) ?? "—")"
+      : nil
     let state = CompactBarState(
       skull: skull, summoned: skull && appearance == .active,
-      counts: enabled("Sheol") ? sheol.counts : "", cpu: enabled("CPU") ? stats.cpuPercent : nil,
-      pressure: memory ? pressure.pressurePercent : nil,
-      level: memory ? pressure.vmPressureLevel : 1,
+      counts: counts, cpu: integer("cpu"), pressure: integer("ram"),
+      level: enabled("Memory") ? pressure.vmPressureLevel : 1,
       awake: enabled("Awake") && system.isAwake,
       dark: button.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua,
-      scale: backingScale,
-      height: NSStatusBar.system.thickness)
+      scale: backingScale, height: NSStatusBar.system.thickness,
+      gpu: integer("gpu"), temperature: integer("temp"), network: network)
     guard state != lastRender else { return }
     lastRender = state
     button.image = CompactBar.image(state)
   }
+
 }
 
 // MARK: - Terminal and tmux menu section (no status item ownership)
@@ -495,6 +538,10 @@ final class SheolMenuSection: NSObject {
     let isTmux: Bool
     let job: String?  // foreground command (iTerm jobName)
     let procs: String?  // ALL commands on the tty — deep agent detection (job can hide it)
+    var isHotkey: Bool { TerminalProtection.isHotkey(name: name) }
+    var appName: String {
+      id.hasPrefix("app:") ? String(id.dropFirst(4)) : "iTerm2"
+    }
   }
   private var terminals: [Terminal] = []
 
@@ -680,7 +727,6 @@ final class SheolMenuSection: NSObject {
   func append(to menu: NSMenu) {
     self.menu = menu
     refreshCounts()
-    menu.addItem(.msSectionHeader(title: "Terminals & tmux"))
 
     let plainTerms = terminals.filter { !$0.isTmux }
 
@@ -706,44 +752,55 @@ final class SheolMenuSection: NSObject {
           }.max() ?? 160))
     let rowW = max(tmuxLabelW, termLabelW) + 116  // marker + name + moon + agent + ✕ + pad
 
-    // One shared budget across tmux and plain terminals. Freeze order while tracking:
-    // moving a live row beside a destructive button would make the ward unsafe.
-    var sessions: [(id: String, activity: TimeInterval, item: NSMenuItem)] = spirits.map {
-      ("tmux:" + $0.name, TimeInterval($0.activity), rowItem($0, labelW: tmuxLabelW, rowW: rowW))
+    // Freeze row order during tracking; destructive controls must not move under the pointer.
+    func addSection(_ title: String, items: [NSMenuItem]) {
+      menu.addItem(.separator())
+      menu.addItem(.msSectionHeader(title: title))
+      if items.isEmpty {
+        let empty = NSMenuItem(title: "None", action: nil, keyEquivalent: "")
+        empty.isEnabled = false
+        menu.addItem(empty)
+      }
+      for item in items.prefix(6) { menu.addItem(item) }
+      if items.count > 6 {
+        let more = NSMenuItem(title: "More…", action: nil, keyEquivalent: "")
+        let overflow = NSMenu()
+        overflow.autoenablesItems = false
+        for item in items.dropFirst(6) { overflow.addItem(item) }
+        more.submenu = overflow
+        menu.addItem(more)
+      }
     }
-    for term in plainTerms {
-      var label = term.name.replacingOccurrences(of: "\n", with: " ")
-      if label.count > 52 { label = String(label.prefix(51)) + "…" }
-      let isITerm = !term.id.hasPrefix("app:")
-      let agent = agentKind(for: [term.job, term.procs].compactMap { $0 }.joined(separator: " "))
-      let item = NSMenuItem()
-      item.view = TerminalRow(
-        id: term.id, title: "❯  " + label, tty: term.tty,
-        canKill: isITerm, marker: isITerm ? .iterm : .other,
-        agent: agent, labelW: termLabelW, rowW: rowW, owner: self)
-      // tty modification time records terminal output; tmux exposes session_activity.
-      // Missing timestamps sort last, with stable IDs breaking ties.
-      let attributes = try? FileManager.default.attributesOfItem(atPath: term.tty)
-      let activity = (attributes?[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
-      sessions.append(("term:" + term.id, activity, item))
+    let otherApps = Set(plainTerms.map(\.appName)).subtracting(["iTerm2", "Terminal"]).sorted()
+    for app in ["iTerm2", "Terminal"] + otherApps {
+      let items = plainTerms.filter { $0.appName == app }.sorted { $0.id < $1.id }.map { term in
+        var label = term.name.replacingOccurrences(of: "\n", with: " ")
+        if label.count > 52 { label = String(label.prefix(51)) + "…" }
+        let isITerm = term.appName == "iTerm2"
+        let agent = agentKind(for: [term.job, term.procs].compactMap { $0 }.joined(separator: " "))
+        let item = NSMenuItem()
+        item.view = TerminalRow(
+          id: term.id, title: "❯  " + label, tty: term.tty,
+          canKill: isITerm && !term.isHotkey, hotkey: term.isHotkey,
+          marker: isITerm ? .iterm : .other,
+          agent: agent, labelW: termLabelW, rowW: rowW, owner: self)
+        return item
+      }
+      addSection(app, items: items)
     }
-    sessions.sort { $0.activity == $1.activity ? $0.id < $1.id : $0.activity > $1.activity }
-    for session in sessions.prefix(8) { menu.addItem(session.item) }
-    if sessions.count > 8 {
-      let more = NSMenuItem(title: "More…", action: nil, keyEquivalent: "")
-      let overflow = NSMenu()
-      overflow.autoenablesItems = false
-      for session in sessions.dropFirst(8) { overflow.addItem(session.item) }
-      more.submenu = overflow
-      menu.addItem(more)
-    } else if sessions.isEmpty {
-      let none = NSMenuItem(title: "No terminals or tmux sessions", action: nil, keyEquivalent: "")
-      none.isEnabled = false
-      menu.addItem(none)
+    for (title, detached) in [("tmux — living", false), ("sheol — detached", true)] {
+      let items = spirits.filter { $0.isWandering == detached }.sorted {
+        $0.activity == $1.activity ? $0.name < $1.name : $0.activity > $1.activity
+      }.map { rowItem($0, labelW: tmuxLabelW, rowW: rowW) }
+      addSection(title, items: items)
     }
-    menu.addItem(actionRow(title: "＋  New tmux window", rowW: rowW, action: #selector(newTmuxWindow)))
-    menu.addItem(actionRow(title: "＋  New terminal window", rowW: rowW, action: #selector(newTerminalWindow)))
-    let open = NSMenuItem(title: "Open sheol ledger…", action: #selector(openLedger), keyEquivalent: "")
+    menu.addItem(.separator())
+    menu.addItem(
+      actionRow(title: "＋  New tmux window", rowW: rowW, action: #selector(newTmuxWindow)))
+    menu.addItem(
+      actionRow(title: "＋  New terminal window", rowW: rowW, action: #selector(newTerminalWindow)))
+    let open = NSMenuItem(
+      title: "Open sheol ledger…", action: #selector(openLedger), keyEquivalent: "")
     open.target = self
     menu.addItem(open)
     menu.addItem(.separator())
@@ -795,6 +852,12 @@ final class SheolMenuSection: NSObject {
   /// terminals-core kill. The ledger stays open so you can close several; the
   /// retired row hides in place (a reopen rebuilds fresh regardless).
   @objc fileprivate func killTerminalRow(_ sender: SheolRowButton) {
+    guard let terminal = terminals.first(where: { $0.id == sender.sessionName }),
+      terminal.appName == "iTerm2", !terminal.isHotkey
+    else {
+      sender.resetWard()
+      return
+    }
     sender.wardTimer?.invalidate()
     sender.wardTaps += 1
     if sender.wardTaps >= 3 {
@@ -1380,7 +1443,7 @@ private final class TerminalRow: NSView {
   private var trackingArea: NSTrackingArea?
 
   init(
-    id: String, title: String, tty: String, canKill: Bool, marker: RowMarker,
+    id: String, title: String, tty: String, canKill: Bool, hotkey: Bool = false, marker: RowMarker,
     agent: AgentKind?, labelW: CGFloat, rowW: CGFloat, owner: SheolMenuSection
   ) {
     self.title = title
@@ -1420,6 +1483,14 @@ private final class TerminalRow: NSView {
     super.init(frame: NSRect(x: 0, y: 0, width: rowW, height: h))
     addSubview(nameButton)
     if let killButton { addSubview(killButton) }
+    if hotkey {
+      let tag = NSTextField(labelWithString: "hotkey")
+      tag.font = .systemFont(ofSize: 9, weight: .medium)
+      tag.textColor = .secondaryLabelColor
+      tag.alignment = .center
+      tag.frame = NSRect(x: rowW - 46, y: 5, width: 40, height: 13)
+      addSubview(tag)
+    }
     // Agent glyph — flags an agent CLI running in this terminal, just left of the
     // ✕ (the safety cue before you close it).
     if let agent {

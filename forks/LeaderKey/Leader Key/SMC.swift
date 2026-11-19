@@ -1,30 +1,28 @@
 import Foundation
 import IOKit
 
-// Read-only SMC ABI and M4 sensor keys adapted from exelban/Stats, MIT.
+// Read-only SMC ABI and known CPU/GPU sensor keys adapted from exelban/Stats, MIT.
 // Copyright (c) 2019 Serhiy Mytrovtsiy. Full notice: ../Stats-LICENSE.txt.
 // No fan control, privileged helper, or write operation is implemented.
 final class SMCTemperatures {
   private var connection: io_connect_t = 0
   private var keys: [(String, String, UInt32, UInt32)] = []
   init() {
-    // Other generations use the HID path. Never apply guessed M4 labels to an unknown chip.
-    var size = 0
-    sysctlbyname("machdep.cpu.brand_string", nil, &size, nil, 0)
-    guard size > 0 else { return }
-    var brand = [CChar](repeating: 0, count: size)
-    guard sysctlbyname("machdep.cpu.brand_string", &brand, &size, nil, 0) == 0,
-      String(cString: brand).hasPrefix("Apple M4")
-    else { return }
     let service = IOServiceGetMatchingService(kIOMainPortDefault, IOServiceMatching("AppleSMC"))
     guard service != 0 else { return }
     defer { IOObjectRelease(service) }
     guard IOServiceOpen(service, mach_task_self_, 0, &connection) == KERN_SUCCESS else { return }
-    let cpu = [
-      "Te05", "Te0S", "Te09", "Te0H", "Tp01", "Tp05", "Tp09", "Tp0D", "Tp0V", "Tp0Y", "Tp0b",
-      "Tp0e",
-    ]
-    let gpu = ["Tg0G", "Tg0H", "Tg1U", "Tg1k", "Tg0K", "Tg0L", "Tg0d", "Tg0e", "Tg0j", "Tg0k"]
+    #if arch(arm64)
+      let cpu = [
+        "Tp0T",
+        "Te05", "Te0S", "Te09", "Te0H", "Tp01", "Tp05", "Tp09", "Tp0D", "Tp0V", "Tp0Y", "Tp0b",
+        "Tp0e",
+      ]
+      let gpu = ["Tg0G", "Tg0H", "Tg1U", "Tg1k", "Tg0K", "Tg0L", "Tg0d", "Tg0e", "Tg0j", "Tg0k"]
+    #else
+      let cpu = ["TC0P"]
+      let gpu: [String] = []
+    #endif
     for (group, names) in [("CPU", cpu), ("GPU", gpu)] {
       for name in names {
         guard let output = call(name, operation: 9) else { continue }
@@ -61,8 +59,9 @@ final class SMCTemperatures {
     guard result == KERN_SUCCESS, outputSize == 80, output[40] == 0 else { return nil }
     return output
   }
-  func sample() -> [(String, Double)] {
+  func sample(only requestedGroup: String? = nil) -> [(String, Double)] {
     keys.compactMap { group, name, size, type in
+      guard requestedGroup == nil || requestedGroup == group else { return nil }
       guard let output = call(name, operation: 5, size: size) else { return nil }
       let value: Double
       if type == fourCC("flt ") {
