@@ -32,7 +32,8 @@ Everything else in this repo follows from that: additive not replacing, portable
 - **iTerm2** — terminal-first workflow, splits, and a custom color scheme. See [`config/iterm2/`](config/iterm2/).
 - **Hotkey-window splash** ([`shell/splash/`](shell/splash/)) — every summon of the hotkey terminal boots a randomized, typed-out splash: blackletter banners in five scripts, an ASCII skull or dragon, fastfetch, a quote from a 54-deep rotation, and blinking unicode charms. See [Terminal splash](#terminal-splash) below.
 - **One skull menu for three tools** — the fork's menu-bar item is a skull (pupils light up when you summon) whose dropdown folds Leader Key, Rectangle (window actions via its URL scheme), and Karabiner (live status + profile via `karabiner_cli`) into one labeled menu; Rectangle's and Karabiner's own icons are hidden. Ice / Thaw still hides clutter, with [Stats](https://github.com/exelban/stats) for monitoring. See [The launcher fork](#the-launcher--machinespirit-leader-key-fork).
-- **System menu** — one bolt icon for keep-awake, built-in brightness, and Apple Silicon external-display DDC brightness, with brightness keys routed to the display under the mouse. See [System menu](#system-menu-keep-awake--brightness).
+- **System menu** — one bolt icon for keep-awake and synchronized brightness across all displays, with combined hardware/software dimming and a brightness HUD on every screen. See [System menu](#system-menu-keep-awake--brightness).
+- **Clipboard history** — native searchable text, rich text, files and images; summon with `⌘⇧V` or `⇪ k`, pin favorites and paste into the previous app. See [Clipboard history](#clipboard-history).
 - **Memory-pressure gauge** — a native menu-bar readout of the machine's real memory *pressure* (`100 − kern.memorystatus_level`), not RAM usage: a gauge whose needle and color escalate green → orange → red with the kernel's VM pressure level. It's syscall-cheap (one `sysctl` + one `host_statistics64`, no subprocess) and event-driven off a `DispatchSourceMemoryPressure`, so it flips the instant pressure changes; the dropdown breaks down App / Wired / Compressed / Cached / Free / Swap. Complements Stats' RAM % — pressure is the signal that actually predicts a stall. See [The launcher fork](#the-launcher--machinespirit-leader-key-fork).
 - **macOS tweaks** — snappier window resize and animation via reversible `defaults` writes.
 - **No dead-end dialogs** — a failed keybind (e.g. resizing an app that refuses it) silently does nothing instead of throwing a focus-stealing macOS alert that blocks the launcher. See [Command reliability](#command-reliability--no-focus-stealing-dialogs).
@@ -87,7 +88,7 @@ The tree follows four rules, by escalating "weight" of the action:
 | `⇪ g p` | ChatGPT | | `⇪ t r` | Terminal |
 | `⇪ i t` | iTerm | | `⇪ v l c` | VLC (jump/cycle) |
 | `⇪ m e` | Messages | | `⇪ v m w` | VMware Fusion |
-| `⇪ w h` | WhatsApp | | | |
+| `⇪ w h` | WhatsApp | | `⇪ k` | Clipboard history |
 
 `⇪ s a` (Safari), `⇪ c h r` (Chrome), and `⇪ f i` (Finder) all run [`bin/app-jump.applescript`](bin/app-jump.applescript) with an app name — the whole-app analogue of `web-jump`, one ladder for every app: **not running → launch; backgrounded → restore its minimized windows and bring it forward (opening a window if none); already frontmost → cycle its windows in order, wrapping**. It rides macOS's native ⌘\` / ⌘N, so it's genuinely app-agnostic rather than scripted per app — any Cocoa app (Preview, Notes, TextEdit…) is one config line. (Its predecessor, [`bin/browser-window-cycle.applescript`](bin/browser-window-cycle.applescript), cycled only the frontmost browser and stranded minimized windows; it stays in `bin/` unused.)
 
@@ -195,22 +196,74 @@ means keep-awake is active: choose Off, Indefinitely, 15 minutes, or 1/2/4/8 hou
 keeping the system awake. **Keep awake at launch** defaults off. Timed sessions
 use a single expiry timer; remaining time refreshes when the menu opens.
 
-Each display gets a brightness row. Built-in brightness uses DisplayServices;
-external brightness uses DDC/CI on Apple Silicon. Unresponsive displays show
-**(no DDC)**; Intel external displays show **DDC unsupported**. Reads run off the
-main thread and slider writes coalesce to the latest value. Brightness keys
-control a working external display under the pointer, with a small fading HUD;
-built-in and unsupported displays keep native key behavior. Accessibility is
-required for key interception. These private APIs may change with macOS, and
-DDC support also depends on the monitor, adapter, connection, and monitor settings.
+**Sync all displays** defaults on (`msBrightnessSync`): one **All displays** slider
+sets every screen to the same combined level. Turn sync off to reveal individual
+sliders. Built-in brightness uses DisplayServices; external brightness uses DDC/CI
+on Apple Silicon. Each display has its own serial queue and retains only the
+latest pending write, so a slow port cannot hold up the other screens.
+
+The slider's **25–100** range controls hardware brightness from 0–100%; **0–25**
+keeps hardware at minimum and dims with gamma from 15–100%. The built-in backlight
+has a 1% hardware floor to avoid switching it off. Displays without hardware
+support show **(software only)** and use gamma across the full slider. Equal levels
+use the same curve; different monitor panels are not calibrated to equal nits.
+ColorSync is restored when leaving software dimming and on clean quit; remaining
+dimmed screens are reapplied after restoration, screen changes, and wake.
+
+Brightness keys step the shared level by **6.25%** with sync on, including when
+the pointer is over the built-in display. With sync off they control only the
+external display under the pointer. A reusable fading HUD appears on **every
+screen**. Levels persist across launches. Accessibility is required for key
+interception. Private APIs and adapter/monitor DDC support remain compatibility
+limits. **Quit MonitorControl (conflicts)** is enabled when that app is running;
+it is never quit automatically.
 
 **Open machine-spirit board** explicitly activates the board. **Graph overlay
-while typing** defaults on; navigation and fired-bind notifications use local
+while typing** defaults on; the launcher theme becomes transparent while its panel
+continues capturing keys (the delayed cheatsheet remains visible). Navigation and fired-bind notifications use local
 distributed IPC without opening board URLs. The fork starts an installed board
 in the background at launch unless `msLaunchBoardAtLogin` is false. No additional
 login mechanism is installed. The optional Amphetamine/MonitorControl casks are
 not currently listed in this repo's Brewfile; only retire those apps after
 verifying the features you use on your displays.
+
+## Clipboard history
+
+![Native clipboard panel with test entries](forks/LeaderKey/docs/clipboard-panel.png)
+
+Press **⌘⇧V**, **⇪ k**, or **System → Clipboard history…**. The single dark panel
+opens at the pointer and stays inside that display. `v` was already occupied by
+VLC/VMware, so `k` is the free top-level clipboard bind. The hotkey is configurable
+in Leader Key **Settings → General → Clipboard history**. Both
+`msleaderkey://clipboard` (fork-specific) and `leaderkey://clipboard` are supported.
+
+Type to search by substring or fuzzy character order. **↑/↓** selects; **Return**
+pastes into the previously frontmost app; **⌥Return** copies only. **⌘1–⌘9** chooses
+a visible result, **⌘P** pins/unpins, **⌫** deletes when the search is empty, and
+**Esc** closes. Automatic paste requires Accessibility and is skipped if focus
+changes before the keystroke. The item remains copied in that case.
+
+History keeps **300 entries**, including at most **50 images** resized to at most
+2048 pixels per side. Pinned items are never evicted and can exceed these limits.
+Plain text retains RTF when present; file URLs stay files. Concealed, transient,
+autogenerated, 1Password-marked, and this app's own pasteboard writes are ignored.
+**Clear history** removes unpinned items; explicitly delete a pin to remove it.
+
+Data stays on this Mac in
+`~/Library/Application Support/MachineSpirit/clipboard/` (`index.json` and PNGs).
+The folder is owner-only, with atomic, debounced background writes. Clipboard
+payloads are read only when the change counter changes; the idle check runs every
+0.5 seconds with 0.25 seconds of tolerance. Oversized payloads (text >8 MiB, RTF
+>16 MiB, source images >64 MiB) are skipped to bound memory use. Ordinary copied
+secrets without a sensitive marker can still enter history; this is local storage,
+not an encrypted vault.
+
+Screenshot troubleshooting: if `⇪ s s s c` or `⇪ s s s s` starts selection but
+produces nothing, check **System Settings → Privacy & Security → Screen & System
+Audio Recording → MachineSpirit Leader Key**. Enable/re-tick the installed
+`~/Applications/MachineSpirit Leader Key.app`, then restart its LaunchAgent.
+`run-quiet.sh` intentionally hides capture failures. The fork's command runner now
+runs commands off the main thread and drains output while they run.
 
 ## Terminal splash
 

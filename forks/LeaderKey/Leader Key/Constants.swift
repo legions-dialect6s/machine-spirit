@@ -3,6 +3,7 @@ import KeyboardShortcuts
 
 extension KeyboardShortcuts.Name {
   static let activate = Self("navigate")
+  static let msClipboardHistory = Self("msClipboardHistory", default: .init(.v, modifiers: [.command, .shift]))
 }
 
 // MARK: - Three-Way Key Mapping System

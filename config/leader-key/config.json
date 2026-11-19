@@ -1,6 +1,12 @@
 {
   "actions" : [
     {
+      "key" : "k",
+      "label" : "Clipboard history",
+      "type" : "url",
+      "value" : "msleaderkey://clipboard"
+    },
+    {
       "actions" : [
         {
           "actions" : [

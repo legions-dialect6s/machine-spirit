@@ -82,14 +82,14 @@ carried; the SHAs below are the exact upstream commits captured.
   keep-awake and brightness, independently of the skull visibility preference.
   `KeepAwake.swift` owns one IOPM assertion and one optional expiry timer;
   `SystemStatusItem.swift` owns the menu; `BrightnessController.swift` owns
-  cached display state, the media-key tap, and one reusable nonactivating HUD;
-  `DisplayHardware.swift` resolves private APIs dynamically. All display I/O
-  uses one serial queue, and each display retains only its latest pending write.
+  cached display state, the media-key tap, and reusable nonactivating HUDs per screen;
+  `DisplayHardware.swift` resolves private APIs dynamically. Display I/O
+  uses one serial queue per display, and each retains only its latest pending write.
   The existing memory gauge also skips unchanged image/title assignments to
   avoid redundant AppKit status-item replica redraws.
   Topology changes invalidate callbacks; unchanged screen notifications keep
   the cache. Wake and menu opening refresh readings. Ambiguous registry matches
-  and unsupported hardware fail closed, with no brightness slider enabled.
+  and unsupported hardware use software dimming without sending uncertain DDC writes.
 - **MonitorControl attribution (MIT)**: registry matching and DDC protocol are
   adapted/reimplemented from [Arm64DDC.swift](https://github.com/MonitorControl/MonitorControl/blob/main/MonitorControl/Support/Arm64DDC.swift).
   Its copyright/MIT notice is retained in `DisplayHardware.swift`; no dependency
@@ -123,10 +123,10 @@ are live-system steps; the eventual `install.sh`/onboarding automates them,
 tracked in MANUAL-WIRING):
 
 1. **Bundle id** → `com.machinespirit.leader-key` (in-tree, above).
-2. **Stable install path:** build, then `cp -R` the product to
-   `~/Applications/Leader Key.app` and `codesign --force --deep --sign -` it
-   (ad-hoc re-sign at the new path). DerivedData is ephemeral; the login item
-   must point somewhere stable.
+2. **Stable install path:** Release build, then `ditto` the product to
+   `~/Applications/MachineSpirit Leader Key.app` and sign with
+   **MachineSpirit Local Codesign** (see Signing above). Never run the
+   DerivedData product as the daily driver.
 3. **Seed prefs:** `defaults export com.brnbw.Leader-Key - | defaults import
    com.machinespirit.leader-key -` — carries F19 activation + theme into the
    new (empty) domain.
@@ -137,11 +137,11 @@ tracked in MANUAL-WIRING):
    (`System Events → delete login item "Leader Key"`, path
    `/Applications/Leader Key.app`). The cask **stays installed** for rollback.
 6. **Accessibility (owner, consent gate):** the new bundle id is a new TCC
-   identity — grant Accessibility to `~/Applications/Leader Key.app` for the
+   identity — grant Accessibility to `~/Applications/MachineSpirit Leader Key.app` for the
    System-Events binds (app-jump, screenshots) to work.
 
 **Rollback to the cask:** `launchctl bootout gui/$(id -u)/com.machinespirit.leader-key`;
-`pkill -f 'Applications/Leader Key.app'`; re-enable the cask's Launch-at-Login
+`pkill -f 'Applications/MachineSpirit Leader Key.app'`; re-enable the cask's Launch-at-Login
 (open `/Applications/Leader Key.app`, toggle it on); it drives again. The new
 domain, LaunchAgent, and ~/Applications copy can all be deleted with no trace.
 
@@ -175,3 +175,99 @@ domain, LaunchAgent, and ~/Applications copy can all be deleted with no trace.
   Visual icon/menu acceptance, slider dragging, physical media-key routing/HUD,
   hot-plug, Intel fallback, and cold board launch remain manual checks. The board
   worker's app files were not modified.
+
+## Leader Key v2 (2026-11-19)
+
+- **DDC fix:** the Samsung LC32G5xT returned repeated valid DDC null packets
+  (`6E 80 BE`) to the old GET checksum. Standard GET includes source address
+  `0x51`; this immediately made Samsung answer. Standard-first reads retain a
+  legacy-checksum retry for bridges that require it. Reads/writes use two paced
+  10 ms write cycles, a 50 ms read delay, and bounded retries. Matching retains
+  unique IORegistry location/EDID identity, adds product-name scoring, and logs
+  each matched DCPAVServiceProxy registry ID and framebuffer plus read results.
+- **Reference/license:** inspected MonitorControl at
+  `7cfe64500d19cbbcbf82121a91c826f658a403bd`, including
+  `MonitorControl/Support/Arm64DDC.swift` and `DisplayManager.swift`.
+  The existing full MIT notice in `DisplayHardware.swift` covers the adapted
+  registry/DDC implementation. Standard-checksum fallback and per-display queue
+  ownership are local changes; no MonitorControl dependency is linked.
+- **Brightness:** `msBrightnessSync` defaults true; one All displays slider,
+  per-display rows only when sync is off, shared 6.25% media-key steps, one lazy
+  HUD per screen. Hardware occupies levels 25–100; levels 0–25 use 15–100% gamma
+  at minimum hardware (1% backlight floor on built-in to prevent switching off).
+  Unsupported hardware has full-range software fallback. Display UUID levels
+  and the master level persist. ColorSync restoration is global, so restoring
+  one display immediately reapplies all other dimmed screens. Wake/topology
+  events rebuild/reapply. MonitorControl conflict warning/action is opt-in.
+- **Invisible launcher:** only MainWindow's content alpha/shadow change when
+  graph overlay is on. The key window stays alive; IPC payloads are unchanged;
+  the separate cheatsheet is unaffected. Theme shadow state restores when off.
+- **Commands/screenshots:** commands now run on a serial background queue with
+  continuous output draining and a 64 KiB diagnostic limit, preserving group
+  ordering without blocking AppKit. The screenshot failure on this machine is
+  a denied Screen Capture TCC grant, not a missing executable or PATH. Both
+  copy/save probes through the installed app returned exit 1 and `could not
+  create image from rect`; identical shell probes returned exit 0 and PNG/TIFF
+  clipboard data. The quiet wrapper intentionally converts failures to exit 0.
+  Owner action: System Settings → Privacy & Security → Screen & System Audio
+  Recording → MachineSpirit Leader Key; enable/re-tick the installed app and
+  restart the LaunchAgent. No TCC database modifications were made.
+- **Native clipboard:** `ClipboardHistory.swift` and `ClipboardPanel.swift`,
+  default ⌘⇧V (`msClipboardHistory`, configurable), both clipboard URL schemes,
+  System menu entries, and live-config `⇪ k` (`v` was occupied). Live config was
+  backed up to `/private/tmp/leader-key-before-clipboard-20261119-083850.json`
+  before the surgical insertion; `scripts/sync.sh` captured exactly that change.
+  Native AppKit
+  search/list, keyboard selection, pins, copy-only and guarded previous-app
+  paste. Maccy's [README behavior](https://github.com/p0deje/Maccy#usage) and
+  ignored-type policy informed the design; no Maccy source was copied/vendored.
+  Its project is MIT licensed. Our default Return/Option-Return actions follow
+  the owner's requested mapping. Local index/images use owner-only permissions,
+  background processing/persistence, 300-entry/50-image caps with pin exceptions.
+  Clear preserves pins; explicit deletion can remove a pin.
+
+### v2 verification
+
+- Each part was Release-built, installed with `ditto`, signed using the existing
+  MachineSpirit Local Codesign identity, verified with `codesign --verify
+  --deep --strict`, and restarted through `launchctl kickstart -k`. No staging,
+  commits or pushes; no edits to the concurrent worker's `app/` files.
+- Real DDC roundtrip: **LC32G5xT 0 → 1 → 0**, **M28U 63 → 64 → 63**.
+  Both original values were restored before enabling the new sync behavior.
+  The installed sync-default launch then set all displays to shared level 100.
+- Production-controller smoke: combined level 12.5 read gamma maximum **0.575**
+  on Built-in Retina Display, LC32G5xT and M28U. At combined level 50, hardware
+  read **33.3333 / 33 / 33** respectively. Original hardware and ColorSync were
+  restored after the smoke.
+- Installed transparent panel reported `key=1 contentAlpha=0.0 shadow=0`.
+  Actual keyboard input advanced IPC path to `s/s/s`; Escape posted hidden.
+  IPC values remained Strings with the existing state/path/screen contract.
+- Command smoke wrote 200 KB, captured the bounded 65,536-byte diagnostic buffer,
+  exited 0, and allowed **9 main-run-loop timer ticks** while executing.
+- Clipboard smoke uses an isolated named pasteboard/temp directory. Passed all
+  ignored markers, dedup preserving a pin, RTF retention/own-copy exclusion,
+  multiple file URLs, image priority over secondary plain URL text, 300-entry eviction preserving the oldest pin, 3000-pixel
+  source resized to **2048×16**, PNG+TIFF replay, 50-image cap, full persistence
+  equality after restart, clearing unpinned entries and orphan PNG removal,
+  and fuzzy matching. The installed app passed fuzzy search, pin and copy-only.
+- Reproduction tools live in `forks/LeaderKey/tools/`: `SystemMenuSmoke.swift`,
+  `BrightnessSmoke.swift`, `CommandRunnerSmoke.swift`, `ClipboardSmoke.swift`.
+  `deploy-release.sh` follows the stable-path/certificate/LaunchAgent recipe.
+  Smoke binaries are standalone fixtures; no DerivedData app was run live.
+
+- Final layout fixture rendered the production view offscreen (no user windows
+  activated): table/cell width **504 px**, preview width **364 px**; image reviewed
+  at `forks/LeaderKey/docs/clipboard-panel.png`. `ClipboardPanelSmoke.swift` explains
+  its test-only same-file extension compilation. Initial preview clipping was
+  corrected by explicitly sizing the table/column to the scroll view.
+- Idle CPU with the installed clipboard poller: `top -l 3 -s 2 … -stats cpu,mem`
+  returned **0.0%, 0.0%, 0.0%**, about **47 MB** in the initial sample. This is a
+  short bounded observation, not a whole-session performance guarantee. The final
+  sample after all changes was **0.0%, 0.3%, 0.6%**, about **24 MB**.
+- Still manual/unverified: successful screenshots after the owner restores the
+  Screen Recording grant; physical brightness/hotkey routing; MonitorControl
+  conflict-menu click; wake/hot-plug and Intel fallback; interactive all-screen
+  HUD acceptance; final Return-to-previous-app paste. Live paste verification
+  was interrupted by repeated launcher activations/current-app changes; it is
+  not counted as a pass. Storage copy/replay and installed Option-Return copy
+  were verified separately. No TCC permissions were silently granted/reset.

@@ -56,6 +56,20 @@ struct SystemMenuSmoke {
             )
           } else if let service = services[id], let value = hardware.readDDC(service) {
             print("DDC \(name) id=\(id) current=\(value.current) max=\(value.maximum)")
+            if CommandLine.arguments.contains("--round-trip") {
+              let test = value.current < value.maximum ? value.current + 1 : value.current - 1
+              let written = hardware.writeDDC(service, value: test)
+              usleep(100_000)
+              let changed = hardware.readDDC(service)
+              let restored = hardware.writeDDC(service, value: value.current)
+              usleep(100_000)
+              let after = hardware.readDDC(service)
+              print(
+                "ROUNDTRIP \(name): original=\(value.current) requested=\(test) read=\(String(describing: changed?.current)) restored=\(String(describing: after?.current))"
+              )
+              precondition(
+                written && restored && changed?.current == test && after?.current == value.current)
+            }
             if CommandLine.arguments.contains("--write-same") {
               precondition(hardware.writeDDC(service, value: value.current))
               let after = hardware.readDDC(service)

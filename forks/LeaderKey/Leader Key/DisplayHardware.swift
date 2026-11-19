@@ -21,8 +21,9 @@
 import Cocoa
 import Darwin
 import IOKit
+import os.log
 
-/// Only used on BrightnessController's serial hardware queue. Keep dlopen handles
+/// Each instance belongs to one serial hardware queue. Keep dlopen handles
 /// alive for the process lifetime: cached function pointers must never dangle.
 final class DisplayHardware {
   typealias GetBrightness = @convention(c) (UInt32, UnsafeMutablePointer<Float>) -> Int32
@@ -66,6 +67,7 @@ final class DisplayHardware {
   private struct Candidate {
     let service: CFTypeRef
     let location: String
+    let registryID: UInt64
     let product: NSDictionary
     let edid: String
   }
@@ -106,8 +108,12 @@ final class DisplayHardware {
           property(entry, "Location") as? String == "External",
           let service = createService(kCFAllocatorDefault, entry)?.takeRetainedValue()
         {
+          var registryID: UInt64 = 0
+          IORegistryEntryGetRegistryEntryID(entry, &registryID)
           candidates.append(
-            Candidate(service: service, location: location, product: product, edid: edid))
+            Candidate(
+              service: service, location: location, registryID: registryID, product: product,
+              edid: edid))
         }
       }
       var proposals: [CGDirectDisplayID: Int] = [:]
@@ -127,7 +133,12 @@ final class DisplayHardware {
             && (candidate.product["ProductID"] as? NSNumber)?.uint32Value == model
           guard identityMatches || candidate.edid.hasPrefix(prefix) else { return 0 }
           let serial = CGDisplaySerialNumber(id)
-          return 10
+          let names = info?["DisplayProductName"] as? [String: String]
+          let name = names?["en_US"] ?? names?.values.first ?? ""
+          let nameMatches =
+            !name.isEmpty
+            && name.lowercased() == (candidate.product["ProductName"] as? String)?.lowercased()
+          return 10 + (nameMatches ? 2 : 0)
             + (serial != 0
               && (candidate.product["SerialNumber"] as? NSNumber)?.uint32Value == serial ? 5 : 0)
         }
@@ -139,6 +150,10 @@ final class DisplayHardware {
       var result: [CGDirectDisplayID: CFTypeRef] = [:]
       for (id, index) in proposals where proposals.values.filter({ $0 == index }).count == 1 {
         result[id] = candidates[index].service
+        os_log(
+          "Brightness match: display=%u DCPAVServiceProxy=%llu framebuffer=%{public}@ EDID=%{public}@ product=%{public}@",
+          id, candidates[index].registryID, candidates[index].location, candidates[index].edid,
+          candidates[index].product.description)
       }
       return result
     #else
@@ -153,13 +168,15 @@ final class DisplayHardware {
 
   func readDDC(_ service: CFTypeRef) -> (current: UInt16, maximum: UInt16)? {
     guard let writeI2C, let readI2C else { return nil }
-    for attempt in 0..<3 {
-      // IOAVService's GET checksum excludes the data address (MonitorControl).
+    for attempt in 0..<5 {
+      // Standard DDC includes source address 0x51. Samsung rejects the legacy
+      // MonitorControl checksum with a valid null response; retry legacy only
+      // for bridges which require it. Never accept null or corrupt replies.
       var request: [UInt8] = [0x82, 0x01, 0x10, 0x6E ^ 0x82 ^ 0x01 ^ 0x10]
-      // Some DDC bridges need a repeated GET (also used by MonitorControl).
-      // Keep the fast single request first; use the repeat only on retry.
+      if attempt < 3 { request[3] ^= 0x51 }
+      // Two write cycles, paced at 10ms, as in MonitorControl.
       var sent = false
-      for _ in 0..<(attempt == 0 ? 1 : 2) {
+      for _ in 0..<2 {
         usleep(10_000)
         sent = request.withUnsafeMutableBytes {
           writeI2C(service, 0x37, 0x51, $0.baseAddress!, UInt32($0.count)) == 0
@@ -180,7 +197,10 @@ final class DisplayHardware {
         let current = UInt16(reply[8]) << 8 | UInt16(reply[9])
         if maximum > 0, current <= maximum { return (current, maximum) }
       }
-      if attempt < 2 { usleep(40_000) }
+      if ProcessInfo.processInfo.environment["MS_DDC_DEBUG"] != nil {
+        print("DDC reply attempt=\(attempt) sent=\(sent) received=\(received) bytes=\(reply)")
+      }
+      if attempt < 4 { usleep(20_000) }
     }
     return nil
   }
@@ -189,11 +209,17 @@ final class DisplayHardware {
     guard let writeI2C else { return false }
     var packet: [UInt8] = [0x84, 0x03, 0x10, UInt8(value >> 8), UInt8(value & 255)]
     packet.append(packet.reduce(UInt8(0x6E ^ 0x51), ^))
-    let success = packet.withUnsafeMutableBytes {
-      writeI2C(service, 0x37, 0x51, $0.baseAddress!, UInt32($0.count)) == 0
+    for _ in 0..<5 {
+      var success = false
+      for _ in 0..<2 {
+        usleep(10_000)
+        success = packet.withUnsafeMutableBytes {
+          writeI2C(service, 0x37, 0x51, $0.baseAddress!, UInt32($0.count)) == 0
+        }
+      }
+      if success { return true }
+      usleep(20_000)
     }
-    // Pace successive transfers; the main thread stays free throughout.
-    usleep(40_000)
-    return success
+    return false
   }
 }

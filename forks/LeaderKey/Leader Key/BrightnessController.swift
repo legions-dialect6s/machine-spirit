@@ -1,21 +1,25 @@
 import Cocoa
 import os.log
 
-/// UI state lives on main; every registry/brightness operation runs on one queue.
+/// AppKit/state/gamma on main; independent serial I/O and trailing writes per display.
 final class BrightnessController {
   final class Display {
     let id: CGDirectDisplayID
     let screen: NSScreen
     let builtIn: Bool
+    let queue: DispatchQueue
+    let hardware = DisplayHardware()
+    let preferenceKey: String
     var service: CFTypeRef?
-    var percent: Double = 50
+    var percent: Double = 100
     var maximum: UInt16 = 100
-    var available = false
+    var available = false  // hardware support; software remains available regardless
     var checked = false
     var revision = 0
     var reading = false
     var writing = false
     var pending: Double?
+    var gamma: Double = 1
 
     init(screen: NSScreen) {
       self.screen = screen
@@ -23,23 +27,35 @@ final class BrightnessController {
         (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?
         .uint32Value ?? 0
       builtIn = CGDisplayIsBuiltin(id) != 0
+      queue = DispatchQueue(label: "com.machinespirit.brightness.\(id)", qos: .userInitiated)
+      let uuid = CGDisplayCreateUUIDFromDisplayID(id)?.takeRetainedValue()
+      preferenceKey =
+        "msBrightnessLevel." + (uuid.map { CFUUIDCreateString(nil, $0) as String } ?? String(id))
     }
   }
 
-  private let queue = DispatchQueue(
-    label: "com.machinespirit.display-hardware", qos: .userInitiated)
-  private let hardware = DisplayHardware()
+  private let discoveryQueue = DispatchQueue(label: "com.machinespirit.display-discovery")
   private(set) var displays: [Display] = []
   var onChange: (() -> Void)?
-  private var observer: NSObjectProtocol?
+  private var observers: [NSObjectProtocol] = []
   private var wakeObservers: [NSObjectProtocol] = []
-  private var generation = 0
   private var discovered = false
+  private var generation = 0
   private var screenSignature: [String] = []
   private var tap: CFMachPort?
   private var tapSource: CFRunLoopSource?
-  private let hud = BrightnessHUD()
+  private var huds: [CGDirectDisplayID: BrightnessHUD] = [:]
+  private(set) var masterLevel =
+    UserDefaults.standard.object(forKey: "msBrightnessLevel") as? Double ?? 100
   var keysAvailable: Bool { tap != nil }
+  var sync: Bool {
+    get { UserDefaults.standard.bool(forKey: "msBrightnessSync") }
+    set {
+      UserDefaults.standard.set(newValue, forKey: "msBrightnessSync")
+      if newValue { setAll(masterLevel) }
+      onChange?()
+    }
+  }
   var keysEnabled: Bool {
     get { UserDefaults.standard.bool(forKey: "msBrightnessKeysEnabled") }
     set {
@@ -49,23 +65,31 @@ final class BrightnessController {
   }
 
   func start() {
-    observer = NotificationCenter.default.addObserver(
-      forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
-    ) { [weak self] _ in self?.rebuild() }
+    observers.append(
+      NotificationCenter.default.addObserver(
+        forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
+      ) { [weak self] _ in self?.rebuild() })
     wakeObservers = [NSWorkspace.didWakeNotification, NSWorkspace.screensDidWakeNotification].map {
       name in
       NSWorkspace.shared.notificationCenter.addObserver(forName: name, object: nil, queue: .main) {
         [weak self] _ in self?.rebuild(force: true)
       }
     }
+    if !NSRunningApplication.runningApplications(
+      withBundleIdentifier: "app.monitorcontrol.MonitorControl"
+    ).isEmpty {
+      os_log(
+        "Brightness: MonitorControl is running and may conflict with keys/gamma; quit it using System menu"
+      )
+    }
     rebuild(force: true)
     installTap()
   }
 
   func stop() {
-    if let observer { NotificationCenter.default.removeObserver(observer) }
-    observer = nil
-    for observer in wakeObservers { NSWorkspace.shared.notificationCenter.removeObserver(observer) }
+    observers.forEach { NotificationCenter.default.removeObserver($0) }
+    wakeObservers.forEach { NSWorkspace.shared.notificationCenter.removeObserver($0) }
+    observers.removeAll()
     wakeObservers.removeAll()
     if let tap {
       CGEvent.tapEnable(tap: tap, enable: false)
@@ -75,31 +99,36 @@ final class BrightnessController {
     tap = nil
     tapSource = nil
     generation += 1
-    displays = []
-    screenSignature = []
-    hud.hide()
+    displays.removeAll()
+    huds.values.forEach { $0.hide() }
+    huds.removeAll()
+    CGDisplayRestoreColorSyncSettings()
   }
 
   private func rebuild(force: Bool = false) {
     let screens = NSScreen.screens
-    let signature = screens.map { screen in
-      "\(screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] ?? 0):"
-        + "\(NSStringFromRect(screen.frame)):\(screen.backingScaleFactor):\(screen.localizedName)"
+    let signature = screens.map {
+      "\($0.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] ?? 0):\(NSStringFromRect($0.frame))"
     }
-    // macOS also broadcasts screen-parameter changes without a topology change.
-    // Preserve the cache and avoid re-probing DDC for those duplicate events.
-    guard force || signature != screenSignature else { return }
+    guard force || signature != screenSignature else {
+      reapplyGamma()
+      return
+    }
     screenSignature = signature
-    generation += 1
     discovered = false
+    CGDisplayRestoreColorSyncSettings()
+    generation += 1
     let version = generation
     displays = screens.map(Display.init)
     let snapshot = displays
+    let ids = Set(snapshot.map { $0.id })
+    for (id, hud) in huds where !ids.contains(id) {
+      hud.hide()
+      huds.removeValue(forKey: id)
+    }
     onChange?()
-    let ids = snapshot.filter { !$0.builtIn }.map { $0.id }
-    queue.async { [weak self] in
-      guard let self else { return }
-      let services = self.hardware.services(for: ids)
+    discoveryQueue.async {
+      let services = DisplayHardware().services(for: snapshot.filter { !$0.builtIn }.map { $0.id })
       DispatchQueue.main.async { [weak self] in
         guard let self, self.generation == version else { return }
         for display in snapshot { display.service = services[display.id] }
@@ -116,44 +145,61 @@ final class BrightnessController {
       let revision = display.revision
       let version = generation
       let service = display.service
-      queue.async { [weak self] in
-        guard let self else { return }
+      display.queue.async {
         var percent: Double?
         var maximum: UInt16 = 100
         if display.builtIn {
-          percent = self.hardware.readBuiltIn(display.id)
-        } else if let service, let value = self.hardware.readDDC(service) {
+          percent = display.hardware.readBuiltIn(display.id)
+        } else if let service, let value = display.hardware.readDDC(service) {
           maximum = value.maximum
           percent = Double(value.current) / Double(maximum) * 100
+          os_log(
+            "Brightness DDC read: %{public}@ id=%u current=%u maximum=%u",
+            display.screen.localizedName, display.id, value.current, value.maximum)
         }
         let result = percent
         let maxValue = maximum
         DispatchQueue.main.async { [weak self] in
           guard let self, version == self.generation else { return }
           display.reading = false
-          guard revision == display.revision else { return }  // a drag superseded this read
+          let firstRead = !display.checked
           display.checked = true
           display.available = result != nil
-          if let result {
-            display.percent = result
-            display.maximum = maxValue
-          }
+          display.maximum = maxValue
           os_log(
-            "System menu: display %{public}@ id=%u %{public}@ brightness=%.2f",
-            display.screen.localizedName, display.id,
-            display.builtIn
-              ? (display.available ? "DisplayServices OK" : "DisplayServices unavailable")
-              : (display.available ? "DDC answered" : "no DDC"), display.percent)
+            "Brightness: %{public}@ id=%u %{public}@ hardware=%.2f", display.screen.localizedName,
+            display.id, display.available ? "hardware available" : "software only", result ?? -1)
+          if firstRead {
+            let saved = UserDefaults.standard.object(forKey: display.preferenceKey) as? Double
+            let target =
+              self.sync
+              ? self.masterLevel
+              : (revision != display.revision
+                ? display.percent : saved ?? (result.map { 25 + 0.75 * $0 } ?? 100))
+            self.set(display, percent: target)
+          }
           self.onChange?()
         }
       }
     }
   }
 
+  func setAll(_ percent: Double) {
+    masterLevel = max(0, min(100, percent))
+    UserDefaults.standard.set(masterLevel, forKey: "msBrightnessLevel")
+    for display in displays { set(display, percent: masterLevel) }
+  }
+
   func set(_ display: Display, percent: Double) {
-    guard displays.contains(where: { $0 === display }), display.available else { return }
+    guard displays.contains(where: { $0 === display }) else { return }
     display.revision += 1
     display.percent = max(0, min(100, percent))
+    UserDefaults.standard.set(display.percent, forKey: display.preferenceKey)
+    // A pending level during discovery is applied once hardware support is known.
+    guard display.checked else {
+      onChange?()
+      return
+    }
     display.pending = display.percent
     onChange?()
     sendLatest(display)
@@ -164,40 +210,66 @@ final class BrightnessController {
     display.pending = nil
     display.writing = true
     let version = generation
+    // Built-in backlights may switch off at literal zero; keep a 1% floor.
+    let hardwareLevel = max(0, (value - 25) / 75 * 100)
     let service = display.service
-    let rawValue = UInt16((value / 100 * Double(display.maximum)).rounded())
-    queue.async { [weak self] in
-      guard let self else { return }
-      let success: Bool
-      if display.builtIn {
-        success = self.hardware.writeBuiltIn(display.id, percent: value)
-      } else if let service {
-        success = self.hardware.writeDDC(service, value: rawValue)
-      } else {
-        success = false
-      }
+    let available = display.available
+    let rawValue = UInt16((hardwareLevel / 100 * Double(display.maximum)).rounded())
+    // Gamma is immediate; a slow DDC port cannot delay another screen or the UI.
+    setGamma(display, level: value)
+    display.queue.async {
+      let success =
+        !available
+        || (display.builtIn
+          ? display.hardware.writeBuiltIn(display.id, percent: max(1, hardwareLevel))
+          : service.map { display.hardware.writeDDC($0, value: rawValue) } ?? false)
       DispatchQueue.main.async { [weak self] in
         guard let self, version == self.generation else { return }
         display.writing = false
-        if success {
-          self.sendLatest(display)  // one trailing value, never a queue of stale slider positions
-        } else {
+        if !success {
           display.available = false
-          display.pending = nil
+          self.setGamma(display, level: display.percent)
           os_log(
-            "System menu: brightness write failed for %{public}@", display.screen.localizedName)
-          self.onChange?()
+            "Brightness write failed for %{public}@; using software dimming",
+            display.screen.localizedName)
         }
+        self.sendLatest(display)  // only the latest trailing value is retained
+        self.onChange?()
       }
     }
   }
 
+  private func setGamma(_ display: Display, level: Double) {
+    let factor =
+      display.available ? (level < 25 ? 0.15 + 0.85 * level / 25 : 1) : 0.15 + 0.85 * level / 100
+    let wasDimmed = display.gamma < 1
+    display.gamma = factor
+    if factor == 1 && wasDimmed {
+      // ColorSync restoration is global: immediately reapply every other dimmed screen.
+      CGDisplayRestoreColorSyncSettings()
+      reapplyGamma()
+    } else if factor < 1 {
+      applyGamma(display)
+    }
+  }
+
+  private func applyGamma(_ display: Display) {
+    let value = Float(display.gamma)
+    let result = CGSetDisplayTransferByFormula(display.id, 0, value, 1, 0, value, 1, 0, value, 1)
+    if result != .success {
+      os_log("Brightness gamma failed display=%u error=%d", display.id, result.rawValue)
+    }
+  }
+
+  private func reapplyGamma() {
+    for display in displays where display.gamma < 1 { applyGamma(display) }
+  }
+
   func installTap() {
     guard tap == nil else { return }
-    let mask: CGEventMask = 1 << 14  // NX_SYSDEFINED; CGEventType has no named case
     tap = CGEvent.tapCreate(
       tap: .cgSessionEventTap, place: .headInsertEventTap,
-      options: .defaultTap, eventsOfInterest: mask,
+      options: .defaultTap, eventsOfInterest: 1 << 14,
       callback: { _, type, event, context in
         guard let context else { return Unmanaged.passUnretained(event) }
         let owner = Unmanaged<BrightnessController>.fromOpaque(context).takeUnretainedValue()
@@ -208,10 +280,10 @@ final class BrightnessController {
         return owner.handleMediaKey(event) ? nil : Unmanaged.passUnretained(event)
       }, userInfo: Unmanaged.passUnretained(self).toOpaque())
     guard let tap else {
-      os_log("System menu: brightness keys unavailable (needs Accessibility)")
+      os_log("Brightness keys unavailable (needs Accessibility)")
       return
     }
-    os_log("System menu: brightness key event tap installed")
+    os_log("Brightness key event tap installed")
     tapSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
     CFRunLoopAddSource(CFRunLoopGetMain(), tapSource, .commonModes)
     CGEvent.tapEnable(tap: tap, enable: keysEnabled)
@@ -223,19 +295,35 @@ final class BrightnessController {
     else { return false }
     let key = (nsEvent.data1 >> 16) & 0xFFFF
     let state = (nsEvent.data1 >> 8) & 0xFF
-    guard key == 2 || key == 3, state == 0xA || state == 0xB,
-      let display = displays.first(where: { $0.screen.frame.contains(NSEvent.mouseLocation) }),
-      !display.builtIn, display.available
+    guard key == 2 || key == 3, state == 0xA || state == 0xB else { return false }
+    let delta = key == 2 ? 6.25 : -6.25
+    if sync {
+      guard !displays.isEmpty else { return false }
+      if state == 0xA {
+        setAll(masterLevel + delta)
+        showHUDs()
+      }
+      return true
+    }
+    guard let display = displays.first(where: { $0.screen.frame.contains(NSEvent.mouseLocation) }),
+      !display.builtIn
     else { return false }
     if state == 0xA {
-      set(display, percent: display.percent + (key == 2 ? 6.25 : -6.25))
-      hud.show(percent: display.percent, on: display.screen)
+      set(display, percent: display.percent + delta)
+      showHUDs()
     }
     return true
   }
-}
 
-/// A single reusable, non-activating panel; only a one-shot dismissal is scheduled.
+  private func showHUDs() {
+    for display in displays {
+      let hud = huds[display.id] ?? BrightnessHUD()
+      huds[display.id] = hud
+      hud.show(percent: display.percent, on: display.screen)
+    }
+  }
+}
+/// One reusable, non-activating panel per screen; only a one-shot dismissal is scheduled.
 private final class BrightnessHUD {
   private let panel: NSPanel
   private let bar = NSLevelIndicator()

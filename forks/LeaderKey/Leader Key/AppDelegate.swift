@@ -26,6 +26,10 @@ class AppDelegate: NSObject, NSApplicationDelegate,
   // hidden with the skull.
   let memoryStatusItem = MemoryPressureStatusItem()
   let systemStatusItem = SystemStatusItem()
+  let clipboardHistory = ClipboardHistory()
+  lazy var clipboardPanel = ClipboardPanel(history: clipboardHistory)
+  private var previousFrontmost: NSRunningApplication?
+  private var activationObserver: NSObjectProtocol?
   let config = UserConfig()
   // machine-spirit fork: hot-reload — config edits land without a restart.
   let configMonitor = ConfigFileMonitor()
@@ -126,6 +130,17 @@ class AppDelegate: NSObject, NSApplicationDelegate,
 
     systemStatusItem.overlayChanged = { [weak self] in self?.controller?.overlayPreferenceChanged()
     }
+    previousFrontmost = NSWorkspace.shared.frontmostApplication
+    activationObserver = NSWorkspace.shared.notificationCenter.addObserver(
+      forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
+    ) { [weak self] notification in
+      guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
+        app.processIdentifier != ProcessInfo.processInfo.processIdentifier else { return }
+      self?.previousFrontmost = app
+    }
+    clipboardHistory.start()
+    systemStatusItem.showClipboard = { [weak self] in self?.showClipboardHistory() }
+    systemStatusItem.clearClipboard = { [weak self] in self?.clipboardHistory.clearUnpinned() }
     systemStatusItem.enable()
     launchBoardIfNeeded()
 
@@ -177,6 +192,10 @@ class AppDelegate: NSObject, NSApplicationDelegate,
       self.activate()
     }
 
+    KeyboardShortcuts.onKeyDown(for: .msClipboardHistory) { [weak self] in
+      self?.showClipboardHistory()
+    }
+
     for groupKey in Defaults[.groupShortcuts] {
       print("Registering shortcut for \(groupKey)")
       KeyboardShortcuts.onKeyDown(for: KeyboardShortcuts.Name("group-\(groupKey)")) {
@@ -191,7 +210,15 @@ class AppDelegate: NSObject, NSApplicationDelegate,
     }
   }
 
+  func showClipboardHistory() {
+    let current = NSWorkspace.shared.frontmostApplication
+    let target = current?.processIdentifier == ProcessInfo.processInfo.processIdentifier ? previousFrontmost : current
+    controller?.hide { [weak self] in self?.clipboardPanel.show(previousApplication: target) }
+  }
+
   func applicationWillTerminate(_ notification: Notification) {
+    clipboardHistory.stop()
+    if let activationObserver { NSWorkspace.shared.notificationCenter.removeObserver(activationObserver) }
     systemStatusItem.disable()
     controller?.postBoardNavigation(hidden: true)
     // Config saves automatically on changes
@@ -286,6 +313,8 @@ class AppDelegate: NSObject, NSApplicationDelegate,
     let action = URLSchemeHandler.parse(url)
 
     switch action {
+    case .clipboard:
+      showClipboardHistory()
     case .settings:
       showSettings()
     case .about:

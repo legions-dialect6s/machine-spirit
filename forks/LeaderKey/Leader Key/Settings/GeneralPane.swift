@@ -85,6 +85,10 @@ struct GeneralPane: View {
         }
       }
 
+      Settings.Section(title: "Clipboard history") {
+        KeyboardShortcuts.Recorder(for: .msClipboardHistory)
+      }
+
       Settings.Section(title: "Shortcut") {
         KeyboardShortcuts.Recorder(for: .activate)
       }

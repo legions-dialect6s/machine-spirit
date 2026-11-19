@@ -5,19 +5,22 @@ final class SystemStatusItem: NSObject, NSMenuDelegate {
   private var statusItem: NSStatusItem?
   private let awake = KeepAwake()
   private let brightness = BrightnessController()
+  private var masterRow: BrightnessMenuRow?
   private var rows: [CGDirectDisplayID: BrightnessMenuRow] = [:]
   private let durations = [
     (0, "Off"), (-1, "Indefinitely"), (15, "15 min"),
     (60, "1 hour"), (120, "2 hours"), (240, "4 hours"), (480, "8 hours"),
   ]
   private var sessionItems: [Int: NSMenuItem] = [:]
+  var showClipboard: (() -> Void)?
+  var clearClipboard: (() -> Void)?
   var overlayChanged: (() -> Void)?
 
   static func registerDefaults() {
     UserDefaults.standard.register(defaults: [
       "msKeepAwakeDisplay": true, "msKeepAwakeAtLaunch": false,
       "msBrightnessKeysEnabled": true, "msGraphOverlayEnabled": true,
-      "msLaunchBoardAtLogin": true,
+      "msLaunchBoardAtLogin": true, "msBrightnessSync": true,
     ])
   }
 
@@ -84,7 +87,20 @@ final class SystemStatusItem: NSObject, NSMenuDelegate {
       checked: UserDefaults.standard.bool(forKey: "msKeepAwakeAtLaunch"))
     menu.addItem(.separator())
     _ = add("Displays", action: nil, to: menu)
-    for display in brightness.displays {
+    _ = add(
+      "Sync all displays", action: #selector(toggleSync(_:)), to: menu, checked: brightness.sync)
+    masterRow = nil
+    if brightness.sync {
+      let item = NSMenuItem()
+      let row = BrightnessMenuRow(display: nil) { [weak self] value in
+        self?.brightness.setAll(value)
+      }
+      row.updateMaster(brightness.masterLevel)
+      masterRow = row
+      item.view = row
+      menu.addItem(item)
+    }
+    for display in brightness.displays where !brightness.sync {
       let item = NSMenuItem()
       let row = BrightnessMenuRow(display: display) { [weak self, weak display] value in
         guard let display else { return }
@@ -97,11 +113,21 @@ final class SystemStatusItem: NSObject, NSMenuDelegate {
     if brightness.displays.isEmpty { _ = add("No displays", action: nil, to: menu) }
     menu.addItem(.separator())
     let title =
-      "Brightness keys control the display under the mouse"
+      (brightness.sync
+        ? "Brightness keys control all displays" : "Brightness keys control external under mouse")
       + (brightness.keysAvailable ? "" : " (needs Accessibility)")
     let keys = add(
       title, action: #selector(toggleKeys(_:)), to: menu, checked: brightness.keysEnabled)
     keys.isEnabled = brightness.keysAvailable
+    let conflict = add(
+      "Quit MonitorControl (conflicts)", action: #selector(quitMonitorControl), to: menu)
+    conflict.isEnabled = !NSRunningApplication.runningApplications(
+      withBundleIdentifier: "app.monitorcontrol.MonitorControl"
+    ).isEmpty
+    menu.addItem(.separator())
+    _ = add("Clipboard history…", action: #selector(openClipboard), to: menu)
+    let clear = add("Clear history", action: #selector(clearHistory), to: menu)
+    clear.toolTip = "Remove unpinned clipboard entries; pinned entries are kept."
     menu.addItem(.separator())
     _ = add("Open machine-spirit board", action: #selector(openBoard), to: menu)
     _ = add(
@@ -128,6 +154,14 @@ final class SystemStatusItem: NSObject, NSMenuDelegate {
   }
 
   private func updateDisplays() {
+    if brightness.sync {
+      if let masterRow {
+        masterRow.updateMaster(brightness.masterLevel)
+      } else if let menu = statusItem?.menu {
+        buildMenu(menu)
+      }
+      return
+    }
     let ids = Set(brightness.displays.map { $0.id })
     let changedDisplays = brightness.displays.contains { rows[$0.id]?.display !== $0 }
     if ids != Set(rows.keys) || changedDisplays, let menu = statusItem?.menu {
@@ -137,6 +171,15 @@ final class SystemStatusItem: NSObject, NSMenuDelegate {
     }
   }
 
+  @objc private func toggleSync(_ item: NSMenuItem) {
+    brightness.sync.toggle()
+    if let menu = statusItem?.menu { buildMenu(menu) }
+  }
+  @objc private func quitMonitorControl() {
+    NSRunningApplication.runningApplications(
+      withBundleIdentifier: "app.monitorcontrol.MonitorControl"
+    ).forEach { $0.terminate() }
+  }
   @objc private func selectDuration(_ item: NSMenuItem) { awake.start(minutes: item.tag) }
   @objc private func toggleDisplay(_ item: NSMenuItem) {
     awake.keepsDisplayOn.toggle()
@@ -158,6 +201,8 @@ final class SystemStatusItem: NSObject, NSMenuDelegate {
     UserDefaults.standard.set(value, forKey: key)
     item.state = value ? .on : .off
   }
+  @objc private func openClipboard() { showClipboard?() }
+  @objc private func clearHistory() { clearClipboard?() }
   @objc private func openBoard() {
     guard let url = URL(string: "machinespirit://board") else { return }
     let configuration = NSWorkspace.OpenConfiguration()
@@ -167,12 +212,12 @@ final class SystemStatusItem: NSObject, NSMenuDelegate {
 }
 
 private final class BrightnessMenuRow: NSView {
-  let display: BrightnessController.Display
+  let display: BrightnessController.Display?
   private let label = NSTextField(labelWithString: "")
   private let slider = NSSlider(value: 50, minValue: 0, maxValue: 100, target: nil, action: nil)
   private let changed: (Double) -> Void
 
-  init(display: BrightnessController.Display, changed: @escaping (Double) -> Void) {
+  init(display: BrightnessController.Display?, changed: @escaping (Double) -> Void) {
     self.changed = changed
     self.display = display
     super.init(frame: NSRect(x: 0, y: 0, width: 360, height: 52))
@@ -183,24 +228,25 @@ private final class BrightnessMenuRow: NSView {
     slider.isContinuous = true
     slider.target = self
     slider.action = #selector(slid)
-    slider.setAccessibilityLabel("\(display.screen.localizedName) brightness")
+    slider.setAccessibilityLabel("\(display?.screen.localizedName ?? "All displays") brightness")
     addSubview(label)
     addSubview(slider)
-    update(display)
+    if let display { update(display) }
   }
 
   required init?(coder: NSCoder) { nil }
 
   func update(_ display: BrightnessController.Display) {
-    var suffix = display.checked ? " (no DDC)" : " (checking…)"
-    #if !arch(arm64)
-      if !display.builtIn { suffix = " (DDC unsupported)" }
-    #endif
-    if display.builtIn { suffix = " (brightness unavailable)" }
-    label.stringValue = display.screen.localizedName + (display.available ? "" : suffix)
-    slider.isHidden = display.builtIn && !display.available
-    slider.isEnabled = display.available
+    label.stringValue =
+      display.screen.localizedName
+      + (display.checked ? (display.available ? "" : " (software only)") : " (checking…)")
+    slider.isEnabled = display.checked
     slider.doubleValue = display.percent
+  }
+
+  func updateMaster(_ value: Double) {
+    label.stringValue = "All displays"
+    slider.doubleValue = value
   }
 
   @objc private func slid() { changed(slider.doubleValue) }

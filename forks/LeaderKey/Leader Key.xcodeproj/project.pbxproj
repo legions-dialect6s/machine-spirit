@@ -61,6 +61,8 @@
 		B0175A000000000000000004 /* DisplayHardware.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0175A000000000000000003 /* DisplayHardware.swift */; };
 		B0175A000000000000000006 /* BrightnessController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0175A000000000000000005 /* BrightnessController.swift */; };
 		B0175A000000000000000008 /* SystemStatusItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0175A000000000000000007 /* SystemStatusItem.swift */; };
+		C11B00000000000000000002 /* ClipboardHistory.swift in Sources */ = {isa = PBXBuildFile; fileRef = C11B00000000000000000001 /* ClipboardHistory.swift */; };
+		C11B00000000000000000004 /* ClipboardPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C11B00000000000000000003 /* ClipboardPanel.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -126,6 +128,8 @@
 		B0175A000000000000000003 /* DisplayHardware.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisplayHardware.swift; sourceTree = "<group>"; };
 		B0175A000000000000000005 /* BrightnessController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrightnessController.swift; sourceTree = "<group>"; };
 		B0175A000000000000000007 /* SystemStatusItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemStatusItem.swift; sourceTree = "<group>"; };
+		C11B00000000000000000001 /* ClipboardHistory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardHistory.swift; sourceTree = "<group>"; };
+		C11B00000000000000000003 /* ClipboardPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardPanel.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -213,6 +217,8 @@
 				427C182C2BD31F9500955B98 /* Settings.swift */,
 				427C18262BD31E2E00955B98 /* StatusItem.swift */,
 				A1B2C3D40000000000000001 /* MemoryPressureStatusItem.swift */,
+				C11B00000000000000000001 /* ClipboardHistory.swift */,
+				C11B00000000000000000003 /* ClipboardPanel.swift */,
 				B0175A000000000000000007 /* SystemStatusItem.swift */,
 				B0175A000000000000000005 /* BrightnessController.swift */,
 				B0175A000000000000000003 /* DisplayHardware.swift */,
@@ -459,6 +465,8 @@
 				427C18502BD6652500955B98 /* Util.swift in Sources */,
 				427C182A2BD31E2E00955B98 /* StatusItem.swift in Sources */,
 				A1B2C3D40000000000000002 /* MemoryPressureStatusItem.swift in Sources */,
+				C11B00000000000000000002 /* ClipboardHistory.swift in Sources */,
+				C11B00000000000000000004 /* ClipboardPanel.swift in Sources */,
 				B0175A000000000000000008 /* SystemStatusItem.swift in Sources */,
 				B0175A000000000000000006 /* BrightnessController.swift in Sources */,
 				B0175A000000000000000004 /* DisplayHardware.swift in Sources */,

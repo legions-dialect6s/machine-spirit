@@ -1,6 +1,7 @@
 import Foundation
 
 enum URLSchemeAction: Equatable {
+  case clipboard
   case settings
   case about
   case configReload
@@ -22,6 +23,8 @@ class URLSchemeHandler {
     }
 
     switch url.host {
+    case "clipboard":
+      return .clipboard
     case "settings":
       return .settings
     case "about":

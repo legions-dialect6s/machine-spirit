@@ -88,6 +88,7 @@ class Controller {
     userState.navigationPath = []
     userState.display = nil
     boardPanelShown = true
+    window.updateOverlayAppearance()
     window.show(on: screen) {
       Events.send(.didActivate)
     }
@@ -395,6 +396,7 @@ class Controller {
   }
 
   func overlayPreferenceChanged() {
+    window?.updateOverlayAppearance()
     postBoardNavigation(
       hidden: !boardPanelShown || !UserDefaults.standard.bool(forKey: "msGraphOverlayEnabled"))
   }
