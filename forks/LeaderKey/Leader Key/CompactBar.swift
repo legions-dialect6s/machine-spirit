@@ -130,7 +130,12 @@ final class NumberTween {
   func set(_ targets: [String: Double], now: TimeInterval = ProcessInfo.processInfo.systemUptime) {
     values = values.filter { targets[$0.key] != nil }
     for (key, target) in targets where target.isFinite {
-      if let old = values[key] {
+      // Only the machine-spirit counts glide: they change rarely. Stats
+      // resample every second, so tweening them kept the bar redrawing at
+      // ~12 fps forever (measured ~6% CPU idle) — they snap instead.
+      if !key.hasPrefix("count") {
+        values[key] = Value(start: target, target: target, began: now)
+      } else if let old = values[key] {
         if old.target != target {
           values[key] = Value(start: old.at(now), target: target, began: now)
         }
