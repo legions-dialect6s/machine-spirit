@@ -36,7 +36,8 @@ fi
 if [[ -d "$BIN_LIVE" ]]; then
   while IFS= read -r -d '' f; do
     rel="${f#"$REPO_ROOT/bin/"}"
-    if [[ -f "$BIN_LIVE/$rel" ]]; then
+    # Skip live symlinks back into the repo (e.g. ~/bin/ms) — same file.
+    if [[ -f "$BIN_LIVE/$rel" && ! -L "$BIN_LIVE/$rel" ]]; then
       cp "$BIN_LIVE/$rel" "$f"
       echo "  captured bin/$rel"
     fi

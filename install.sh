@@ -43,6 +43,9 @@ while IFS= read -r -d '' f; do
   chmod +x "$HOME/bin/$rel"
   echo "    installed bin/$rel"
 done < <(find "$REPO_ROOT/bin" -type f -print0)
+# `ms` resolves the repo from its own location (it builds/execs tools/ms), so
+# it must be a symlink back into the repo, not a copy.
+ln -sf "$REPO_ROOT/bin/ms" "$HOME/bin/ms" && echo "    linked bin/ms -> repo"
 
 # Busy-pane shield (OPT-IN, off by default): symlink the iTerm2 API daemon into
 # AutoLaunch so iTerm runs it, and drop the disable flag so it starts OFF (⌘W

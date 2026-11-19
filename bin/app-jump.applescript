@@ -30,6 +30,9 @@ on run argv
 		-- Not running: launch it and stop (its own first window opens).
 		if not appRunning(appName) then
 			tell application appName to activate
+			-- Fresh launch: place its first window by the mouse (⇪ ␣ logic),
+			-- retrying in the background until the window exists (≤3s).
+			do shell script "(for i in $(seq 1 30); do ~/bin/ms win place smart --app " & quoted form of appName & " >/dev/null 2>&1 && break; sleep 0.1; done) >/dev/null 2>&1 &"
 			return
 		end if
 
