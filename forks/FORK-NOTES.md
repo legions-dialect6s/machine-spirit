@@ -5,6 +5,9 @@ in-tree (MIT, small, a learning goal). Karabiner and iTerm2 stay external and
 managed — never forked. "Coordinator, not parent" still governs process
 lifecycle: the app coordinates running tools; it never owns their lifecycles.
 
+Local build commands use `.noindex` derived-data folders to exclude build products
+from Spotlight. Daily-driver apps live in `~/Applications`.
+
 Both trees vendored as **squashed git subtrees** — upstream history is not
 carried; the SHAs below are the exact upstream commits captured.
 
@@ -18,11 +21,11 @@ carried; the SHAs below are the exact upstream commits captured.
 - **Build (works, 2026-07-06, Xcode 26.6):**
   ```
   xcodebuild -project "forks/LeaderKey/Leader Key.xcodeproj" -scheme "Leader Key" \
-    -configuration Debug -derivedDataPath forks/LeaderKey/DerivedData \
+    -configuration Debug -derivedDataPath forks/LeaderKey/DerivedData.noindex \
     CODE_SIGN_IDENTITY="-" CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM="" \
     -skipPackagePluginValidation -skipMacroValidation build
   ```
-  Product: `forks/LeaderKey/DerivedData/Build/Products/Debug/Leader Key.app`.
+  Product: `forks/LeaderKey/DerivedData.noindex/Build/Products/Debug/Leader Key.app`.
   The two skip flags are required: LeaderKey uses a SwiftFormat build plugin
   (`SwiftFormatPlugins`), and headless xcodebuild can't answer the interactive
   plugin-trust prompt — without them the build fails at
@@ -40,10 +43,10 @@ carried; the SHAs below are the exact upstream commits captured.
 - **Build (works, 2026-07-06, Xcode 26.6):**
   ```
   xcodebuild -project forks/Rectangle/Rectangle.xcodeproj -scheme Rectangle \
-    -configuration Debug -derivedDataPath forks/Rectangle/DerivedData \
+    -configuration Debug -derivedDataPath forks/Rectangle/DerivedData.noindex \
     CODE_SIGN_IDENTITY="-" CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM="" build
   ```
-  Product: `forks/Rectangle/DerivedData/Build/Products/Debug/Rectangle.app`,
+  Product: `forks/Rectangle/DerivedData.noindex/Build/Products/Debug/Rectangle.app`,
   ad-hoc signed (`codesign -dv` → `flags=0x2(adhoc)`).
 
 ## Local patches (the fork diverges here)

@@ -87,11 +87,12 @@ The bulk of iTerm setup. All of it lives in the plist (not captured by sync — 
 
 ## Leader Key
 
-### 5. Set F19 activation + Launch at Login
-- **Click-path:** Leader Key → Settings (`⇪ l k`, or ⌘, once focused) → **activation shortcut field → press Caps Lock** (Karabiner has already remapped it to **F19**, so the field records F19). Enable **Launch at Login**.
-- **Set:** activation = F19; Launch at Login = on.
-- **Why not scriptable:** the shortcut must be *captured from a keypress* in Leader Key's own field; Launch-at-Login is a Leader Key preference (and a `SMAppService` login item, itself approval-adjacent).
-- **Strategy:** `own-when-forked` — once Leader Key is hard-forked into machine-spirit (#8), machine-spirit owns activation + login-item registration directly. Until then, `detect-and-guide`.
+### 5. Set F19 activation + startup ownership
+- **Click-path:** MachineSpirit Leader Key → Settings (`⇪ l k`, or ⌘, once focused) → **activation shortcut field → press Caps Lock** (Karabiner remaps it to **F19**).
+- **Fork startup:** `install.sh` installs the self-healing `com.machinespirit.leader-key` LaunchAgent. Leave the fork's **Launch at Login off** to avoid a second startup mechanism. Only the stock Leader Key fallback needs its own Launch at Login enabled.
+- **Board startup:** the fork launches `~/Applications/MachineSpirit.app` in the background by bundle ID unless `msLaunchBoardAtLogin` is false. No separate board Login Item is needed. The board deploy script removes the old `MachineSpirit` entry that pointed into DerivedData; if Automation is denied, remove **MachineSpirit** under **System Settings → General → Login Items**. Leave other apps' entries alone.
+- **Manual cleanup command:** `osascript -e 'tell application "System Events" to delete every login item whose name is "MachineSpirit"'` (safe when absent).
+- **Strategy:** startup is automated; shortcut capture and macOS consent remain manual.
 
 ### 6. Reload Leader Key after a config edit — ✅ already automated
 - **How:** run [`bin/reload-leaderkey.sh`](bin/reload-leaderkey.sh) (Leader Key does **not** hot-reload; an edited bind stays stale until restart).

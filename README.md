@@ -45,7 +45,7 @@ cd ~/machine-spirit
 ./install.sh
 ```
 
-`install.sh` is idempotent. It installs Homebrew if missing, installs every app from the [`Brewfile`](Brewfile), restores your configs (backing up anything it replaces), and prints the short list of permissions macOS requires you to grant by hand.
+`install.sh` is idempotent. It installs Homebrew if missing, installs every app from the [`Brewfile`](Brewfile), restores your configs (backing up anything it replaces), and prints the short list of permissions macOS requires you to grant by hand. With full Xcode installed, it also builds and signs the board and Leader Key fork into `~/Applications`; without Xcode those builds are skipped.
 
 ## Keeping it in sync
 
@@ -433,6 +433,38 @@ sheol is the first piece of a terminal necromancer theme for machine-spirit. the
 ![the node-graph board](docs/altar-board.png)
 
 The beginning of the [north star](#north-star--machine-spirit-as-its-own-tool-not-yet-built): a native app (`app/` + `kit/`) that imports the live Leader Key config **losslessly** (round-trip proven by a headless test gate) and renders it two ways, side by side — a directory tree and a radial node-graph board. Walk either view with the leader grammar itself (type `s s w s` and travel the tree), drag nodes into your own arrangement (two named layouts, the computed `radial` ⇄ your `hand` — switching never destroys either), and when a bind executes on the keyboard the board answers: the fired route pulses from the center out to the node (a `machinespirit://` ping; the Leader Key fork — now the daily driver — fires it on every executed action). And the pen is wired: the board's **+ / −** buttons add and remove leaf binds by writing the live config itself, always through the armored gate (round-trip precondition → timestamped backup → validate-before-landing → atomic swap) — the fork hot-reloads the change, and the footer reports every write node-by-node with the backup path a hover away.
+
+The daily-driver board lives at **`~/Applications/MachineSpirit.app`**. Build and
+redeploy it from the repo root with:
+
+```bash
+./app/MachineSpirit/tools/deploy-release.sh
+```
+
+This builds Release into `app/MachineSpirit/DerivedData-Release.noindex`, signs
+with the fork's `MachineSpirit Local Codesign` identity (creating it if missing),
+quits the old board, installs the verified bundle, registers it with LaunchServices,
+unregisters the Debug/Release build copies, and launches it in the background.
+The optional first argument selects the build log (default
+`/private/tmp/machinespirit-board-build.log`). `.noindex` build folders are excluded
+from Spotlight; build products are not daily-driver installs.
+
+The fork launches the installed board by bundle ID at startup unless
+`msLaunchBoardAtLogin` is false. **Do not add a separate MachineSpirit Login Item.**
+Deployment removes the legacy entry that pointed into DerivedData. To remove it
+manually (or use System Settings → General → Login Items if Automation is denied):
+
+```bash
+osascript -e 'tell application "System Events" to delete every login item whose name is "MachineSpirit"'
+```
+
+For a development build only (use the deploy script to run the daily driver):
+
+```bash
+xcodebuild -project app/MachineSpirit/MachineSpirit.xcodeproj -scheme MachineSpirit \
+  -configuration Debug -derivedDataPath app/MachineSpirit/DerivedData.noindex \
+  build CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
+```
 
 ## Busy-pane shield (opt-in, default off)
 

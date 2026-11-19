@@ -116,16 +116,22 @@ AGENT_SRC="$REPO_ROOT/config/leader-key/com.machinespirit.leader-key.plist"
 AGENT_DEST="$HOME/Library/LaunchAgents/com.machinespirit.leader-key.plist"
 AGENT_LABEL="com.machinespirit.leader-key"
 if command -v xcodebuild >/dev/null 2>&1 && [[ -d /Applications/Xcode.app ]]; then
+  echo "    building and deploying MachineSpirit board (Release)…"
+  if bash "$REPO_ROOT/app/MachineSpirit/tools/deploy-release.sh"; then
+    echo "    installed board at ~/Applications/MachineSpirit.app (startup via the fork)"
+  else
+    echo "    !! board deploy failed (see /tmp/machinespirit-board-build.log); existing board left in place if build/signing failed"
+  fi
   echo "    building MachineSpirit Leader Key fork (Release)…"
   if xcodebuild -project "$FORK_DIR/Leader Key.xcodeproj" \
        -scheme "Leader Key" -configuration Release \
-       -derivedDataPath "$FORK_DIR/DerivedData-Release" \
+       -derivedDataPath "$FORK_DIR/DerivedData-Release.noindex" \
        -skipPackagePluginValidation -skipMacroValidation build \
        CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO \
        >/tmp/machinespirit-fork-build.log 2>&1; then
     mkdir -p "$HOME/Applications"
     rm -rf "$FORK_APP"
-    ditto "$FORK_DIR/DerivedData-Release/Build/Products/Release/Leader Key.app" "$FORK_APP"
+    ditto "$FORK_DIR/DerivedData-Release.noindex/Build/Products/Release/Leader Key.app" "$FORK_APP"
     # Stable local code-signing identity: ad-hoc signatures change every build,
     # which RESETS the app's TCC grants (Screen Recording for the ss-* binds,
     # Accessibility for window/app control) and traps you in a grant→rebuild→
@@ -166,7 +172,7 @@ CNF
     echo "    !! fork build failed (see /tmp/machinespirit-fork-build.log); stock Leader Key remains the launcher"
   fi
 else
-  echo "    (skipped) full Xcode not found — install it and re-run to build the fork; stock Leader Key is the launcher until then"
+  echo "    (skipped) full Xcode not found — install it and re-run to build the board and fork; stock Leader Key is the launcher until then"
 fi
 
 echo "==> 5/5  macOS defaults (optional)"

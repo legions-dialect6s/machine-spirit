@@ -6,9 +6,9 @@ This file provides guidance to coding agents when working with code in this repo
 
 ## Build & Test Commands
 
-- Build and run: `xcodebuild -scheme "Leader Key" -configuration Debug build`
-- Run all tests: `xcodebuild -scheme "Leader Key" -testPlan "TestPlan" test`
-- Run single test: `xcodebuild -scheme "Leader Key" -testPlan "TestPlan" -only-testing:Leader KeyTests/UserConfigTests/testInitializesWithDefaults test`
+- Build and run: `xcodebuild -scheme "Leader Key" -configuration Debug -derivedDataPath ./DerivedData.noindex build`
+- Run all tests: `xcodebuild -scheme "Leader Key" -derivedDataPath ./DerivedData.noindex -testPlan "TestPlan" test`
+- Run single test: `xcodebuild -scheme "Leader Key" -derivedDataPath ./DerivedData.noindex -testPlan "TestPlan" -only-testing:Leader KeyTests/UserConfigTests/testInitializesWithDefaults test`
 - Bump version: `bin/bump`
 - Create release: `bin/release`
 
@@ -30,11 +30,11 @@ Full Release build + redeploy recipe this repo uses:
 ```
 cd forks/LeaderKey
 xcodebuild -project "Leader Key.xcodeproj" -scheme "Leader Key" -configuration Release \
-  -derivedDataPath ./DerivedData-Release -skipPackagePluginValidation -skipMacroValidation \
+  -derivedDataPath ./DerivedData-Release.noindex -skipPackagePluginValidation -skipMacroValidation \
   clean build CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
 launchctl bootout "gui/$(id -u)/com.machinespirit.leader-key" 2>/dev/null
 rm -rf "$HOME/Applications/MachineSpirit Leader Key.app"
-ditto "DerivedData-Release/Build/Products/Release/Leader Key.app" "$HOME/Applications/MachineSpirit Leader Key.app"
+ditto "DerivedData-Release.noindex/Build/Products/Release/Leader Key.app" "$HOME/Applications/MachineSpirit Leader Key.app"
 codesign --force --deep -s "MachineSpirit Local Codesign" "$HOME/Applications/MachineSpirit Leader Key.app"
 launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/com.machinespirit.leader-key.plist"
 ```

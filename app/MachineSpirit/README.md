@@ -1,5 +1,27 @@
 # MachineSpirit.app — the optional board
 
+## Build and install
+
+From the repo root, run `./app/MachineSpirit/tools/deploy-release.sh` (full Xcode
+required). It builds into `DerivedData-Release.noindex`, uses the stable local
+signing identity shared with the fork, installs to `~/Applications/MachineSpirit.app`,
+and launches in the background. `install.sh` calls the same script. The fork
+owns board startup via `msLaunchBoardAtLogin`; deployment removes the obsolete
+`MachineSpirit` Login Item and unregisters build copies from LaunchServices.
+
+For a Debug build from this directory:
+
+```bash
+xcodebuild -project MachineSpirit.xcodeproj -scheme MachineSpirit \
+  -configuration Debug -derivedDataPath DerivedData.noindex \
+  build CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
+```
+
+Keep build directories suffixed `.noindex` so Spotlight excludes them. Run the
+installed Release app as the daily driver; use `tools/deploy-release.sh` to update it.
+
+## Behavior
+
 The app launches as an accessory with no window or Dock icon; `machinespirit://board` opens the single, resizable board (minimum 420×320).
 Closing the board removes its view tree and Sheol polling, and returns the app to accessory mode; reopening the running app also summons the board.
 While typing in Leader Key, a transparent, click-through graph spawns at the mouse on its screen, then stays anchored for the session without taking focus.
