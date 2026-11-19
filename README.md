@@ -105,11 +105,11 @@ Home-directory prefixes in the captured Leader Key config become `__HOME__` on t
 
 ## Keybind reference
 
-**How to run anything:** tap `⇪` (Caps Lock — remapped to F19, so it never capitalizes), then type a sequence. With the graph overlay enabled, a click-through graph shows the available neighborhood; with it disabled, Leader Key shows its normal panel/cheatsheet. `Esc` backs out. `⇪ l k` is the legacy settings bind; see its limitation below.
+**How to run anything:** tap `⇪` (Caps Lock — remapped to F19, so it never capitalizes), then type a sequence. With the graph overlay enabled, a click-through graph shows the available neighborhood; with it disabled, Leader Key shows its normal panel/cheatsheet. `⌫` steps back one level (at the root it stays open on the skull); `Esc` closes — and `⇪ Esc` at the root also un-captures the frontmost text field (in Messages it jumps to conversation search, so you can type a name). `⇪ l k` opens the fork's settings. **Keep holding `⇪` after a bind fires and you're in [hold mode](#hold-mode--keep--down-to-keep-going).**
 
 The tree follows four rules, by escalating "weight" of the action:
 
-1. **One tap** — frequent and harmless: `h` hides, `y` cycles YouTube tabs.
+1. **One tap** — frequent and harmless: `y` cycles YouTube tabs.
 2. **Two taps, first-two-letters mnemonic** — apps and tools: `m e` → **Me**ssages, `s p` → **Sp**otify, `d i` → **Di**scord. Read the sequence as the start of the app's name.
 3. **Three taps of the same letter** — window placement. The repetition is deliberate friction (placement requires a deliberate repeated sequence) and the letters form a spatial grid (see [Window management](#window-management)). The two exceptions are grow/shrink at two taps, because they're pressed repeatedly.
 4. **Spelled-out words** — destructive actions: `q u i t` literally types the word to ⌘Q the frontmost app. Quitting should never be one slip away; making you spell it *is* the confirmation dialog.
@@ -118,24 +118,30 @@ The tree follows four rules, by escalating "weight" of the action:
 
 | Keys | Opens | | Keys | Opens |
 |---|---|---|---|---|
-| `⇪ a c` | Activity Monitor | | `⇪ n o` | Notes |
-| `⇪ c l` | Claude | | `⇪ p h` | Photos |
-| `⇪ c o` | Codex | | `⇪ p s` | Photoshop |
+| `⇪ a c` | Activity Monitor | | `⇪ n o` | Notes ✕ |
+| `⇪ c l` | Claude | | `⇪ p h` | Photos ✕ |
+| `⇪ c o` | Codex | | `⇪ p s` | Photoshop (hold `s`: next document) |
+| `⇪ f c 2` | Focusrite Control 2 | | `⇪ p b` | Photo Booth ✕ |
+| `⇪ t e l` / `⇪ t g` | Telegram | | `⇪ u r` | Unreal Editor (cycle; hold `r`) |
 | `⇪ c h r` | Chrome (jump/cycle) | | `⇪ s a` | Safari (jump/cycle) |
 | `⇪ f i` | Finder (jump/cycle) | | `⇪ s i g` | Signal (jump/cycle) |
 | `⇪ d i` | Discord | | `⇪ s e` | System Settings |
-| `⇪ f a c` / `⇪ f t` | FaceTime | | `⇪ s p` | Spotify |
-| | | | `⇪ t e` | TextEdit |
-| `⇪ g p` | ChatGPT | | `⇪ t r` | Terminal |
+| `⇪ f a c` / `⇪ f t` | FaceTime ✕ (from Messages: FaceTime the selected chat) | | `⇪ s p` | Spotify |
+| `⇪ f i` (hold `i`) | Finder — hold to gather windows into tabs | | `⇪ t e x` | TextEdit ✕ (closes all; asks if unsaved) |
+| `⇪ g p` | ChatGPT | | `⇪ t e r` | Terminal |
 | `⇪ i t` | iTerm | | `⇪ v l c` | VLC (jump/cycle) |
 | `⇪ m e` | Messages | | `⇪ v m w` | VMware Fusion |
 | `⇪ w h` | WhatsApp | | `⇪ k` | Clipboard history |
 
 `⇪ s a` (Safari), `⇪ c h r` (Chrome), and `⇪ f i` (Finder) all run [`bin/app-jump.applescript`](bin/app-jump.applescript) with an app name — the whole-app analogue of `web-jump`, one ladder for every app: **not running → launch; backgrounded → restore its minimized windows and bring it forward (opening a window if none); already frontmost → cycle its windows in order, wrapping**. It rides macOS's native ⌘\` / ⌘N, so the implementation is shared rather than scripted per app; apps must still honor those native shortcuts and expose accessible windows. (Its predecessor, [`bin/browser-window-cycle.applescript`](bin/browser-window-cycle.applescript), cycled only the frontmost browser and stranded minimized windows; it stays in `bin/` unused.)
 
+**✕ = toggle:** [`bin/app-toggle.sh`](bin/app-toggle.sh) — not running → launch + place by the mouse; backgrounded → bring forward; frontmost **and the pointer is over one of its windows** → close it (TextEdit closes every document with the native save prompt, so nothing unsaved is lost); frontmost but pointer elsewhere → next window. Any app launched fresh (application binds and `app-jump`) gets its first window placed with the `⇪ ␣ ␣` mouse logic.
+
 `⇪ v m w` runs [`bin/vmware.applescript`](bin/vmware.applescript) — activate if running, launch if not. (Cycling between individual VM windows isn't cleanly scriptable; use ⌘\` once focused.)
 
 ### Web — focus-or-cycle-or-open
+
+**Hold to collect:** keep `⇪` down after a site bind and spam its last letter (`y`, `.`, `r`, `p`, …): each press moves one more matching tab into a single new window placed by the mouse ([`bin/web-collect.sh`](bin/web-collect.sh)); when the last one lands the overlay pulses **blue**, and further presses cycle through them.
 
 Every site key runs the same script, [`bin/web-jump.applescript`](bin/web-jump.applescript): if no tab for the site exists it opens one; if one exists it focuses it; if you're **already on it, pressing again cycles** through all matching tabs across every window. Adding a site is one Leader Key entry — `osascript ~/bin/web-jump.applescript <domains> [fallback-url]` — no new script.
 
@@ -148,6 +154,9 @@ Every site key runs the same script, [`bin/web-jump.applescript`](bin/web-jump.a
 | `⇪ i g` | Instagram | |
 | `⇪ s x` / `⇪ s t` / `⇪ x .` | X / Twitter | matches x.com + twitter.com (three aliases for the same jump) |
 | `⇪ y` | YouTube | |
+| `⇪ d r` | Google Drive | |
+| `⇪ s h o p` | Shopify admin | |
+| `⇪ t r` | Tripo | |
 | `⇪ r r` | — | strips the current tab's URL to the site's home page ([`bin/site-home.applescript`](bin/site-home.applescript)) |
 
 ### Folders & terminal
@@ -177,21 +186,40 @@ Every site key runs the same script, [`bin/web-jump.applescript`](bin/web-jump.a
 
 | Keys | Action |
 |---|---|
-| `⇪ h` | hide frontmost app (⌘H) |
+| `⇪ h h` | hide frontmost app (⌘H) |
+| `⇪ h i d e` | hide everything (`ms win hide-all`) |
+| `⇪ s h o w` | unhide + un-minimize everything and tile every window across all displays (`ms win tile-all`) |
+| `⇪ m a c h i n e s p i r i t` | the board, transient (closes when you click away, reopens where you were) |
 | `⇪ q u i t` | quit frontmost app (⌘Q) — spelled out on purpose |
 | `⇪ s l e e p` | sleep the **display only** (`pmset displaysleepnow`) — spelled out |
 | `⇪ l l` | focus the address/search bar (sends ⌘L to the frontmost app) |
-| `⇪ l k` | Leader Key settings (see limitation below) |
+| `⇪ l k` | fork settings (`msleaderkey://settings`) |
 
 `⇪ l l` sends ⌘L to whatever's frontmost, which focuses the address/search bar in browsers that use that shortcut (Safari, Chrome, Arc, Brave, Firefox); nothing is browser-hardcoded. In another app, that app decides what ⌘L does. *Future:* cycling through in-page fields is a browser-extension/native-messaging proposal in the handoff notes; it is not implemented. This v1 just hits the primary address bar via ⌘L.
-
-**`⇪ l k` limitation:** it only surfaces Leader Key's settings if the settings window is *already* open — menu-bar apps don't reliably pop their settings from `open -a`, so from a cold state you still need a manual **⌘,** once Leader Key is focused. That bind still uses the legacy name-based `open` command. The fork already exposes a direct settings route: `open "msleaderkey://settings"`, also reachable from its menu.
 
 **`⇪ s l e e p`** sleeps only the **display** — it does not request system sleep or create a keep-awake assertion. Work can continue under the existing power policy, but this bind does not guarantee the system stays awake indefinitely. The bind is `(sleep 2 && pmset displaysleepnow) &` routed through [`run-quiet.sh`](bin/run-quiet.sh): the **2 s delay** lets the key-release events of the chord settle so the display doesn't instantly wake back up, and the `&` backgrounds it so Leader Key never blocks. Spelled out (rule 4) both as a mnemonic and so it's never one slip away.
 
 **Reloading after a config edit:** the fork watches `config.json` with a **300 ms debounce** and re-arms its watcher after atomic replacements. The board watches it too. [`bin/reload-leaderkey.sh`](bin/reload-leaderkey.sh) remains a legacy recovery helper; its name-based launch can resolve to stock Leader Key or a build copy. For the installed fork, restart its existing LaunchAgent if recovery is needed, then verify the running path.
 
 Window placement and resize live in [Window management](#window-management) below. This listing is maintained by hand — after changing bindings, re-run `./scripts/sync.sh` and update the tables in the same commit.
+
+## Hold mode — keep `⇪` down to keep going
+
+If Caps (F19) is **still physically held** when a bind fires, the fork stays live instead of closing — the panel is non-activating, so the app you just targeted keeps focus — until you let go:
+
+- A bind can declare `"hold": "<command>"` + `"holdKeys": "<keys>"` (default: its own key). Every press of a hold key re-runs the command with `MS_HOLD_N` (1, 2, 3…) and `MS_HOLD_KEY` in the environment. Exit `10` = "finished" (overlay pulses blue), `11` = "nothing to do" (red flash).
+- `␣` after **any** bind places the frontmost window by the mouse, then walks the grow ladder.
+- Any other key starts a fresh sequence from the root, still holding.
+- Release is detected by a 50 ms key-state probe that exists only while holding — zero cost otherwise.
+
+| After | Spam | Does |
+|---|---|---|
+| any site bind | its last letter | collect every matching tab into one window, then cycle them |
+| `⇪ f i` | `i` | gather Finder windows into tabs of one window (blue when none are left) |
+| `⇪ t m u x` | `x` | 1st: new protected tmux window; then splits right, down, right, down…; maximizes at 3 panes, tiles from 5 |
+| `⇪ p s` / `⇪ u r` | `s` / `r` | next Photoshop document / next Unreal window |
+| `⇪ f f f` / `⇪ g g g` | `f` or `g` | keep moving displays in the first direction |
+| anything | `␣` | place by mouse, then the grow ladder |
 
 ## Window management
 
@@ -203,17 +231,19 @@ Rectangle does the window math; Leader Key drives it through Rectangle's URL sch
 ⇪ z z z   bottom-left     ⇪ x x x   bottom half     ⇪ c c c   bottom-right
 ⇪ v v v   left third      ⇪ b b b   center third    ⇪ n n n   right third
 ⇪ 1 1 1   first third     ⇪ 2 2 2   center third    ⇪ 3 3 3   last third
-⇪ c s s   center          ⇪ m m m   maximize        ⇪ f f f   other display
-⇪ c e n   center (screen) ⇪ a m m m almost-maximize
+⇪ c s s   center          ⇪ m m m   maximize        ⇪ f f f   next display
+⇪ c e n   center (screen) ⇪ a m m m almost-maximize ⇪ g g g   previous display
+⇪ ␣ ␣     place by mouse: corner → quarter, edge → half, else almost-maximize
 ⇪ = =     grow            ⇪ - -     shrink          ⇪ q u i t  ⌘Q frontmost app
 ```
 
 - **Triple letters** for placement to reduce accidental placement; the two resize keys are **double-taps** because they're pressed repeatedly. (Notes moved to `⇪ n o` when `n` became the right-third group.)
 - **Thirds two ways**: the spatial letters `v`/`b`/`n` (left/center/right) and the numeric row `1`/`2`/`3` (first/center/last) both drive Rectangle's thirds — pick whichever your hand reaches for.
 - **Two centers**: `⇪ c s s` is Rectangle's own center action; `⇪ c e n` runs [`bin/center-window.applescript`](bin/center-window.applescript), which centers the frontmost window on *whichever display it currently sits on* (multi-monitor aware) without resizing it.
-- **`⇪ a m m m`** is Rectangle's almost-maximize (a small inset from full-screen).
+- **`⇪ a m m m` / `⇪ m m m`** use [`ms win place`](tools/ms/README.md) (90% inset / exact visible frame — **maximize stops above the Dock**), so they share geometry with the `⇪ ␣ ␣` ladder.
+- **`⇪ ␣ ␣`** moves the focused window to the display under the mouse and sizes it by where the pointer sits on it. Hold `⇪` and keep pressing `␣` (or re-tap `⇪ ␣ ␣` within 1.5 s) to walk the grow ladder: quarter → its side half → almost-maximize → maximize → full screen → maximize → almost-maximize → … (maximize drops back to almost-maximize only when it came out of full screen).
 - **Grow/shrink bypass Rectangle**: [`bin/win-lerp.applescript`](bin/win-lerp.applescript) animates the frontmost window ±120 px over 22 smoothstep-eased frames — centered as it scales, with a primary-origin left/top clamp and a 300×200 floor so shrink-spam can't crush a window. This helper interpolates the resize; its clamp is not fully multi-monitor-aware (negative-origin displays are a limitation).
-- **`⇪ f f f`** cycles displays (with two monitors, a toggle); Rectangle centers the window on arrival, so no follow-up action is needed.
+- **`⇪ f f f` / `⇪ g g g`** send the window to the next / previous display; hold `⇪` and spam `f` or `g` to keep going in the **first** direction.
 - Rectangle's *native* larger/smaller step is bumped to 100 px by [`scripts/macos-defaults.sh`](scripts/macos-defaults.sh) for when it's triggered outside Leader Key.
 
 ## The launcher — MachineSpirit Leader Key fork
@@ -236,6 +266,8 @@ What the fork adds over stock:
 **Crowded menu bar:** macOS puts a newly-added status item in the hidden overflow first. If the skull isn't visible, ⌘-drag it left of the clock once — macOS remembers the spot.
 
 ## Menu bar
+
+**Compact bar (Stats-style):** tiny labels above each value — `TERM · TMUX · SHEOL` counts, then `CPU · GPU · RAM · TEMP · NET` (NET = live ↓/↑ throughput from interface counters, so Little Snitch Network Monitor's menu bar isn't needed for a glance). Values turn amber/red only when extreme (CPU/GPU ≥ 70/90 %, RAM pressure warn/critical, TEMP ≥ 80/95 °C). The machine-spirit counts glide to new values (one 400 ms, 30 fps tween that stops when settled); stats resample every second and snap, so the bar stays ~1 % CPU idle. The terminals dropdown is sectioned iTerm2 · Terminal · tmux living · sheol, and the iTerm **hotkey window** row has no ✕ — it focuses but can't be killed from here.
 
 ![The single status item at twice its logical size](docs/img/menubar.png)
 
@@ -407,6 +439,8 @@ Every summon of the iTerm hotkey window boots a randomized splash, typed to the 
 
 ## tmux protection & sheol (experimental)
 
+**New this wave:** the status bar shows the full spirit name (`obsidian-cipher`) when the client is ≥ 70 columns wide, truncated to 12 below that. `⇪ t m u x` + hold `x` spawns and spirals panes (see [hold mode](#hold-mode--keep--down-to-keep-going)). `terminals-core reap` closes iTerm sessions that are nothing but an idle login shell (≥ 3 min untouched; never tmux, never the hotkey window), rate-limited to once a minute and run in the background whenever a terminal bind fires.
+
 Deliberate terminal protection you opt into at launch, plus a way to recover sessions that outlived their window. (This replaced an earlier "busy-pane shield" experiment — see the design notes for why.)
 
 ### `⇪ t t` — launch a protected pane
@@ -480,6 +514,10 @@ Only ever **one sheol** runs: pressing `⇪ t m u x` again kills any open ledger
 sheol is the first piece of a terminal necromancer theme for machine-spirit. the idea: your terminals are spirits. living ones have a watcher, detached ones wander the underworld with their work still breathing, and you get to revive them, commune with them, or banish them for good. it started as a way to never lose a long running session again and turned into something with a bit of soul. today it spans the terminal TUI, menu ledger, and an optional embedded terminal pane in the board. a conditional dock nag and a richer native graphical ledger remain future work. lean into the language everywhere: land of the living, restless spirits, revive, commune, banish. it's a workflow tool that's also a little bit alive.
 
 ## MachineSpirit.app — the board and typing overlay
+
+**Typing overlay game-feel (all behind `OverlayFX` knobs, `msFX.*` defaults):** a green skull at the root and as the cursor; each matched letter pops in big and springs down with a faint shockwave ring; a miss flashes the whole overlay red and pulses the current letter; `⌫` retracts one level (at the root the skull pulses); hold-mode completions pulse blue; closing plays a reverse collapse at half the opening's duration. Nodes are clickable (it navigates the fork via `msleaderkey://navigate`), hovering any node lights its route and dims the rest, and non-root nodes stay inside the visible frame (clear of the menu bar and Dock). Optional curved traces (`msFX.curvedTraces`), 1× displays get matched `contentsScale` + edge antialiasing. Zero work while idle — all motion is Core Animation.
+
+**Local stats (opt-in, off by default):** `msStatsEnabled` counts fired binds into `~/Library/Application Support/MachineSpirit/stats.json` (day-level counts + key paths only, never finer timestamps), with an estimated time saved; shown in the board with reset/disable. Nothing leaves the machine.
 
 ![Close-up of the running node-graph board](docs/img/board.png)
 

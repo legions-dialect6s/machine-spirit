@@ -103,8 +103,9 @@
               "actions" : [
                 {
                   "key" : "m",
+                  "label" : "Almost maximize",
                   "type" : "command",
-                  "value" : "open -g \"rectangle://execute-action?name=almost-maximize\""
+                  "value" : "~/bin/run-quiet.sh ~/bin/ms win place amm"
                 }
               ],
               "key" : "m",
@@ -223,6 +224,14 @@
           "key" : "i",
           "type" : "application",
           "value" : "/Applications/Discord.app"
+        },
+        {
+          "hold" : "~/bin/web-collect.sh drive.google.com",
+          "holdKeys" : "r",
+          "key" : "r",
+          "label" : "Google Drive",
+          "type" : "command",
+          "value" : "osascript ~/bin/web-jump.applescript drive.google.com"
         }
       ],
       "key" : "d",
@@ -328,6 +337,8 @@
         {
           "actions" : [
             {
+              "hold" : "open -g \"rectangle://execute-action?name=next-display\"",
+              "holdKeys" : "fg",
               "key" : "f",
               "type" : "command",
               "value" : "open -g \"rectangle://execute-action?name=next-display\""
@@ -337,6 +348,8 @@
           "type" : "group"
         },
         {
+          "hold" : "~/bin/finder-collect.sh",
+          "holdKeys" : "i",
           "key" : "i",
           "type" : "command",
           "value" : "~/bin/run-quiet.sh osascript ~/bin/app-jump.applescript Finder"
@@ -359,8 +372,21 @@
         },
         {
           "key" : "t",
-          "type" : "application",
-          "value" : "/System/Applications/FaceTime.app"
+          "label" : "FaceTime (from Messages: call selected)",
+          "type" : "command",
+          "value" : "~/bin/run-quiet.sh ~/bin/app-toggle.sh \"FaceTime\""
+        },
+        {
+          "actions" : [
+            {
+              "key" : "2",
+              "label" : "Focusrite Control 2",
+              "type" : "application",
+              "value" : "/Applications/Focusrite Control 2.app"
+            }
+          ],
+          "key" : "c",
+          "type" : "group"
         }
       ],
       "key" : "f",
@@ -371,6 +397,8 @@
         {
           "actions" : [
             {
+              "hold" : "~/bin/web-collect.sh github.com",
+              "holdKeys" : "t",
               "key" : "t",
               "type" : "command",
               "value" : "osascript ~/bin/web-jump.applescript github.com"
@@ -384,6 +412,8 @@
             {
               "actions" : [
                 {
+                  "hold" : "~/bin/web-collect.sh grok.com,x.com/i/grok",
+                  "holdKeys" : "k",
                   "key" : "k",
                   "type" : "command",
                   "value" : "osascript ~/bin/web-jump.applescript grok.com,x.com/i/grok"
@@ -397,6 +427,8 @@
           "type" : "group"
         },
         {
+          "hold" : "~/bin/web-collect.sh google.com",
+          "holdKeys" : "o",
           "key" : "o",
           "type" : "command",
           "value" : "osascript ~/bin/web-jump.applescript google.com"
@@ -407,22 +439,35 @@
           "value" : "/Applications/ChatGPT.app"
         },
         {
+          "hold" : "~/bin/web-collect.sh chatgpt.com,chat.openai.com",
+          "holdKeys" : "w",
           "key" : "w",
           "type" : "command",
           "value" : "osascript ~/bin/web-jump.applescript chatgpt.com,chat.openai.com"
+        },
+        {
+          "actions" : [
+            {
+              "hold" : "open -g \"rectangle://execute-action?name=previous-display\"",
+              "holdKeys" : "gf",
+              "key" : "g",
+              "label" : "Previous display",
+              "type" : "command",
+              "value" : "open -g \"rectangle://execute-action?name=previous-display\""
+            }
+          ],
+          "key" : "g",
+          "type" : "group"
         }
       ],
       "key" : "g",
       "type" : "group"
     },
     {
-      "key" : "h",
-      "type" : "command",
-      "value" : "~/bin/run-quiet.sh osascript -e 'tell application \"System Events\" to keystroke \"h\" using command down'"
-    },
-    {
       "actions" : [
         {
+          "hold" : "~/bin/web-collect.sh instagram.com",
+          "holdKeys" : "g",
           "key" : "g",
           "type" : "command",
           "value" : "osascript ~/bin/web-jump.applescript instagram.com"
@@ -445,8 +490,9 @@
       "actions" : [
         {
           "key" : "k",
+          "label" : "Leader Key settings",
           "type" : "command",
-          "value" : "open -a \"Leader Key\" --args --show-settings"
+          "value" : "open -g \"msleaderkey://settings\""
         },
         {
           "key" : "l",
@@ -496,11 +542,84 @@
           "actions" : [
             {
               "key" : "m",
+              "label" : "Maximize (above Dock)",
               "type" : "command",
-              "value" : "open -g \"rectangle://execute-action?name=maximize\""
+              "value" : "~/bin/run-quiet.sh ~/bin/ms win place max"
             }
           ],
           "key" : "m",
+          "type" : "group"
+        },
+        {
+          "actions" : [
+            {
+              "actions" : [
+                {
+                  "actions" : [
+                    {
+                      "actions" : [
+                        {
+                          "actions" : [
+                            {
+                              "actions" : [
+                                {
+                                  "actions" : [
+                                    {
+                                      "actions" : [
+                                        {
+                                          "actions" : [
+                                            {
+                                              "actions" : [
+                                                {
+                                                  "actions" : [
+                                                    {
+                                                      "key" : "t",
+                                                      "label" : "machine-spirit board",
+                                                      "type" : "command",
+                                                      "value" : "open \"machinespirit://board?transient=1\""
+                                                    }
+                                                  ],
+                                                  "key" : "i",
+                                                  "type" : "group"
+                                                }
+                                              ],
+                                              "key" : "r",
+                                              "type" : "group"
+                                            }
+                                          ],
+                                          "key" : "i",
+                                          "type" : "group"
+                                        }
+                                      ],
+                                      "key" : "p",
+                                      "type" : "group"
+                                    }
+                                  ],
+                                  "key" : "s",
+                                  "type" : "group"
+                                }
+                              ],
+                              "key" : "e",
+                              "type" : "group"
+                            }
+                          ],
+                          "key" : "n",
+                          "type" : "group"
+                        }
+                      ],
+                      "key" : "i",
+                      "type" : "group"
+                    }
+                  ],
+                  "key" : "h",
+                  "type" : "group"
+                }
+              ],
+              "key" : "c",
+              "type" : "group"
+            }
+          ],
+          "key" : "a",
           "type" : "group"
         }
       ],
@@ -522,8 +641,9 @@
         },
         {
           "key" : "o",
-          "type" : "application",
-          "value" : "/System/Applications/Notes.app"
+          "label" : "Notes",
+          "type" : "command",
+          "value" : "~/bin/run-quiet.sh ~/bin/app-toggle.sh \"Notes\""
         }
       ],
       "key" : "n",
@@ -533,10 +653,13 @@
       "actions" : [
         {
           "key" : "h",
-          "type" : "application",
-          "value" : "/System/Applications/Photos.app"
+          "label" : "Photos",
+          "type" : "command",
+          "value" : "~/bin/run-quiet.sh ~/bin/app-toggle.sh \"Photos\""
         },
         {
+          "hold" : "~/bin/ps-cycle.sh",
+          "holdKeys" : "s",
           "key" : "s",
           "type" : "application",
           "value" : "/Applications/Adobe Photoshop 2026/Adobe Photoshop 2026.app"
@@ -545,6 +668,12 @@
           "key" : "w",
           "type" : "application",
           "value" : "/System/Applications/Passwords.app"
+        },
+        {
+          "key" : "b",
+          "label" : "Photo Booth",
+          "type" : "command",
+          "value" : "~/bin/run-quiet.sh ~/bin/app-toggle.sh \"Photo Booth\""
         }
       ],
       "key" : "p",
@@ -693,27 +822,24 @@
           "type" : "group"
         },
         {
+          "hold" : "~/bin/web-collect.sh x.com,twitter.com",
+          "holdKeys" : "t",
           "key" : "t",
           "type" : "command",
           "value" : "osascript ~/bin/web-jump.applescript x.com,twitter.com"
         },
         {
+          "hold" : "~/bin/web-collect.sh x.com,twitter.com",
+          "holdKeys" : "x",
           "key" : "x",
           "type" : "command",
           "value" : "osascript ~/bin/web-jump.applescript x.com,twitter.com"
         },
         {
-          "key" : "l",
-          "label" : "😴 sleep",
-          "type" : "group",
           "actions" : [
             {
-              "key" : "e",
-              "type" : "group",
               "actions" : [
                 {
-                  "key" : "e",
-                  "type" : "group",
                   "actions" : [
                     {
                       "key" : "p",
@@ -721,11 +847,44 @@
                       "type" : "command",
                       "value" : "~/bin/run-quiet.sh sh -c '(sleep 2 && pmset displaysleepnow) &'"
                     }
-                  ]
+                  ],
+                  "key" : "e",
+                  "type" : "group"
                 }
-              ]
+              ],
+              "key" : "e",
+              "type" : "group"
             }
-          ]
+          ],
+          "key" : "l",
+          "label" : "😴 sleep",
+          "type" : "group"
+        },
+        {
+          "actions" : [
+            {
+              "actions" : [
+                {
+                  "hold" : "~/bin/web-collect.sh admin.shopify.com",
+                  "holdKeys" : "p",
+                  "key" : "p",
+                  "label" : "Shopify admin",
+                  "type" : "command",
+                  "value" : "osascript ~/bin/web-jump.applescript admin.shopify.com"
+                },
+                {
+                  "key" : "w",
+                  "label" : "Show + tile every window",
+                  "type" : "command",
+                  "value" : "~/bin/run-quiet.sh ~/bin/ms win tile-all"
+                }
+              ],
+              "key" : "o",
+              "type" : "group"
+            }
+          ],
+          "key" : "h",
+          "type" : "group"
         }
       ],
       "key" : "s",
@@ -733,16 +892,6 @@
     },
     {
       "actions" : [
-        {
-          "key" : "e",
-          "type" : "application",
-          "value" : "/System/Applications/TextEdit.app"
-        },
-        {
-          "key" : "r",
-          "type" : "application",
-          "value" : "/System/Applications/Utilities/Terminal.app"
-        },
         {
           "key" : "t",
           "type" : "command",
@@ -753,6 +902,8 @@
             {
               "actions" : [
                 {
+                  "hold" : "~/bin/tmux-hold.sh",
+                  "holdKeys" : "x",
                   "key" : "x",
                   "type" : "command",
                   "value" : "~/bin/run-quiet.sh ~/bin/tmux-sheol-open.sh"
@@ -796,6 +947,44 @@
           "key" : "q",
           "label" : "✕ kill selected tmux pane  ◆◆◆◆",
           "type" : "group"
+        },
+        {
+          "actions" : [
+            {
+              "key" : "l",
+              "label" : "Telegram",
+              "type" : "application",
+              "value" : "/Applications/Telegram.app"
+            },
+            {
+              "key" : "x",
+              "label" : "TextEdit (again closes all, asks if unsaved)",
+              "type" : "command",
+              "value" : "~/bin/run-quiet.sh ~/bin/app-toggle.sh \"TextEdit\""
+            },
+            {
+              "key" : "r",
+              "label" : "Terminal",
+              "type" : "application",
+              "value" : "/System/Applications/Utilities/Terminal.app"
+            }
+          ],
+          "key" : "e",
+          "type" : "group"
+        },
+        {
+          "key" : "g",
+          "label" : "Telegram",
+          "type" : "application",
+          "value" : "/Applications/Telegram.app"
+        },
+        {
+          "hold" : "~/bin/web-collect.sh tripo3d.ai",
+          "holdKeys" : "r",
+          "key" : "r",
+          "label" : "Tripo",
+          "type" : "command",
+          "value" : "osascript ~/bin/web-jump.applescript tripo3d.ai"
         }
       ],
       "key" : "t",
@@ -826,15 +1015,15 @@
           "type" : "group"
         },
         {
-          "key" : "l",
-          "type" : "group",
           "actions" : [
             {
               "key" : "c",
               "type" : "command",
               "value" : "~/bin/run-quiet.sh osascript ~/bin/app-jump.applescript VLC"
             }
-          ]
+          ],
+          "key" : "l",
+          "type" : "group"
         }
       ],
       "key" : "v",
@@ -865,6 +1054,8 @@
     {
       "actions" : [
         {
+          "hold" : "~/bin/web-collect.sh x.com,twitter.com",
+          "holdKeys" : ".",
           "key" : ".",
           "type" : "command",
           "value" : "osascript ~/bin/web-jump.applescript x.com,twitter.com"
@@ -890,6 +1081,8 @@
       "type" : "group"
     },
     {
+      "hold" : "~/bin/web-collect.sh youtube.com",
+      "holdKeys" : "y",
       "key" : "y",
       "type" : "command",
       "value" : "osascript ~/bin/web-jump.applescript youtube.com"
@@ -909,6 +1102,65 @@
         }
       ],
       "key" : "z",
+      "type" : "group"
+    },
+    {
+      "actions" : [
+        {
+          "hold" : "~/bin/ms win place step",
+          "holdKeys" : "space",
+          "key" : "space",
+          "label" : "Place window by mouse",
+          "quickRepeat" : true,
+          "type" : "command",
+          "value" : "~/bin/run-quiet.sh ~/bin/ms win place smart"
+        }
+      ],
+      "key" : "space",
+      "type" : "group"
+    },
+    {
+      "actions" : [
+        {
+          "key" : "h",
+          "label" : "Hide app (⌘H)",
+          "type" : "command",
+          "value" : "~/bin/run-quiet.sh osascript -e 'tell application \"System Events\" to keystroke \"h\" using command down'"
+        },
+        {
+          "actions" : [
+            {
+              "actions" : [
+                {
+                  "key" : "e",
+                  "label" : "Hide everything",
+                  "type" : "command",
+                  "value" : "~/bin/run-quiet.sh ~/bin/ms win hide-all"
+                }
+              ],
+              "key" : "d",
+              "type" : "group"
+            }
+          ],
+          "key" : "i",
+          "type" : "group"
+        }
+      ],
+      "key" : "h",
+      "type" : "group"
+    },
+    {
+      "actions" : [
+        {
+          "hold" : "~/bin/ms win cycle --app UnrealEditor",
+          "holdKeys" : "r",
+          "key" : "r",
+          "label" : "Unreal Editor",
+          "type" : "command",
+          "value" : "~/bin/run-quiet.sh sh -c 'pgrep -xq UnrealEditor && ~/bin/ms win cycle --app UnrealEditor || open -b com.epicgames.UnrealEditor'"
+        }
+      ],
+      "key" : "u",
       "type" : "group"
     }
   ],
