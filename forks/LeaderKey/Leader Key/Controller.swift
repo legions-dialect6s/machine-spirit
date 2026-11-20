@@ -37,6 +37,8 @@ class Controller {
   private var holdCount = 0
   private var holdSpaceCount = 0
   private var holdWatch: Timer?
+  private var holdTap: CFMachPort?
+  private var holdTapSource: CFRunLoopSource?
   private var lastFired: (key: String, at: Date, count: Int)?
   static let leaderKeyCode: CGKeyCode = 80  // F19 (Karabiner maps ⇪ → F19)
 
@@ -445,23 +447,75 @@ class Controller {
     holdCount = 0
     holdSpaceCount = 0
     postNav(state: "hold", path: path.joined(separator: "/"))
-    // Release detection: a cheap 50 ms keyState probe that exists ONLY while
-    // holding (Carbon key-up is not delivered to every path reliably).
+    // The panel steps aside and a session event tap owns the keyboard while
+    // ⇪ is held: it swallows only keys pressed during the hold, so the target
+    // app keeps focus. (The first version re-took key every 50 ms whenever the
+    // action activated its app — a visible focus tug-of-war.)
+    if installHoldTap() { window?.orderOut(nil) }
+    // Release detection backstop: a 50 ms keyState probe that exists ONLY
+    // while holding (the tap also ends the hold on F19 key-up).
     holdWatch?.invalidate()
     let timer = Timer(timeInterval: 0.05, repeats: true) { [weak self] _ in
       guard let self, self.holdAction != nil else { return }
-      if !Controller.leaderPhysicallyDown() {
-        self.hide()
-      } else if let window = self.window, !window.isKeyWindow {
-        // An app the action activated took key; take it back while ⇪ is held.
-        window.makeKeyAndOrderFront(nil)
-      }
+      if !Controller.leaderPhysicallyDown() { self.hide() }
     }
     RunLoop.main.add(timer, forMode: .common)
     holdWatch = timer
   }
 
+  private func installHoldTap() -> Bool {
+    removeHoldTap()
+    let mask = (1 << CGEventType.keyDown.rawValue) | (1 << CGEventType.keyUp.rawValue)
+    guard
+      let tap = CGEvent.tapCreate(
+        tap: .cgSessionEventTap, place: .headInsertEventTap, options: .defaultTap,
+        eventsOfInterest: CGEventMask(mask),
+        callback: { _, type, event, refcon in
+          guard let refcon else { return Unmanaged.passUnretained(event) }
+          let controller = Unmanaged<Controller>.fromOpaque(refcon).takeUnretainedValue()
+          return controller.holdTapEvent(type, event)
+        }, userInfo: Unmanaged.passUnretained(self).toOpaque())
+    else { return false }  // no Accessibility → keep the key-panel path
+    let source = CFMachPortCreateRunLoopSource(nil, tap, 0)
+    CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
+    CGEvent.tapEnable(tap: tap, enable: true)
+    holdTap = tap
+    holdTapSource = source
+    return true
+  }
+
+  private func removeHoldTap() {
+    if let tap = holdTap {
+      CGEvent.tapEnable(tap: tap, enable: false)
+      CFMachPortInvalidate(tap)
+    }
+    if let source = holdTapSource { CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes) }
+    holdTap = nil
+    holdTapSource = nil
+  }
+
+  /// Runs on the main run loop. Swallows every key event while holding.
+  private func holdTapEvent(_ type: CGEventType, _ event: CGEvent) -> Unmanaged<CGEvent>? {
+    if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+      if let tap = holdTap { CGEvent.tapEnable(tap: tap, enable: true) }
+      return Unmanaged.passUnretained(event)
+    }
+    guard holdAction != nil else { return Unmanaged.passUnretained(event) }
+    let code = CGKeyCode(event.getIntegerValueField(.keyboardEventKeycode))
+    if code == Controller.leaderKeyCode {
+      if type == .keyUp { DispatchQueue.main.async { self.hide() } }
+      return nil  // F19 repeats/release never reach anything else
+    }
+    if type == .keyDown, event.getIntegerValueField(.keyboardEventAutorepeat) == 0,
+      let ns = NSEvent(cgEvent: event)
+    {
+      DispatchQueue.main.async { self.handleHoldKey(ns) }
+    }
+    return nil
+  }
+
   private func exitHold() {
+    removeHoldTap()
     holdWatch?.invalidate()
     holdWatch = nil
     holdAction = nil
@@ -495,6 +549,7 @@ class Controller {
     } else {
       // Any other key while ⇪ is held starts a fresh sequence from the root.
       exitHold()
+      window?.makeKeyAndOrderFront(nil)
       userState.clear()
       postBoardNavigation(hidden: false)
       handleKey(char, withModifiers: event.modifierFlags)
