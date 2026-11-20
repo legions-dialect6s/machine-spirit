@@ -17,44 +17,6 @@
             ],
             "virtual_hid_keyboard": {
                 "keyboard_type_v2": "ansi"
-            },
-            "complex_modifications": {
-                "rules": [
-                    {
-                        "description": "Command–Space–M toggles native fullscreen",
-                        "manipulators": [
-                            {
-                                "type": "basic",
-                                "from": {
-                                    "simultaneous": [
-                                        {
-                                            "key_code": "spacebar"
-                                        },
-                                        {
-                                            "key_code": "m"
-                                        }
-                                    ],
-                                    "simultaneous_options": {
-                                        "key_down_order": "strict"
-                                    },
-                                    "modifiers": {
-                                        "mandatory": [
-                                            "command"
-                                        ]
-                                    }
-                                },
-                                "parameters": {
-                                    "basic.simultaneous_threshold_milliseconds": 180
-                                },
-                                "to": [
-                                    {
-                                        "shell_command": "/usr/bin/open -g -b com.machinespirit.leader-key 'msleaderkey://navigate?keys=space,m'"
-                                    }
-                                ]
-                            }
-                        ]
-                    }
-                ]
             }
         }
     ],
