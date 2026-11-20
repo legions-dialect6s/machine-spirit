@@ -47,8 +47,8 @@ class Controller {
     self.userConfig = userConfig
     userState.navigationDidChange = { [weak self] in
       guard let self else { return }
-      self.postBoardNavigation(
-        hidden: !self.boardPanelShown || self.userState.navigationPath.isEmpty)
+      // Backspace can return an open panel to the root (an empty path).
+      self.postBoardNavigation(hidden: !self.boardPanelShown)
     }
 
     Task {

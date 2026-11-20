@@ -28,6 +28,12 @@ owner confirmation only**.
 
 ## Ledger
 
+### v0.5.1-classic-driver — definitive checkpoint, 2026-11-19
+
+Tap and release Caps, enter a group, and press Backspace. The launcher shows the parent. When you reach the root, you can immediately type a different route. The fix changes the launcher's visibility notification when a path becomes empty.
+
+This tag follows `v0.5-classic-driver` below. The signed apps, exact live shortcuts, release CLI, source bundle and recovery instructions are in `~/Library/Application Support/MachineSpirit/Checkpoints/v0.5.1-classic-driver/`. Run `shasum -a 256 -c SHA256SUMS` from that directory to check the package.
+
 ### v0.5-classic-driver — definitive daily driver, 2026-11-19
 
 Alexander confirmed the classic node motion and window placement felt right. This annotated local tag includes anchored hover, the original randomness effects, pre-commit window previews, directional double arrows, and the new Safari Gmail route on `⇪ G M`. Finder tab collection is available on `⇪ F I` followed by additional I presses while Caps stays down. The portable shortcut tree matches the full live tree, including the existing Tripo and Translate shortcuts.

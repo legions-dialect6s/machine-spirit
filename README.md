@@ -105,7 +105,7 @@ Home-directory prefixes in the captured Leader Key config become `__HOME__` on t
 
 ## Keybind reference
 
-**How to run anything:** tap `⇪` (Caps Lock — remapped to F19, so it never capitalizes), then type a sequence. With the graph overlay enabled, a click-through graph shows the available neighborhood; with it disabled, Leader Key shows its normal panel/cheatsheet. `⌫` steps back one level (at the root it stays open on the skull); `Esc` closes — and `⇪ Esc` at the root also un-captures the frontmost text field (in Messages it jumps to conversation search, so you can type a name). `⇪ l k` opens the fork's settings. **Keep holding `⇪` after a bind fires and you're in [hold mode](#hold-mode--keep--down-to-keep-going).**
+**How to run anything:** tap `⇪` (Caps Lock — remapped to F19, so it never capitalizes), then type a sequence. With the graph overlay enabled, a click-through graph shows the available neighborhood; with it disabled, Leader Key shows its normal panel/cheatsheet. `⌫` steps back one level (back at the skull, type another route without pressing Caps again); `Esc` closes — and `⇪ Esc` at the root also un-captures the frontmost text field (in Messages it jumps to conversation search, so you can type a name). `⇪ l k` opens the fork's settings. **Keep holding `⇪` after a bind fires and you're in [hold mode](#hold-mode--keep--down-to-keep-going).**
 
 The tree follows four rules, by escalating "weight" of the action:
 
@@ -127,7 +127,7 @@ The tree follows four rules, by escalating "weight" of the action:
 | `⇪ f i` | Finder (jump/cycle) | | `⇪ s i g` | Signal (jump/cycle) |
 | `⇪ d i` | Discord | | `⇪ s e` | System Settings ✕ |
 | `⇪ f a c` / `⇪ f t` | FaceTime ✕ (from Messages: FaceTime the selected chat) | | `⇪ s p` | Spotify |
-| `⇪ f i` (hold `i`) | Finder — hold to gather windows into tabs | | `⇪ t e x` | TextEdit ✕ (closes all; asks if unsaved) |
+| `⇪ f i` (keep ⇪ down, tap `i` again) | Gather one more Finder tab per press | | `⇪ t e x` | TextEdit ✕ (closes all; asks if unsaved) |
 | `⇪ g p` | ChatGPT | | `⇪ t e r` | Terminal |
 | `⇪ i t` | iTerm | | `⇪ v l c` | VLC (jump/cycle) |
 | `⇪ m e` | Messages → straight into conversation search (type a name) | | `⇪ v m w` | VMware Fusion |
