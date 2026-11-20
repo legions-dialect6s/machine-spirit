@@ -8,6 +8,8 @@ final class MemoryDefaults: UserDefaults, @unchecked Sendable {
   override func object(forKey key: String) -> Any? { values[key] }
   override func bool(forKey key: String) -> Bool { values[key] as? Bool ?? false }
   override func set(_ value: Any?, forKey key: String) { values[key] = value }
+  override func dictionaryRepresentation() -> [String: Any] { values }
+  override func removeObject(forKey key: String) { values.removeValue(forKey: key) }
 }
 
 @main struct StatsSmoke {
@@ -69,6 +71,22 @@ final class MemoryDefaults: UserDefaults, @unchecked Sendable {
     defaults.set(false, forKey: "msFX.letterPop")
     defaults.set(-3.0, forKey: "msFX.popDuration")
     precondition(!OverlayFX(defaults: defaults).letterPop && OverlayFX(defaults: defaults).popDuration == 0)
+    precondition(knobs.accentHex == "#36DE6A" && knobs.randomness == 0.35 && knobs.shake == 0.4 && knobs.glitch == 0.5)
+    defaults.set("#AB34EF", forKey: "msFX.accentHex")
+    defaults.set(3.0, forKey: "msFX.randomness")
+    defaults.set(-1.0, forKey: "msFX.shake")
+    defaults.set(Double.nan, forKey: "msFX.glitch")
+    let custom = OverlayFX(defaults: defaults)
+    precondition(custom.accentHex == "#AB34EF" && custom.randomness == 1 && custom.shake == 0 && custom.glitch == 0.5)
+    defaults.set("#wrong!", forKey: "msFX.accentHex")
+    precondition(OverlayFX(defaults: defaults).accentHex == "#36DE6A")
+    OverlayFX.reset(defaults: defaults)
+    precondition(OverlayFX(defaults: defaults).letterPop && defaults.bool(forKey: "msStatsEnabled"))
+    var tempo = OverlayTempo()
+    precondition(tempo.key(at: 0) == 0 && tempo.key(at: 0.07) == 1 && tempo.key(at: 0.14) == 1)
+    precondition(tempo.key(at: 0.74) == 0, "Idle did not decay tempo")
+    for i in 1...8 { _ = tempo.key(at: 0.74 + Double(i) * 0.07) }
+    precondition(tempo.key(at: 1.37) > 0.95)
     precondition(SkullMark.path().boundingBoxOfPath.height == 44)
     print("PASS opt-in, 10s debounce, disk round-trip, disable/reset cancellation, top 50, 60 days, estimates, FX knobs, skull geometry")
   }

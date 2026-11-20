@@ -32,7 +32,7 @@ The v3 overlay is a layer-hosting NSView in one reusable NSPanel, covering the e
 
 The whole config's layers and text are built at startup and on model changes. Navigation changes properties only. The root skull can occupy the original mouse point even over the menu bar or Dock; every non-root node and label is constrained to the screen’s visible frame. A focused letter stays at the mouse point where the safe frame permits; children are full size, grandchildren are 55% size / 45% opacity, and ancestors form a dim chain. Labels sit on dark rounded chips; preview labels appear only where space permits. Geometry in `Sources/OverlayScene.swift` fans away from screen edges, reserves children before previews, and caches visited layouts for the session anchor.
 
-Open/navigation uses 140ms ease-out motion with 8ms child staggering (capped at 40ms total); back collapses in 90ms and close retracts/scales/spins toward the root in 70ms. A typed letter springs down from 2.4× over 220ms and emits a pooled 380ms shockwave. Miss flashes the graph red for 350ms with a double letter pulse; done pulses the lit route blue for 450ms. Hold presses pulse the fired letter. The root and small focus mark use the reusable even-odd vector path in `SkullMark.swift`. Animations replace their keyed predecessor using presentation values. Incoming notifications share one runloop mailbox; duplicate paths do nothing. A fully hidden open commits the prebuilt focus immediately, then commits the complete fan after placement; diagnostics report both times. An interrupted close retains the existing presentation instead of clearing it.
+Open/navigation uses 140ms ease-out motion with 8ms child staggering (capped at 40ms total); back collapses in 90ms and close retracts/scales/spins nodes toward the root in 70ms, with a 200ms chromatic skull ghost. A summon remains visible for at least 260ms even if hide arrives immediately; reopening during a close preserves its anchor and presentation. A typed letter springs down from 2.4× over 220ms and emits a pooled 380ms shockwave. Miss flashes the graph red for 350ms with a double letter pulse; done pulses the lit route blue for 450ms. Hold presses pulse the fired letter. The 56pt root skull grows through 0.55 → 1.25 → 1.0 with a glow bloom; it and the small focus mark use the reusable even-odd vector path in `SkullMark.swift`. Animations replace their keyed predecessor using presentation values. Incoming notifications share one runloop mailbox; duplicate paths do nothing. A fully hidden open commits the prebuilt focus immediately, then commits the complete fan after placement; diagnostics report both times. An interrupted close retains the existing presentation instead of clearing it.
 
 The default hide policy keeps the panel ordered in with alpha 0 and no running clock. An A/B comparison favored this over ordering out. Set `MS_OVERLAY_ORDER_OUT=1` to repeat the comparison; `MS_OVERLAY_DIAGNOSTICS=1` prints receipt-to-first-commit, receipt-to-full-fan-commit, handler time, layout time, visible-node count, and total layer count. Neither setting changes the Leader Key config.
 
@@ -43,10 +43,51 @@ A root placed closer than its radius to the physical screen edge is clipped by t
 
 ## Overlay controls and local stats
 
-`OverlayFX` reads `msFX.<property>` from UserDefaults on each new overlay session. All booleans default true except `curvedTraces` (false): `skull`, `skullGlow`, `letterPop`, `shockwave`, `miss`, `back`, `done`, `hold`, `close`, `hover`. Duration keys are `openingDuration` (0.14), `popDuration` (0.22), `shockwaveDuration` (0.38), `missDuration` (0.35), `backDuration` (0.09), `doneDuration` (0.45), `holdDuration` (0.16), `closeDuration` (half opening), and `hoverDuration` (0.10), in seconds. Zero disables that motion; invalid/out-of-range values are bounded. Curved traces use one quadratic path per existing trace layer. No effect creates layers during navigation, and closing cancels all remaining animations.
+`OverlayFX` reads `msFX.<property>` from UserDefaults on each new overlay session. The board’s compact **Graphics** disclosure exposes an accent color well, Curvature/Randomness/Shake/Glitch sliders, effect toggles, and Reset to defaults. Values persist under `msFX.*` and apply on the next summon. `accentHex` defaults to `#36DE6A`; `curvature`, `randomness`, `shake`, and `glitch` default to 0.4, 0.35, 0.4, and 0.5, bounded to 0…1. All booleans default true except `curvedTraces` (false): `skull`, `skullGlow`, `letterPop`, `shockwave`, `miss`, `back`, `done`, `hold`, `close`, `hover`, `placementPreview`, `hud`. Duration keys are `openingDuration` (0.14), `popDuration` (0.22), `shockwaveDuration` (0.38), `missDuration` (0.35), `backDuration` (0.09), `doneDuration` (0.45), `holdDuration` (0.16), `closeDuration` (half opening), and `hoverDuration` (0.14; return uses 10/7 of this), in seconds. Zero disables that motion; invalid/out-of-range values are bounded. Curved traces use one quadratic path per existing trace layer. The graph’s effect layers are pooled before navigation, and closing cancels all remaining animations. Successful forward navigation and repeated hold keys drive an interval EMA: 450ms or slower is calm, 90ms or faster is full intensity. It controls 120ms discrete scene shake, larger/brighter shockwaves with a second thin ring at high speed, and masked letter slices. Arrival jitter is bounded by Randomness. There is no animation clock or idle decay loop; the next key incorporates the elapsed idle time.
 
-While shown, local/global mouse-moved monitors enable input only over visible node or label rectangles. Hover highlights the whole route, including distant previews. Clicking opens `msleaderkey://navigate?keys=…` with textual keys (`space`) and `activates = false`; the overlay panel can never become key or main. Monitors are removed as hiding begins. Late feedback cannot reopen a hidden overlay.
+While shown, local/global mouse-moved monitors enable input only over visible node or label rectangles. Hover scales the node and its route to 1.08× with a slight 140ms spring, brightens their traces/glow, and dims neighboring nodes. Non-route nodes drift radially outward 6–14pt with distance falloff and event-time Randomness; travel is reduced at screen edges to keep labels visible. Their traces follow the displaced endpoints. Hover-out returns over 200ms. Hit regions stay at layout positions (including preview scale and label bounds), so motion cannot change the target under a resting pointer. Targets are computed once per hover change; there is no animation loop. Clicking opens `msleaderkey://navigate?keys=…` with textual keys (`space`) and `activates = false`; the overlay panel can never become key or main. Monitors are removed as hiding begins. Late feedback cannot reopen a hidden overlay.
 
 Stats are off unless `msStatsEnabled` is true. Only valid distributed `leader.fired` events count; legacy URL pings and board pulses do not. `StatsStore` saves total fires, the top 50 key-path counts, daily counts for the last 60 calendar days, and an estimate of time saved (2.5 seconds per fire, 4 for a route containing a window-placement action). Only the retained top 50 counts survive relaunch; totals and saved-time estimates include all fires. Command text is inspected for classification but is never stored. There are no fine timestamps or network requests. The file is `~/Library/Application Support/MachineSpirit/stats.json`, written atomically after ten seconds without another fire; normal quit flushes pending counts. Reset cancels pending writes and deletes the file. Disable stops collection and pending writes, retaining previous saved totals. The board shows total/today/saved time, top five paths, Reset and Disable while enabled.
 
 See [the wave verification report](Tests/OverlayWaveVerification.md) for the isolated IPC harness, captures, timing, tests and remaining human integration checks.
+
+
+## Placement preview and HUD
+
+Nav `shown` with textual path `space` opens a click-through outline on the screen
+under the mouse. The preview owns mouse-moved monitors only in that state and
+removes them on path change, hold, or hide. It uses the same 10% edge bands as
+`ms win place smart`: corners select quarters, a single edge selects a half,
+and the interior selects a centered 90% rectangle. Zones animate in 150ms;
+setting `openingDuration` to zero disables this transition. The glow follows
+the stroke and the interior fill is 3.5% alpha. Existing graph hover monitors
+remain separate and retain their original shown-session lifetime.
+
+- `machinespirit://hud?style=caps&state=on` (or `off`) shows a 240×40pt pill at the top-center of
+  every screen, 10pt inside the visible frame. A small ⇪ and CAPS ON/OFF sit
+  on one line: red-amber ON / configured accent OFF. It slides down 8pt while
+  fading in over 160ms, holds for 1.1s, then fades up over 220ms. Repeated
+  toggles update the existing windows and renew the hold; even an interrupted
+  fade resumes from presentation without replacing the panels.
+- `machinespirit://hud?style=text&title=Hello&text=Message` shows a wrapping card
+  near the mouse, up to 420pt wide, held for ten seconds or dismissed by click.
+  URL-encode the title and text; neither has default sample copy, and an empty
+  payload shows nothing. Content exceeding the available screen height
+  is truncated. Text/title input is bounded to avoid unbounded layout work.
+
+Both surfaces use 15% accent over 55% near-black glass with a 1.25pt stroke
+and soft accent glow. Display text uses DIN Condensed Bold, falling back to
+Avenir Next Condensed Demi Bold and then system condensed, uppercase with
+0.8pt tracking. Text-card body copy uses the regular 13pt system text font.
+
+Both URL styles bypass the board and never activate or become key. Only the
+text card receives clicks. `hud` disables HUDs; `close`/`closeDuration=0` disables
+the fade; `openingDuration=0` disables entrance motion. One strict one-shot deadline handles HUD expiry; Core Animation owns
+the fade, with no per-frame Swift timer.
+
+See [wave 2 verification](Tests/OverlayWave2Verification.md) for private IPC,
+geometry parity, captures, CPU measurements, and remaining human checks.
+Reproduce after the Debug build with `Tests/run-fx-smoke.sh <scratch-directory>`.
+
+See [owner follow-up verification](Tests/OverlayFXFollowupVerification.md) for
+pill, typography, spore motion, captures, and settled CPU checks.

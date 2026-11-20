@@ -63,9 +63,10 @@ struct OverlayScene {
       for y in y0...y1 { for x in x0...x1 { buckets[y * columns + x].append(b) } }
     }
     if !ancestors.isEmpty {
-      reserve(CGRect(x: rootAnchor.x - 26, y: rootAnchor.y - 26, width: 52, height: 52))
+      reserve(CGRect(x: rootAnchor.x - 30, y: rootAnchor.y - 30, width: 60, height: 60))
     }
-    reserve(CGRect(x: anchor.x - 26, y: anchor.y - 26, width: 52, height: 52))
+    let focusRadius: CGFloat = ancestors.isEmpty ? 30 : 26
+    reserve(CGRect(x: anchor.x - focusRadius, y: anchor.y - focusRadius, width: focusRadius * 2, height: focusRadius * 2))
     func box(_ point: CGPoint, width: CGFloat, small: Bool) -> CGRect {
       CGRect(x: point.x - width / 2, y: point.y - (small ? 16 : 24),
              width: width, height: small ? 34 : 76)

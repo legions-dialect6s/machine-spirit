@@ -17,10 +17,12 @@
 		86F32D191CB8DA83C493D46F /* MachineSpiritApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D78116A2645238BBF41D3FF7 /* MachineSpiritApp.swift */; };
 		8F78FE96C639C89C1CD51337 /* SkullMark.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF2D5534392BEBDC5965DDCB /* SkullMark.swift */; };
 		989B5E562D7D3E40A4F22669 /* OverlayScene.swift in Sources */ = {isa = PBXBuildFile; fileRef = D84D34F9CD342ECBD163572B /* OverlayScene.swift */; };
+		B7025D3CB60D86436740126C /* GraphicsSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1FA73B74A525F333E96C2DB /* GraphicsSettings.swift */; };
 		B73295F72D15BE4A17C570F3 /* LedgerPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1F0834B774E421E8A0CFB21 /* LedgerPane.swift */; };
 		B759736072FF493ADEB723E2 /* MachineSpiritKit in Frameworks */ = {isa = PBXBuildFile; productRef = 5BCD9078BC72C5F027120B5B /* MachineSpiritKit */; };
 		BAFAFC9DCF47C32765544359 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41BA055CA9A05CA859DBB7D0 /* ContentView.swift */; };
 		BE57E0EF7193D2A3D2729107 /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = 383308A772C0DF9986165544 /* SwiftTerm */; };
+		C81F6E8A96F592D32DB43AB3 /* OverlaySurfaces.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0324EC861ED085F27A17494 /* OverlaySurfaces.swift */; };
 		DE1E4416918E309ED3644824 /* ConfigWatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8FE015A691BDC6F292D49AE /* ConfigWatcher.swift */; };
 		E0E3D8FE2EF7DA38AFF1B4C0 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 32D65BB0E4B6A0D0BB110E46 /* Assets.xcassets */; };
 		EE9DC96225DDD378E7F5B9E5 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03C338F8057743822B0E18EA /* AppDelegate.swift */; };
@@ -43,6 +45,7 @@
 		8436DE853B6E96250F95BCFF /* PenForm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PenForm.swift; sourceTree = "<group>"; };
 		8CC732F3DE1F0F906BDE16CB /* StatsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatsStore.swift; sourceTree = "<group>"; };
 		98EAE5FFEBA7D1FAEEF81FAE /* GraphView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphView.swift; sourceTree = "<group>"; };
+		A0324EC861ED085F27A17494 /* OverlaySurfaces.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverlaySurfaces.swift; sourceTree = "<group>"; };
 		AB996D2207146A3239C199E7 /* TypingOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TypingOverlay.swift; sourceTree = "<group>"; };
 		AE260BAD489CB9D25CE5394B /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		B1F0834B774E421E8A0CFB21 /* LedgerPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LedgerPane.swift; sourceTree = "<group>"; };
@@ -51,6 +54,7 @@
 		D78116A2645238BBF41D3FF7 /* MachineSpiritApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MachineSpiritApp.swift; sourceTree = "<group>"; };
 		D84D34F9CD342ECBD163572B /* OverlayScene.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverlayScene.swift; sourceTree = "<group>"; };
 		E9D11E59FDFE782CBF1FB7B0 /* MachineSpirit.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MachineSpirit.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		F1FA73B74A525F333E96C2DB /* GraphicsSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphicsSettings.swift; sourceTree = "<group>"; };
 		F9B9B3AF4EADBCCCF104CC61 /* ITermColors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ITermColors.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -82,6 +86,7 @@
 				5D03F1A0DE367DED4735C5E1 /* AppState.swift */,
 				C8FE015A691BDC6F292D49AE /* ConfigWatcher.swift */,
 				41BA055CA9A05CA859DBB7D0 /* ContentView.swift */,
+				F1FA73B74A525F333E96C2DB /* GraphicsSettings.swift */,
 				98EAE5FFEBA7D1FAEEF81FAE /* GraphView.swift */,
 				271503FD6BBFFFE7B766D1E8 /* IconStore.swift */,
 				F9B9B3AF4EADBCCCF104CC61 /* ITermColors.swift */,
@@ -90,6 +95,7 @@
 				3459338B1304703BA890A8E0 /* NodePresentation.swift */,
 				6D41AF5985D266C2D8932BAA /* OverlayFX.swift */,
 				D84D34F9CD342ECBD163572B /* OverlayScene.swift */,
+				A0324EC861ED085F27A17494 /* OverlaySurfaces.swift */,
 				8436DE853B6E96250F95BCFF /* PenForm.swift */,
 				0C61D57EF5E1027553CA1962 /* SheolService.swift */,
 				BF2D5534392BEBDC5965DDCB /* SkullMark.swift */,
@@ -201,6 +207,7 @@
 				DE1E4416918E309ED3644824 /* ConfigWatcher.swift in Sources */,
 				BAFAFC9DCF47C32765544359 /* ContentView.swift in Sources */,
 				019F7D79E1E876626E11B9A2 /* GraphView.swift in Sources */,
+				B7025D3CB60D86436740126C /* GraphicsSettings.swift in Sources */,
 				29CA3C829C1BB591EF6C2938 /* ITermColors.swift in Sources */,
 				78AD8841C80E6169F5C5772E /* IconStore.swift in Sources */,
 				B73295F72D15BE4A17C570F3 /* LedgerPane.swift in Sources */,
@@ -208,6 +215,7 @@
 				03CC4C60DC362CD4DC476CD7 /* NodePresentation.swift in Sources */,
 				F95997E4C61B4B39EEF4ABE3 /* OverlayFX.swift in Sources */,
 				989B5E562D7D3E40A4F22669 /* OverlayScene.swift in Sources */,
+				C81F6E8A96F592D32DB43AB3 /* OverlaySurfaces.swift in Sources */,
 				4761260309A45D32C4754ECA /* PenForm.swift in Sources */,
 				FF7001114F0F6CE852FA0578 /* SheolService.swift in Sources */,
 				8F78FE96C639C89C1CD51337 /* SkullMark.swift in Sources */,
