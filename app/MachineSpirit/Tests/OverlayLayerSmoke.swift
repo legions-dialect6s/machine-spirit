@@ -35,6 +35,7 @@ import MachineSpiritKit
     state.model = root
     let overlay = TypingOverlay(state: state)
     let panel = NSApp.windows.first { $0 is NSPanel }!
+    panel.contentView?.layer?.opacity = 0 // Exercise real layers without drawing over the desktop.
     func pump(_ seconds: Double = 0.24) { CATransaction.flush(); RunLoop.main.run(until: Date().addingTimeInterval(seconds)) }
     func layers(_ layer: CALayer?) -> [CALayer] {
       guard let layer else { return [] }
@@ -85,23 +86,18 @@ import MachineSpiritKit
       precondition(abs((node.value(forKeyPath: "transform.scale") as! CGFloat) - scales[node.name!]! * 1.08) < 0.001)
       precondition(node.opacity == 1)
     }
-    let offset = CGPoint(x: sibling.position.x - baseline["root/b"]!.x, y: sibling.position.y - baseline["root/b"]!.y)
-    precondition(hypot(offset.x, offset.y) >= 6 && hypot(offset.x, offset.y) <= 14)
-    let away = CGPoint(x: baseline["root/b"]!.x - leaf.position.x, y: baseline["root/b"]!.y - leaf.position.y)
-    precondition(offset.x * away.x + offset.y * away.y > 0, "Spore moved toward hover")
-    precondition(abs(offset.x * away.y - offset.y * away.x) < 0.001, "Spore left radial vector")
-    precondition(sibling.opacity == 0.45)
-    precondition(view.node(at: baseline["root/b"]!) == "root/b", "Drift moved hit region")
-    let edgeHit = CGPoint(x: baseline["root/b"]!.x - offset.x / hypot(offset.x, offset.y) * 23,
-                          y: baseline["root/b"]!.y - offset.y / hypot(offset.x, offset.y) * 23)
-    precondition(view.node(at: edgeHit) == "root/b", "Hit-test sampled displaced presentation")
-    let target = sibling.position
-    let driftStart = sibling.animation(forKey: "position")?.beginTime
-    view.hover("root/a/x")
-    precondition(sibling.position == target && sibling.animation(forKey: "position")?.beginTime == driftStart, "Repeated hover rerolled drift")
+    precondition(containers.allSatisfy { $0.position == baseline[$0.name!] })
+    precondition(sibling.opacity == 0.45 && view.node(at: sibling.position) == "root/b")
+    let edgePaths = layers(view.layer).compactMap { $0 as? CAShapeLayer }.filter { $0.name == nil && $0.path != nil }
+    for id in ["root/b", "root/a/x", "root/b", "root/a/x"] {
+      view.hover(id)
+      precondition(containers.allSatisfy { $0.position == baseline[$0.name!] && $0.animation(forKey: "position") == nil },
+                   "Sweeping the pointer moved a node")
+      precondition(edgePaths.allSatisfy { $0.animation(forKey: "path") == nil }, "Hover redrew a trace")
+    }
     precondition(view.node(at: leaf.position) == "root/a/x")
     view.hover(nil)
-    precondition(abs(sibling.animation(forKey: "position")!.duration - 0.2) < 0.001)
+    precondition(abs(leaf.animation(forKey: "transform.scale")!.duration - 0.2) < 0.001)
     pump(0.25)
     for node in containers {
       precondition(node.position == baseline[node.name!])

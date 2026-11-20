@@ -927,8 +927,7 @@ final class OverlayLayerView: NSView {
   }
 
   func node(at point: CGPoint) -> String? {
-    // Stable layout coordinates, including the label and preview scale. Neither
-    // spore motion nor its spring can move a hit region under a resting pointer.
+    // Hit-test the layout, including labels, independently of the hover scale.
     visible.sorted { (visuals[$0]?.container.zPosition ?? 0) > (visuals[$1]?.container.zPosition ?? 0) }.first { id in
       guard let v = visuals[id], let item = displayed[id], item.scale > 0 else { return false }
       let local = CGPoint(x: (point.x - item.center.x) / item.scale,
@@ -944,37 +943,12 @@ final class OverlayLayerView: NSView {
     hovered = id
     let active = id.map { route(to: $0).union(focusID.map { route(to: $0) } ?? []) } ?? []
     let duration = fx.hoverDuration * (id == nil ? 10.0 / 7.0 : 1)
-    let origin = id.flatMap { displayed[$0]?.center }
-    var targets = displayed.mapValues(\.center)
-    // One set of radial destinations per hover event; CA interpolates the rest.
-    for (node, item) in displayed where !active.contains(node) {
-      guard let origin else { continue }
-      let dx = item.center.x - origin.x, dy = item.center.y - origin.y
-      let distance = hypot(dx, dy)
-      guard distance > 0.001 else { continue }
-      let jitter = CGFloat.random(in: -1.5...1.5) * fx.randomness
-      var drift = min(14, max(6, 6 + 8 * exp(-distance / 220) + jitter))
-      let ux = dx / distance, uy = dy / distance
-      // At an edge, reduce travel along the same ray to keep the label visible.
-      if !safeRect.isEmpty, nodes[node]?.key != nil, let v = visuals[node] {
-        let local = item.label ? v.container.bounds.union(v.label.frame) : v.container.bounds
-        let box = CGRect(x: item.center.x + local.minX * item.scale,
-                         y: item.center.y + local.minY * item.scale,
-                         width: local.width * item.scale, height: local.height * item.scale)
-        if ux > 0 { drift = min(drift, max(0, (safeRect.maxX - box.maxX) / ux)) }
-        if ux < 0 { drift = min(drift, max(0, (safeRect.minX - box.minX) / ux)) }
-        if uy > 0 { drift = min(drift, max(0, (safeRect.maxY - box.maxY) / uy)) }
-        if uy < 0 { drift = min(drift, max(0, (safeRect.minY - box.minY) / uy)) }
-      }
-      targets[node] = CGPoint(x: item.center.x + ux * drift, y: item.center.y + uy * drift)
-    }
     CATransaction.begin(); CATransaction.setDisableActions(true)
     defer { CATransaction.commit() }
     for (node, item) in displayed {
       let highlighted = active.contains(node)
       let dimmed = id != nil && !highlighted
       if let v = visuals[node] {
-        animate(v.container, "position", to: NSValue(point: targets[node]!), duration: duration)
         animate(v.container, "transform.scale", to: item.scale * (highlighted ? 1.08 : 1),
                 duration: duration, springy: highlighted)
         animate(v.container, "opacity", to: highlighted ? Float(1) : item.opacity * (dimmed ? 0.45 : 1), duration: duration)
@@ -986,8 +960,7 @@ final class OverlayLayerView: NSView {
           animate(v.skull, "shadowRadius", to: CGFloat(highlighted ? 12 : 8), duration: duration)
         }
       }
-      if let edge = edges[node], let parent = item.parent, let source = targets[parent] {
-        animate(edge, "path", to: tracePath(from: source, to: targets[node]!), duration: duration)
+      if item.parent != nil, let edge = edges[node] {
         animate(edge, "lineWidth", to: CGFloat(highlighted ? 1.5 : 1), duration: duration)
         animate(edge, "opacity", to: highlighted ? Float(0.95) : item.opacity * (dimmed ? 0.25 : 0.55), duration: duration)
       }

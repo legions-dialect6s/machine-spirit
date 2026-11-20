@@ -66,8 +66,8 @@ final class IPCDefaults: UserDefaults, @unchecked Sendable {
     let nodeLayers = descendants(hoverView.layer!).filter { $0.name != nil && $0.bounds.width == 48 }
     let restPositions = Dictionary(uniqueKeysWithValues: nodeLayers.map { ($0.name!, $0.position) })
     hoverView.hover("root/a/m"); pump(0.35)
-    precondition(nodeLayers.contains { $0.opacity > 0 && $0.position != restPositions[$0.name!] })
-    try capture("hover-spores")
+    precondition(nodeLayers.allSatisfy { $0.position == restPositions[$0.name!] })
+    try capture("hover-route")
     print("HOVER settled pid=\(ProcessInfo.processInfo.processIdentifier)"); fflush(stdout)
     if CommandLine.arguments.count > 1 { pump(8) }
     hoverView.hover(nil); pump(0.35)
