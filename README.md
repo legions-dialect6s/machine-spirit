@@ -59,7 +59,7 @@ flowchart TD
 - [What it is](#what-it-is) · [Architecture](#architecture) · [Engineering notes](#engineering-notes)
 - [Philosophy](#philosophy)
 - [Quick start](#quick-start-fresh-mac) · [Keeping it in sync](#keeping-it-in-sync)
-- [Keybind reference](#keybind-reference) · [Window management](#window-management)
+- [Keybind reference](#keybind-reference) · [Window management](#window-management) · [Change history and rollback points](docs/CHANGE-HISTORY.md)
 - [Launcher fork](#the-launcher--machinespirit-leader-key-fork) · [Menu bar](#menu-bar) · [Clipboard history](#clipboard-history)
 - [Terminal splash](#terminal-splash) · [Wiring](#wiring)
 - [tmux protection & sheol](#tmux-protection--sheol-experimental)
@@ -239,9 +239,11 @@ Rectangle does the window math; Leader Key drives it through Rectangle's URL sch
 ⇪ c s s   center          ⇪ m m m   maximize        ⇪ f f f   next display
 ⇪ c e n   center (screen) ⇪ a m m m almost-maximize ⇪ g g g   previous display
 ⇪ ␣ ␣     place by mouse: corner → quarter, edge → half, else almost-maximize
+⇪ ← ←     display left    ⇪ → →     display right   ⇪ ↑ ↑ / ⇪ ↓ ↓   display above / below
 ⇪ = =     grow            ⇪ - -     shrink          ⇪ q u i t  ⌘Q frontmost app
 ```
 
+- **Destination preview.** With the graph overlay active, the second letter in a quarter or half sequence previews the landing spot. The third letter runs the existing Rectangle shortcut. For a directional transfer, the first arrow previews the new frame and the second arrow moves the window. F/F and G/G mark the destination display. The green outline fades when the board observes the landing. Escape clears a pending preview.
 - **Triple letters** for placement to reduce accidental placement; the two resize keys are **double-taps** because they're pressed repeatedly. (Notes moved to `⇪ n o` when `n` became the right-third group.)
 - **Thirds two ways**: the spatial letters `v`/`b`/`n` (left/center/right) and the numeric row `1`/`2`/`3` (first/center/last) both drive Rectangle's thirds — pick whichever your hand reaches for.
 - **Two centers**: `⇪ c s s` is Rectangle's own center action; `⇪ c e n` runs [`bin/center-window.applescript`](bin/center-window.applescript), which centers the frontmost window on *whichever display it currently sits on* (multi-monitor aware) without resizing it.

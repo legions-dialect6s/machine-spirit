@@ -1,6 +1,6 @@
 # Opus handoff · window motion and launcher responsiveness
 
-**19 November 2026. The classic build is running. Alexander rejected the motion pass after trying it. The next session is for review. Wait for his go-ahead before implementing or installing another variant.**
+**Rollback snapshot, 19:09 on 19 November 2026. The classic build was running. Alexander rejected the motion pass after trying it. Alexander subsequently requested the narrow hover, arrow and preview changes. See the [chronological record](CHANGE-HISTORY.md) for the current installation.**
 
 ## Start here
 

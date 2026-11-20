@@ -100,6 +100,7 @@ intersection with the current window:
 | `tl`, `tr`, `bl`, `br` | Corresponding quarter |
 | `center` | Keep size, clamp to usable area, center |
 | `fullscreen` | Request native fullscreen |
+| `display-left`, `display-right`, `display-up`, `display-down` | Move to a physical neighbor, keeping the relative window bounds. Prefer an aligned monitor and stop at the desktop edge. |
 
 `step` classifies all four current edges with tolerance `max(12pt, 2% of the
 screen's usable dimension)`. Quarters grow to the containing left/right half;
