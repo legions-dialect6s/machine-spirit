@@ -144,6 +144,10 @@ class Controller {
   }
 
   func keyDown(with event: NSEvent) {
+    // A held arrow sends repeated key-downs without a second physical tap.
+    if event.isARepeat && (KeyHelpers.leftArrow.rawValue...KeyHelpers.upArrow.rawValue).contains(event.keyCode) {
+      return
+    }
     // Reset the delay timer
     if Defaults[.autoOpenCheatsheet] == .delay {
       scheduleCheatsheet()

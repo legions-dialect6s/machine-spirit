@@ -165,6 +165,25 @@ private func placeWindow(_ requested: Placement, appName: String?) throws -> Out
     let primaryTop = screens[0].frame.maxY
     let screenFrames = screens.map { flipScreenRect($0.frame, primaryTop: primaryTop) }
     let fallback = screens.firstIndex { screenID($0) == CGMainDisplayID() } ?? 0
+    if requested.isDisplayTransfer {
+        let source = overlapScreen(currentFrame, screens: screenFrames, fallback: fallback)
+        guard let index = destinationDisplay(for: requested, from: source, screens: screenFrames) else {
+            return Output(json: ["status": "unchanged", "mode": requested.rawValue,
+                                 "pid": app.processIdentifier, "screen": screenID(screens[source])],
+                          text: "No display in that direction")
+        }
+        if snapshot.fullscreen { try leaveFullscreen(snapshot.element) }
+        let target = transferredFrame(currentFrame,
+            from: flipScreenRect(screens[source].visibleFrame, primaryTop: primaryTop),
+            to: flipScreenRect(screens[index].visibleFrame, primaryTop: primaryTop))
+        try setFrame(snapshot.element, target)
+        // Moving displays breaks the fullscreen ladder. No window ID enumeration
+        // or arrival waits are needed for a directional transfer.
+        try? FileManager.default.removeItem(at: placementStateURL)
+        return Output(json: ["status": "requested", "mode": requested.rawValue, "pid": app.processIdentifier,
+                             "screen": screenID(screens[index]), "frame": frameJSON(target)],
+                      text: "Moved toward display \(screenID(screens[index]))")
+    }
     let point = NSEvent.mouseLocation
     let index = requested == .smart
         ? (screens.firstIndex { $0.frame.contains(point) } ?? screens.firstIndex { $0 == NSScreen.main } ?? fallback)

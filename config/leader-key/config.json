@@ -1231,6 +1231,54 @@
       ],
       "key" : "u",
       "type" : "group"
+    },
+    {
+      "actions" : [
+        {
+          "key" : "←",
+          "label" : "Move to display left",
+          "type" : "command",
+          "value" : "~/bin/run-quiet.sh ~/bin/ms win place display-left"
+        }
+      ],
+      "key" : "←",
+      "type" : "group"
+    },
+    {
+      "actions" : [
+        {
+          "key" : "→",
+          "label" : "Move to display right",
+          "type" : "command",
+          "value" : "~/bin/run-quiet.sh ~/bin/ms win place display-right"
+        }
+      ],
+      "key" : "→",
+      "type" : "group"
+    },
+    {
+      "actions" : [
+        {
+          "key" : "↑",
+          "label" : "Move to display up",
+          "type" : "command",
+          "value" : "~/bin/run-quiet.sh ~/bin/ms win place display-up"
+        }
+      ],
+      "key" : "↑",
+      "type" : "group"
+    },
+    {
+      "actions" : [
+        {
+          "key" : "↓",
+          "label" : "Move to display down",
+          "type" : "command",
+          "value" : "~/bin/run-quiet.sh ~/bin/ms win place display-down"
+        }
+      ],
+      "key" : "↓",
+      "type" : "group"
     }
   ],
   "type" : "group"

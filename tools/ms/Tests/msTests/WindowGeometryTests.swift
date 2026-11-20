@@ -99,6 +99,34 @@ import Testing
     for count in 0...30 { #expect(screenQuotas(count: count, screens: screens).reduce(0, +) == count) }
 }
 
+@Test func directionalMovesUsePhysicalLayoutAndStopAtOuterEdges() {
+    let origin = CGRect(x: 0, y: 0, width: 1000, height: 800)
+    let screens = [origin, origin.offsetBy(dx: 0, dy: 800), origin.offsetBy(dx: -1000, dy: -160),
+                   origin.offsetBy(dx: 1000, dy: 250), origin.offsetBy(dx: -170, dy: -800)]
+    for (mode, expected): (Placement, Int) in [(.displayLeft, 2), (.displayRight, 3), (.displayUp, 4), (.displayDown, 1)] {
+        #expect(destinationDisplay(for: mode, from: 0, screens: screens) == expected)
+        #expect(destinationDisplay(for: mode, from: expected, screens: screens) == nil)
+        #expect(destinationDisplay(for: mode, from: 0, screens: [origin]) == nil)
+    }
+    #expect(destinationDisplay(for: .displayUp, from: 0, screens: []) == nil)
+    #expect(destinationDisplay(for: .displayRight, from: 0, screens: [origin, origin]) == nil)
+}
+
+@Test func alignedDisplaysWinOverDiagonalsAndOffsetsBreakTies() {
+    let origin = CGRect(x: 0, y: 0, width: 1000, height: 800)
+    let diagonal = origin.offsetBy(dx: 1000, dy: 900)
+    let far = origin.offsetBy(dx: 2300, dy: 0)
+    let offCenter = CGRect(x: 1100, y: -500, width: 1000, height: 800)
+    let center = CGRect(x: 1100, y: 300, width: 1000, height: 800)
+    #expect(destinationDisplay(for: .displayRight, from: 0, screens: [origin, diagonal]) == 1)
+    #expect(destinationDisplay(for: .displayRight, from: 0, screens: [origin, diagonal, far]) == 2)
+    #expect(destinationDisplay(for: .displayRight, from: 0, screens: [origin, offCenter, far, center]) == 3)
+    // A display above the right half of the current one belongs to Up.
+    let above = CGRect(x: 500, y: -800, width: 1000, height: 800)
+    #expect(destinationDisplay(for: .displayRight, from: 0, screens: [origin, above]) == nil)
+    #expect(destinationDisplay(for: .displayUp, from: 0, screens: [origin, above]) == 1)
+}
+
 @Test func gridGapsLastRowAndBounds() {
     let screen = CGRect(x: -1000, y: -500, width: 1000, height: 800)
     let frames = tileFrames(count: 5, visibleFrame: screen)
@@ -130,4 +158,11 @@ import Testing
     #expect(try toolArguments("win_cycle", ["app": "Unreal Editor"]) == ["cycle", "--app", "Unreal Editor"])
     #expect(try toolArguments("win_tile_all", [:]) == ["tile-all"])
     #expect(specs.contains { $0.name == "mouse" && $0.readOnly })
+}
+
+@Test func transfersRespectOffsetScreens() {
+    let source = CGRect(x: -1600, y: 50, width: 1600, height: 1000)
+    let dest = CGRect(x: 0, y: -900, width: 1200, height: 800)
+    let frame = CGRect(x: -1200, y: 300, width: 800, height: 500)
+    #expect(transferredFrame(frame, from: source, to: dest) == CGRect(x: 300, y: -700, width: 600, height: 400))
 }
