@@ -18,6 +18,7 @@ class StatusItem: NSObject, NSMenuDelegate {
   let system = SystemMenuSection()
   let sheol = SheolMenuSection()
   let stats = SystemStats()
+  private let nowPlaying = NowPlayingMenuSection()
   private var pressure = MemoryPressure.Reading()
   private var timer: Timer?
   private var lastRender: CompactBarState?
@@ -137,6 +138,7 @@ class StatusItem: NSObject, NSMenuDelegate {
     timer?.invalidate()
     timer = nil
     system.disable()
+    nowPlaying.close()
     stats.close()
     stats.stopBar()
     numbers.stop()
@@ -184,6 +186,7 @@ class StatusItem: NSObject, NSMenuDelegate {
       NSMenuItem(
         title: "Quit MachineSpirit Leader Key", action: #selector(NSApplication.terminate(_:)),
         keyEquivalent: "q"))
+    nowPlaying.append(to: menu)
   }
 
   private func appendLeaderOptions(to menu: NSMenu) {
@@ -393,6 +396,7 @@ class StatusItem: NSObject, NSMenuDelegate {
       buildMenu()
       system.menuWillOpen()
       stats.open()
+      nowPlaying.open()
     } else if menu === statsMenu {
       stats.setDetailsVisible(true)
     }
@@ -402,6 +406,7 @@ class StatusItem: NSObject, NSMenuDelegate {
     if menu === statusItem?.menu {
       menuIsOpen = false
       stats.close()
+      nowPlaying.close()
     } else if menu === statsMenu {
       stats.setDetailsVisible(false)
     }
