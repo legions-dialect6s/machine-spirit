@@ -58,6 +58,15 @@ on run argv
   set pid to runningApp's processIdentifier() as integer
   set wasFront to runningApp's isActive() as boolean
   set wasHidden to runningApp's isHidden() as boolean
+  -- TextEdit frontmost with zero documents is only its Open panel — a Dock
+  -- ghost. Re-typing the bind quits it.
+  if wasFront and (bundleID as text) = "com.apple.TextEdit" then
+   tell application "TextEdit" to set docCount to count of documents
+   if docCount = 0 then
+    tell application "TextEdit" to quit
+    return "OK"
+   end if
+  end if
   with timeout of 2 seconds
    if not wasFront or wasHidden then
     runningApp's unhide()
@@ -91,8 +100,9 @@ on run argv
       end if
      end try
     end repeat
+    -- Frontmost with no windows = a Dock ghost: re-typing it closes it.
+    if (count of windows) = 0 then set overWindow to true
     if not overWindow then
-     if (count of windows) = 0 then return "NONE"
      if not frontmost then return "NONE"
      keystroke "`" using command down
      -- Cmd-` raises the next window itself; do not race it by re-raising window 1.
@@ -104,8 +114,17 @@ on run argv
   if (bundleID as text) = "com.apple.TextEdit" then
    tell application "TextEdit"
     close every document saving ask
-    if closeMode = "quit" and (count of documents) = 0 then quit
    end tell
+   -- close is asynchronous: give it up to 1.5s to settle before quitting.
+   -- If the user cancels a save prompt the document remains and we keep the app.
+   if closeMode = "quit" then
+    repeat 15 times
+     tell application "TextEdit" to set docCount to count of documents
+     if docCount = 0 then exit repeat
+     delay 0.1
+    end repeat
+    if docCount = 0 then tell application "TextEdit" to quit
+   end if
   else if closeMode = "quit" then
    tell application appName to quit
   else
