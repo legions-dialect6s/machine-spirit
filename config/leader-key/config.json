@@ -85,8 +85,9 @@
           "actions" : [
             {
               "key" : "a",
+              "label" : "Left half",
               "type" : "command",
-              "value" : "open -g \"rectangle://execute-action?name=left-half\""
+              "value" : "~/bin/run-quiet.sh ~/bin/ms win place left"
             }
           ],
           "key" : "a",
@@ -159,8 +160,9 @@
           "actions" : [
             {
               "key" : "c",
+              "label" : "Bottom right",
               "type" : "command",
-              "value" : "open -g \"rectangle://execute-action?name=bottom-right\""
+              "value" : "~/bin/run-quiet.sh ~/bin/ms win place br"
             }
           ],
           "key" : "c",
@@ -256,8 +258,9 @@
           "actions" : [
             {
               "key" : "d",
+              "label" : "Right half",
               "type" : "command",
-              "value" : "open -g \"rectangle://execute-action?name=right-half\""
+              "value" : "~/bin/run-quiet.sh ~/bin/ms win place right"
             }
           ],
           "key" : "d",
@@ -286,8 +289,9 @@
           "actions" : [
             {
               "key" : "e",
+              "label" : "Top right",
               "type" : "command",
-              "value" : "open -g \"rectangle://execute-action?name=top-right\""
+              "value" : "~/bin/run-quiet.sh ~/bin/ms win place tr"
             }
           ],
           "key" : "e",
@@ -386,11 +390,11 @@
         {
           "actions" : [
             {
-              "hold" : "open -g \"rectangle://execute-action?name=next-display\"",
+              "hold" : "~/bin/run-quiet.sh ~/bin/ms win place next-display",
               "holdKeys" : "fg",
               "key" : "f",
               "type" : "command",
-              "value" : "open -g \"rectangle://execute-action?name=next-display\""
+              "value" : "~/bin/run-quiet.sh ~/bin/ms win place next-display"
             }
           ],
           "key" : "f",
@@ -497,12 +501,12 @@
         {
           "actions" : [
             {
-              "hold" : "open -g \"rectangle://execute-action?name=previous-display\"",
+              "hold" : "~/bin/run-quiet.sh ~/bin/ms win place prev-display",
               "holdKeys" : "gf",
               "key" : "g",
               "label" : "Previous display",
               "type" : "command",
-              "value" : "open -g \"rectangle://execute-action?name=previous-display\""
+              "value" : "~/bin/run-quiet.sh ~/bin/ms win place prev-display"
             }
           ],
           "key" : "g",
@@ -747,8 +751,9 @@
           "actions" : [
             {
               "key" : "q",
+              "label" : "Top left",
               "type" : "command",
-              "value" : "open -g \"rectangle://execute-action?name=top-left\""
+              "value" : "~/bin/run-quiet.sh ~/bin/ms win place tl"
             }
           ],
           "key" : "q",
@@ -1109,8 +1114,9 @@
           "actions" : [
             {
               "key" : "w",
+              "label" : "Top half",
               "type" : "command",
-              "value" : "open -g \"rectangle://execute-action?name=top-half\""
+              "value" : "~/bin/run-quiet.sh ~/bin/ms win place top"
             }
           ],
           "key" : "w",
@@ -1133,8 +1139,9 @@
           "actions" : [
             {
               "key" : "x",
+              "label" : "Bottom half",
               "type" : "command",
-              "value" : "open -g \"rectangle://execute-action?name=bottom-half\""
+              "value" : "~/bin/run-quiet.sh ~/bin/ms win place bottom"
             }
           ],
           "key" : "x",
@@ -1162,8 +1169,9 @@
           "actions" : [
             {
               "key" : "z",
+              "label" : "Bottom left",
               "type" : "command",
-              "value" : "open -g \"rectangle://execute-action?name=bottom-left\""
+              "value" : "~/bin/run-quiet.sh ~/bin/ms win place bl"
             }
           ],
           "key" : "z",
@@ -1230,6 +1238,54 @@
         }
       ],
       "key" : "u",
+      "type" : "group"
+    },
+    {
+      "actions" : [
+        {
+          "key" : "←",
+          "label" : "Move to display left",
+          "type" : "command",
+          "value" : "~/bin/run-quiet.sh ~/bin/ms win place display-left"
+        }
+      ],
+      "key" : "←",
+      "type" : "group"
+    },
+    {
+      "actions" : [
+        {
+          "key" : "→",
+          "label" : "Move to display right",
+          "type" : "command",
+          "value" : "~/bin/run-quiet.sh ~/bin/ms win place display-right"
+        }
+      ],
+      "key" : "→",
+      "type" : "group"
+    },
+    {
+      "actions" : [
+        {
+          "key" : "↑",
+          "label" : "Move to display up",
+          "type" : "command",
+          "value" : "~/bin/run-quiet.sh ~/bin/ms win place display-up"
+        }
+      ],
+      "key" : "↑",
+      "type" : "group"
+    },
+    {
+      "actions" : [
+        {
+          "key" : "↓",
+          "label" : "Move to display down",
+          "type" : "command",
+          "value" : "~/bin/run-quiet.sh ~/bin/ms win place display-down"
+        }
+      ],
+      "key" : "↓",
       "type" : "group"
     }
   ],

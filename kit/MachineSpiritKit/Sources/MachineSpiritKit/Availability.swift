@@ -43,9 +43,13 @@ enum Availability {
       return probe.pathExists(path) ? .active : .inert(reason: "missing: \(path)")
 
     case .command(let value):
-      if payload.windowAction != nil {
+      if payload.rectangleAction != nil {
         return probe.rectanglePresent()
           ? .active : .inert(reason: "Rectangle.app not installed")
+      }
+      if let executable = payload.nativePlacement?.executable, executable.contains("/"),
+        !probe.pathExists(executable) {
+        return .inert(reason: "missing: \(executable)")
       }
       if value.contains("tmux"), !probe.tmuxPresent() {
         return .inert(reason: "tmux not installed")

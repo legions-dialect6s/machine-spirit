@@ -21,6 +21,7 @@ targets:
     platform: macOS
     sources:
       - Sources
+      - ../../tools/ms/Sources/ms/WindowGeometry.swift
       - Assets.xcassets
     dependencies:
       - package: MachineSpiritKit

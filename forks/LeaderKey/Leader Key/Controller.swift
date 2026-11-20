@@ -16,6 +16,16 @@ enum KeyHelpers: UInt16 {
   case rightArrow = 124
 }
 
+/// Leave short taps in the Space group. A drag or a deliberate hold places on key-up.
+struct SpaceAim {
+  let origin: CGPoint
+  let started: TimeInterval
+
+  func shouldPlace(at point: CGPoint, time: TimeInterval) -> Bool {
+    time - started >= 0.22 || hypot(point.x - origin.x, point.y - origin.y) >= 8
+  }
+}
+
 class Controller {
   var userState: UserState
   var userConfig: UserConfig
@@ -34,6 +44,7 @@ class Controller {
   // further presses to the action's `hold` command until ⇪ is released.
   private(set) var holdAction: Action?
   private var holdPath: [String] = []
+  private var spaceAim: SpaceAim?
   private var holdCount = 0
   private var holdSpaceCount = 0
   private var holdWatch: Timer?
@@ -77,6 +88,7 @@ class Controller {
   }
 
   func show() {
+    cancelSpaceAim()
     Events.send(.willActivate)
 
     // The theme window is created asynchronously (Controller.init observes
@@ -124,6 +136,7 @@ class Controller {
   }
 
   func hide(afterClose: (() -> Void)? = nil) {
+    cancelSpaceAim()
     exitHold()
     boardPanelShown = false
     postBoardNavigation(hidden: true)
@@ -144,6 +157,11 @@ class Controller {
   }
 
   func keyDown(with event: NSEvent) {
+    let isSpace = event.keyCode == KeyHelpers.space.rawValue
+    let isArrow = (KeyHelpers.leftArrow.rawValue...KeyHelpers.upArrow.rawValue).contains(event.keyCode)
+    if event.isARepeat && (isSpace || isArrow) { return }
+    if !isSpace { cancelSpaceAim() }
+
     // Reset the delay timer
     if Defaults[.autoOpenCheatsheet] == .delay {
       scheduleCheatsheet()
@@ -196,12 +214,54 @@ class Controller {
       }
     default:
       guard let char = charForEvent(event) else { return }
+      let canAim = isSpace && userState.navigationPath.isEmpty && Controller.leaderPhysicallyDown()
+        && !shouldRunGroupSequenceWithModifiers(event.modifierFlags)
       handleKey(char, withModifiers: event.modifierFlags)
+      if canAim, userState.navigationPath.compactMap({ $0.key }) == ["space"],
+        userState.currentGroup?.actions.contains(where: { item in
+          guard case .action(let action) = item else { return false }
+          return action.key == "space" && isSmartPlacement(action)
+        }) == true
+      {
+        let origin = event.cgEvent?.unflippedLocation ?? NSEvent.mouseLocation
+        spaceAim = SpaceAim(origin: origin, started: event.timestamp)
+      }
     }
   }
 
+  func spaceReleased(with event: NSEvent) {
+    guard let aim = spaceAim else { return }
+    spaceAim = nil
+    let point = event.cgEvent?.unflippedLocation ?? NSEvent.mouseLocation
+    if userState.navigationPath.compactMap({ $0.key }) == ["space"], aim.shouldPlace(at: point, time: event.timestamp) {
+      handleKey("space", aimedPoint: point)
+    }
+  }
+
+  private func cancelSpaceAim() {
+    guard spaceAim != nil else { return }
+    spaceAim = nil
+    postAim(state: "cancel")
+  }
+
+  private func isSmartPlacement(_ action: Action) -> Bool {
+    let words = action.value.split(whereSeparator: { $0.isWhitespace })
+    return action.type == .command && words.suffix(4) == ["~/bin/ms", "win", "place", "smart"]
+  }
+
+  private func postAim(state: String, point: CGPoint? = nil) {
+    var info: [String: Any] = ["state": state, "time": ProcessInfo.processInfo.systemUptime]
+    if let point {
+      info["x"] = point.x
+      info["y"] = point.y
+    }
+    DistributedNotificationCenter.default().postNotificationName(
+      Notification.Name("com.machinespirit.leader.aim"), object: nil, userInfo: info, deliverImmediately: true)
+  }
+
   func handleKey(
-    _ key: String, withModifiers modifiers: NSEvent.ModifierFlags? = nil, execute: Bool = true
+    _ key: String, withModifiers modifiers: NSEvent.ModifierFlags? = nil, execute: Bool = true,
+    aimedPoint: CGPoint? = nil
   ) {
     if key == "?" {
       showCheatsheet()
@@ -239,29 +299,36 @@ class Controller {
         // full structural key path — BEFORE hide(), which clears
         // navigationPath. Non-blocking, silent-failing: it must never
         // delay or break the bind.
-        fireBoardPing(actionKey: action.key)
         let path = userState.navigationPath.compactMap { $0.key } + [action.key ?? ""]
         let pathKey = path.joined(separator: "/")
-        if action.quickRepeat == true, let hold = action.hold, let last = lastFired,
+        if aimedPoint == nil, action.quickRepeat == true, let hold = action.hold, let last = lastFired,
           last.key == pathKey, Date().timeIntervalSince(last.at) < 1.5
         {
+          fireBoardPing(actionKey: action.key)
           // Tapped again quickly: continue the hold ladder instead.
           let n = last.count + 1
           lastFired = (pathKey, Date(), n)
           hide { self.runHoldCommand(hold, n: n, key: action.key ?? "", path: pathKey) }
           return
         }
+        var placedAction = action
+        if path == ["space", "space"], isSmartPlacement(action) {
+          let point = aimedPoint ?? NSEvent.mouseLocation
+          postAim(state: "commit", point: point)
+          placedAction.value += " --point \(point.x),\(point.y)"
+        }
+        fireBoardPing(actionKey: action.key)
         lastFired = (pathKey, Date(), 1)
         if execute, Controller.leaderPhysicallyDown() {
-          runAction(action)
+          runAction(placedAction)
           enterHold(action, path: path)
           return
         }
         if let mods = modifiers, isInStickyMode(mods) {
-          runAction(action)
+          runAction(placedAction)
         } else {
           hide {
-            self.runAction(action)
+            self.runAction(placedAction)
           }
         }
       }

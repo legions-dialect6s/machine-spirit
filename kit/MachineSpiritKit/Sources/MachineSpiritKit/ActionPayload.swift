@@ -42,10 +42,23 @@ public enum ActionPayload: Equatable, Sendable {
     }
   }
 
-  /// Derived subtype — the Phase-1 form of the Rectangle import. A command
-  /// driving `rectangle://execute-action?name=X` is additionally typed as the
-  /// window action `X`. Derivation NEVER alters the stored value string.
+  /// Keep window binds visually consistent across the native and Rectangle movers.
   public var windowAction: String? {
+    rectangleAction ?? nativePlacement?.mode
+  }
+
+  var nativePlacement: (executable: String, mode: String)? {
+    guard case .command(let value) = self else { return nil }
+    var words = value.split(whereSeparator: \.isWhitespace)[...]
+    if words.first?.split(separator: "/").last == "run-quiet.sh" { words = words.dropFirst() }
+    guard let executable = words.first, executable.split(separator: "/").last == "ms",
+      words.dropFirst().starts(with: ["win", "place"]), let mode = words.dropFirst(3).first,
+      mode.first?.isLetter == true, mode.allSatisfy({ $0.isLetter || $0 == "-" })
+    else { return nil }
+    return (String(executable), String(mode))
+  }
+
+  var rectangleAction: String? {
     guard case .command(let value) = self else { return nil }
     guard let range = value.range(of: "rectangle://execute-action?name=") else { return nil }
     let name = value[range.upperBound...].prefix { character in

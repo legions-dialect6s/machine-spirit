@@ -10,7 +10,7 @@ A keyboard-driven macOS workspace with a live node-graph launcher, one compact s
 
 - **A launcher you can see as you type.** Caps Lock opens a nested key tree in the owned [Leader Key fork](forks/LeaderKey); a click-through graph follows navigation at the pointer. The optional board lets you inspect, arrange, add, and remove binds. It takes the place of a standalone Leader Key setup while keeping its config format.
 - **One compact menu bar item.** Stats, a terminal/tmux ledger, keep-awake, brightness/DDC, and clipboard history share one home. It covers the everyday roles of **Stats**, **Amphetamine**, **MonitorControl**, and **Pastebot/Maccy**; those remain useful standalone alternatives, with different feature sets and hardware coverage.
-- **A spatial window grid.** Repeated keys mirror window positions: `⇪ q q q` → top-left, `⇪ x x x` → bottom half, `⇪ b b b` → center third. Rectangle supplies the placement engine; an AppleScript animates grow/shrink. This replaces routine dragging and shortcut hunting while leaving floating windows and the mouse available.
+- **A spatial window grid.** Repeated keys mirror window positions: `⇪ q q q` → top-left, `⇪ x x x` → bottom half, `⇪ b b b` → center third. Machine Spirit places halves and quarters, moves windows between displays, and handles grow/shrink. Rectangle provides thirds. This replaces routine dragging and shortcut hunting while leaving floating windows and the mouse available.
 - **sheol, a tmux ledger.** Launch protected terminals, see attached and detached sessions, revive them into new iTerm windows, or deliberately banish them. It replaces forgotten detached sessions and repeated manual `tmux list-sessions` / attach commands. Snapshots restore layouts and supported commands, not running process memory.
 - **A terminal with a greeting.** One summonable iTerm hotkey window, pre-rendered multilingual banners, ASCII art, fastfetch, quotes, and an ANSI-safe typewriter replace a bare terminal startup. Normal panes stay silent.
 - **`ms` for agents and scripts.** A native Swift CLI and stdio MCP server enumerate screens/windows, inspect binds, execute configured leaves, read stats and sheol state, and capture selected regions. It replaces guessed coordinates and duplicated desktop-discovery glue. Clipboard-history reads require explicit opt-in.
@@ -36,7 +36,7 @@ flowchart TD
 
 **MachineSpirit board app** starts as an accessory with no board window or Dock icon. [`AppDelegate.swift`](app/MachineSpirit/Sources/AppDelegate.swift) receives `com.machinespirit.leader.nav` (`state`, `path`, `screen`, all strings) and `com.machinespirit.leader.fired` (`path`). The overlay is a reusable nonactivating panel; `machinespirit://board` opens the separate Canvas-based editor. Closing the board tears down its view tree and sheol polling while the overlay remains available.
 
-**Rectangle** owns window placement through `rectangle://execute-action?name=…`. Its MIT source is vendored as an [owned fork](forks/Rectangle), but **the current installer installs the stock Rectangle cask**, not a custom fork build. Grow/shrink is the separate [`win-lerp.applescript`](bin/win-lerp.applescript) path.
+**Rectangle** supplies thirds and its center action through `rectangle://execute-action?name=…`. Its MIT source is vendored as an [owned fork](forks/Rectangle), but **the current installer installs the stock Rectangle cask**, not a custom fork build. Grow/shrink calls the Machine Spirit window mover through [win-lerp.applescript](bin/win-lerp.applescript).
 
 **iTerm2 + tmux/sheol** remain independent processes. [`sheol-core`](bin/sheol-core) supplies the session verbs used by the TUI, menu actions, embedded board ledger, and CLI; [`terminals-core`](bin/terminals-core) handles unprotected terminal actions. The closed menu reads tmux's local socket and native Apple Events without launching those helpers.
 
@@ -228,7 +228,7 @@ If Caps (F19) is **still physically held** when a bind fires, the fork stays liv
 
 ## Window management
 
-Rectangle does the window math; Leader Key drives it through Rectangle's URL scheme (`open -g "rectangle://execute-action?name=..."`). The bindings form a spatial grid — each key sits on the keyboard where it sends the window on screen:
+The keys form a spatial grid. Machine Spirit places the focused window using the usable bounds of its display. The third-width binds use Rectangle.
 
 ```
 ⇪ q q q   top-left        ⇪ w w w   top half        ⇪ e e e   top-right
@@ -247,8 +247,11 @@ Rectangle does the window math; Leader Key drives it through Rectangle's URL sch
 - **Two centers**: `⇪ c s s` is Rectangle's own center action; `⇪ c e n` runs [`bin/center-window.applescript`](bin/center-window.applescript), which centers the frontmost window on *whichever display it currently sits on* (multi-monitor aware) without resizing it.
 - **`⇪ a m m m` / `⇪ m m m`** use [`ms win place`](tools/ms/README.md) (90% inset / exact visible frame — **maximize stops above the Dock**), so they share geometry with the `⇪ ␣ ␣` ladder.
 - **`⇪ ␣ ␣`** moves the focused window to the display under the mouse and sizes it by where the pointer sits on it. Hold `⇪` and keep pressing `␣` (or re-tap `⇪ ␣ ␣` within 1.5 s) to walk the grow ladder: quarter → its side half → almost-maximize → maximize → full screen → maximize → almost-maximize → … (maximize drops back to almost-maximize only when it came out of full screen).
-- **Grow/shrink bypass Rectangle**: [`bin/win-lerp.applescript`](bin/win-lerp.applescript) animates the frontmost window ±120 px over 22 smoothstep-eased frames — centered as it scales, with a primary-origin left/top clamp and a 300×200 floor so shrink-spam can't crush a window. This helper interpolates the resize; its clamp is not fully multi-monitor-aware (negative-origin displays are a limitation).
-- **`⇪ f f f` / `⇪ g g g`** send the window to the next / previous display; hold `⇪` and spam `f` or `g` to keep going in the **first** direction.
+- **Hold Caps and Space together** to aim. Move the pointer onto the desired region, then release Space to place the window there. Escape cancels. A short first Space tap still opens the ordinary two-tap sequence.
+- Quarter targets occupy the outer 25% along both axes. Along the rest of each side the outer 10% selects a half. The green preview and placement command share the same geometry.
+- **Grow/shrink** (`⇪ = =` / `⇪ - -`) changes both dimensions by 120 points around the window center, clamped to its current display. A single frame request replaces the old 22-step resize loop.
+- **`⇪ f f f` / `⇪ g g g`** move to the next or previous display and preserve the window’s relative size and position. After Caps, double-tap an arrow to move in its physical direction. A display directly in line takes priority, and the window stays put at the outer edge.
+- On a quarter or half shortcut, the last tap cues the green outline. Smart placement, the window ladder, grow/shrink and transfers use the same landed-frame check. The mover applies the frame immediately. The outline fades when the app reports the target bounds, and clears after a short timeout if the app refuses them. **Graphics → Window outlines** and macOS Reduce Motion control this effect.
 - Rectangle's *native* larger/smaller step is bumped to 100 px by [`scripts/macos-defaults.sh`](scripts/macos-defaults.sh) for when it's triggered outside Leader Key.
 
 ## The launcher — MachineSpirit Leader Key fork

@@ -43,7 +43,7 @@ final class IPCDefaults: UserDefaults, @unchecked Sendable {
     let prefix = "com.machinespirit.overlay-test.\(UUID().uuidString)"
     delegate.installOverlayObservers(prefix: prefix)
     let panel = NSApp.windows.first { $0 is NSPanel }!
-    func pump(_ seconds: Double = 0.25) { CATransaction.flush(); RunLoop.main.run(until: Date().addingTimeInterval(seconds)) }
+    func pump(_ seconds: Double = 0.8) { CATransaction.flush(); RunLoop.main.run(until: Date().addingTimeInterval(seconds)) }
     func send(_ suffix: String, _ info: [String: String]) {
       DistributedNotificationCenter.default().postNotificationName(
         Notification.Name("\(prefix).\(suffix)"), object: nil, userInfo: info, deliverImmediately: true)
@@ -62,15 +62,15 @@ final class IPCDefaults: UserDefaults, @unchecked Sendable {
     try capture("root")
     let hoverView = panel.contentView as! OverlayLayerView
     func descendants(_ layer: CALayer) -> [CALayer] { [layer] + (layer.sublayers ?? []).flatMap(descendants) }
-    hoverView.hover(nil); pump(0.3)
+    hoverView.cancelHover(); pump(1.7)
     let nodeLayers = descendants(hoverView.layer!).filter { $0.name != nil && $0.bounds.width == 48 }
     let restPositions = Dictionary(uniqueKeysWithValues: nodeLayers.map { ($0.name!, $0.position) })
-    hoverView.hover("root/a/m"); pump(0.35)
+    hoverView.hover("root/a/m"); pump(1.3)
     precondition(nodeLayers.contains { $0.opacity > 0 && $0.position != restPositions[$0.name!] })
     try capture("hover-spores")
     print("HOVER settled pid=\(ProcessInfo.processInfo.processIdentifier)"); fflush(stdout)
     if CommandLine.arguments.count > 1 { pump(8) }
-    hoverView.hover(nil); pump(0.35)
+    hoverView.cancelHover(); pump(1.7)
     precondition(nodeLayers.allSatisfy { $0.position == restPositions[$0.name!] })
     precondition(descendants(hoverView.layer!).allSatisfy { !isAnimating($0) }, "Hover motion outlasted its duration")
     try capture("hover-out-settled")
@@ -110,9 +110,9 @@ final class IPCDefaults: UserDefaults, @unchecked Sendable {
     send("nav", ["state": "shown", "path": "a/m/x"]); pump(0.07)
     send("nav", ["state": "shown", "path": "a/m/x/y"]); pump(0.02)
     precondition(view.intensity > 0.9, "Fast keys failed to build intensity: \(view.intensity)")
-    precondition(layers(view.layer).contains {
-      ($0.animation(forKey: "jitter.transform.translation.x") as? CAKeyframeAnimation)?.calculationMode == .discrete
-    })
+    precondition(!layers(view.layer).contains { layer in
+      (layer.animationKeys() ?? []).contains { $0.hasPrefix("jitter.") }
+    }, "Ordinary navigation should glide continuously")
     precondition(layers(view.layer).filter {
       ($0 as? CAShapeLayer)?.path?.boundingBoxOfPath.width == 180 && $0.animation(forKey: "opacity") != nil
     }.count >= 2, "Fast typing did not emit a second ring")

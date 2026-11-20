@@ -138,3 +138,19 @@ class KeyboardLayoutTests: XCTestCase {
     XCTAssertEqual(result, "←", "Special keys should always use KeyMaps")
   }
 }
+
+final class SpaceAimTests: XCTestCase {
+  private let origin = CGPoint(x: -45.5, y: 1000.25)
+
+  func testShortTapWithPointerJitterLeavesSpaceGroupOpen() {
+    let aim = SpaceAim(origin: origin, started: 10)
+    XCTAssertFalse(aim.shouldPlace(at: origin, time: 10.09))
+    XCTAssertFalse(aim.shouldPlace(at: CGPoint(x: -42, y: 1004), time: 10.16))
+  }
+
+  func testStationaryHoldAndFastIntentionalDragPlace() {
+    let aim = SpaceAim(origin: origin, started: 10)
+    XCTAssertTrue(aim.shouldPlace(at: origin, time: 10.24))
+    XCTAssertTrue(aim.shouldPlace(at: CGPoint(x: -53.5, y: 1000.25), time: 10.08))
+  }
+}

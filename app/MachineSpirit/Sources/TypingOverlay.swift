@@ -7,7 +7,6 @@ final class TypingOverlay {
   private struct Request {
     var path: String? // nil means hidden
     var screen: String?
-    var preview = false
     var received: CFTimeInterval
   }
   private let state: AppState
@@ -71,10 +70,15 @@ final class TypingOverlay {
   }
 
   func show(path: String, screen: String?, preview: Bool = false) {
-    enqueue(Request(path: path, screen: screen, preview: preview, received: CACurrentMediaTime()))
+    if preview { placementPreview.show(fx: shown ? renderer.fx : OverlayFX()) }
+    else { placementPreview.leaveNavigation() }
+    enqueue(Request(path: path, screen: screen, received: CACurrentMediaTime()))
   }
 
-  func hide() { enqueue(Request(path: nil, received: CACurrentMediaTime())) }
+  func hide() {
+    placementPreview.leaveNavigation()
+    enqueue(Request(path: nil, received: CACurrentMediaTime()))
+  }
 
   func feedback(kind: String, path: String?) {
     guard ["miss", "back", "done", "hold"].contains(kind),
@@ -114,7 +118,7 @@ final class TypingOverlay {
     let point = renderer.convert(panel.convertPoint(fromScreen: NSEvent.mouseLocation), from: nil)
     let hit = renderer.node(at: point)
     panel.ignoresMouseEvents = hit == nil
-    renderer.hover(hit)
+    renderer.requestHover(hit)
   }
 
   private func startMouseMonitoring() {
@@ -132,7 +136,7 @@ final class TypingOverlay {
     if let localMouseMonitor { NSEvent.removeMonitor(localMouseMonitor) }
     globalMouseMonitor = nil; localMouseMonitor = nil
     panel.ignoresMouseEvents = true
-    renderer.hover(nil)
+    renderer.cancelHover()
   }
 
   private func enqueue(_ request: Request) {
@@ -175,7 +179,6 @@ final class TypingOverlay {
     pending = nil
     let started = CACurrentMediaTime()
     guard let path = request.path else {
-      placementPreview.hide()
       guard shown else { return }
       hideRequested = true
       stopMouseMonitoring()
@@ -212,13 +215,10 @@ final class TypingOverlay {
       CATransaction.commit()
       return
     }
-    if !request.preview { placementPreview.hide() }
     guard let route = state.route(atPath: path), let focusID = route.last,
           let focus = renderer.nodes[focusID] else { return }
     deferredHide?.cancel(); deferredHide = nil
     hideRequested = false
-    if request.preview { placementPreview.show(fx: shown ? renderer.fx : OverlayFX()) }
-    else { placementPreview.hide() }
     if shown && renderer.focusID == focusID {
       startMouseMonitoring(); updateMouse(); return
     }
@@ -336,6 +336,8 @@ final class OverlayLayerView: NSView {
   private let rings = (0..<3).map { _ in CAShapeLayer() }
   private var ringIndex = 0
   private var displayed: [String: OverlayScene.Item] = [:]
+  private var pendingHover: DispatchWorkItem?
+  private var requestedHover: String?
   private var hovered: String?
   var onClick: ((String) -> Void)?
   var fx = OverlayFX() { didSet { applyPalette() } }
@@ -435,6 +437,7 @@ final class OverlayLayerView: NSView {
     CATransaction.begin()
     CATransaction.setDisableActions(true)
     nodeRoot.sublayers = nil
+    cancelPendingHover()
     edgeRoot.sublayers = nil
     visuals.removeAll(); edges.removeAll(); nodes.removeAll(); widths.removeAll()
     visible.removeAll(); displayed.removeAll(); hovered = nil; cachedLayouts.removeAll(); focusID = nil
@@ -558,27 +561,21 @@ final class OverlayLayerView: NSView {
   /// animation. The model always contains the final state, with no callbacks
   /// that can resurrect a stale path.
   private func animate(_ layer: CALayer, _ key: String, to value: Any,
-                       duration: Double, delay: Double = 0, from: Any? = nil, springy: Bool = false) {
+                       duration: Double, delay: Double = 0, from: Any? = nil, timing: CAMediaTimingFunctionName = .easeOut) {
     let target = layer.value(forKeyPath: key)
-    if from == nil, let old = target as? NSObject, let new = value as? NSObject,
-       old.isEqual(new) { return }
     if duration <= 0 {
       layer.removeAnimation(forKey: key); layer.setValue(value, forKeyPath: key); return
     }
+    if from == nil, let old = target as? NSObject, let new = value as? NSObject,
+       old.isEqual(new) { return }
     let start = from ?? layer.presentation()?.value(forKeyPath: key) ?? target
     layer.setValue(value, forKeyPath: key)
-    let animation: CABasicAnimation
-    if springy {
-      let spring = CASpringAnimation(keyPath: key)
-      let frequency = 8 / duration
-      spring.mass = 1; spring.stiffness = frequency * frequency; spring.damping = 1.5 * frequency
-      animation = spring
-    } else { animation = CABasicAnimation(keyPath: key) }
+    let animation = CABasicAnimation(keyPath: key)
     animation.fromValue = start
     animation.toValue = value
     animation.duration = duration
     animation.preferredFrameRateRange = CAFrameRateRange(minimum: min(80, refreshRate), maximum: refreshRate, preferred: refreshRate)
-    animation.timingFunction = ease
+    animation.timingFunction = CAMediaTimingFunction(name: timing)
     animation.beginTime = layer.convertTime(CACurrentMediaTime(), from: nil) + delay
     animation.fillMode = .backwards
     layer.add(animation, forKey: key)
@@ -618,8 +615,9 @@ final class OverlayLayerView: NSView {
 
   func show(_ items: [String: OverlayScene.Item], focus: String, anchor: CGPoint,
             first: Bool, back: Bool, splash: Bool) {
-    let duration = back ? (fx.back ? fx.backDuration : 0) : fx.openingDuration
-    hover(nil)
+    let duration = (back ? fx.back && fx.backDuration > 0 : fx.openingDuration > 0) ? 0.6 : 0
+    cancelHover()
+    let previousItems = displayed
     displayed = items
     marker.isHidden = !fx.skull || nodes[focus]?.key == nil
     marker.shadowOpacity = fx.skullGlow ? 0.5 : 0
@@ -638,54 +636,49 @@ final class OverlayLayerView: NSView {
     animate(backdrop, "position", to: NSValue(point: center), duration: duration)
     animate(backdrop, "bounds", to: NSValue(rect: CGRect(x: 0, y: 0,
       width: radius * 2, height: radius * 2)), duration: duration)
+    let delays = stagger(items, focus: center)
+    let exitDelays = stagger(previousItems, focus: center)
     for id in visible.subtracting(items.keys) {
       guard let v = visuals[id] else { continue }
-      animate(v.container, "opacity", to: Float(0), duration: fx.back ? fx.backDuration : 0)
-      if back { animate(v.container, "position", to: NSValue(point: anchor), duration: fx.back ? fx.backDuration : 0) }
-      if let edge = edges[id] { animate(edge, "opacity", to: Float(0), duration: fx.back ? fx.backDuration : 0) }
+      let fadeDuration = duration > 0 ? 0.35 : 0
+      let delay = duration > 0 ? exitDelays[id, default: 0] : 0
+      let item = previousItems[id]
+      let destination = radialOffset(item?.center ?? v.container.position, from: center, travel: 5)
+      animate(v.container, "opacity", to: Float(0), duration: fadeDuration, delay: delay, timing: .easeInEaseOut)
+      animate(v.container, "position", to: NSValue(point: destination), duration: fadeDuration, delay: delay, timing: .easeInEaseOut)
+      animate(v.container, "transform.scale", to: (item?.scale ?? 1) * 0.92, duration: fadeDuration, delay: delay, timing: .easeInEaseOut)
+      if let edge = edges[id] { animate(edge, "opacity", to: Float(0), duration: fadeDuration, delay: delay) }
     }
     for (id, item) in items {
       guard let v = visuals[id] else { continue }
-      if v.container.animation(forKey: "closeSpin") != nil {
-        let angle = v.container.presentation()?.value(forKeyPath: "transform.rotation.z") ?? 0
-        v.container.removeAnimation(forKey: "closeSpin")
-        animate(v.container, "transform.rotation.z", to: 0, duration: duration, from: angle)
-      }
-      let fresh = !visible.contains(id) || (first && (scene.presentation()?.opacity ?? 0) < 0.01)
-      let origin = item.parent.flatMap { items[$0]?.center } ?? anchor
+      // A departing node may still be visible when navigation brings it back.
+      // Only seed a fresh entry if there is genuinely nothing on screen to preserve.
+      let fresh = !visible.contains(id) && (v.container.presentation()?.opacity ?? v.container.opacity) < 0.001
+      let delay = duration > 0 ? delays[id, default: 0] : 0
+      let entry = radialOffset(item.center, from: center, travel: -(3 + 3 * intensity))
       if fresh {
         v.container.removeAllAnimations()
-        v.container.opacity = item.opacity
-        v.container.setValue(item.scale, forKeyPath: "transform.scale")
-        if id == focus {
-          v.container.position = item.center
-          animate(v.container, "transform.scale", to: item.scale, duration: duration,
-                  from: nodes[id]?.key == nil && fx.skull ? item.scale : CGFloat(0.7))
-        } else {
-          animate(v.container, "position", to: NSValue(point: item.center), duration: duration,
-                  delay: item.delay, from: NSValue(point: origin))
-        }
-      } else {
-        animate(v.container, "position", to: NSValue(point: item.center), duration: duration, delay: item.delay)
-        animate(v.container, "opacity", to: item.opacity, duration: duration)
-        animate(v.container, "transform.scale", to: item.scale, duration: duration)
+        v.container.position = entry
+        v.container.opacity = 0
+        v.container.setValue(item.scale * 0.92, forKeyPath: "transform.scale")
       }
-      if fresh || (splash && id == focus) { arrivalJitter(v.container) }
-      v.label.opacity = item.label ? 1 : 0
+      animate(v.container, "position", to: NSValue(point: item.center), duration: duration, delay: delay, from: fresh ? NSValue(point: entry) : nil)
+      animate(v.container, "opacity", to: item.opacity, duration: duration > 0 ? 0.35 : 0, delay: delay, from: fresh ? Float(0) : nil, timing: .easeInEaseOut)
+      animate(v.container, "transform.scale", to: item.scale, duration: duration > 0 ? 0.35 : 0, delay: delay, from: fresh ? item.scale * 0.92 : nil, timing: .easeInEaseOut)
+      animate(v.label, "opacity", to: Float(item.label ? 1 : 0), duration: duration > 0 ? 0.35 : 0)
       v.container.zPosition = id == focus ? 2 : (item.scale == 1 ? 1 : 0)
       if let edge = edges[id], let parent = item.parent, let source = items[parent]?.center {
         let path = tracePath(from: source, to: item.center)
         if fresh { edge.removeAllAnimations(); edge.path = path }
-        else { animate(edge, "path", to: path, duration: duration) }
+        else { animate(edge, "path", to: path, duration: duration, delay: delay) }
         animate(edge, "opacity", to: item.opacity * 0.55, duration: duration)
-        animate(edge, "strokeEnd", to: CGFloat(1), duration: duration, delay: item.delay,
+        animate(edge, "strokeEnd", to: CGFloat(1), duration: duration, delay: delay,
                 from: fresh ? CGFloat(0) : nil)
       } else if let edge = edges[id] { animate(edge, "opacity", to: Float(0), duration: duration) }
     }
     if splash, let v = visuals[focus] {
       if fx.letterPop { spring(v.glyph, from: 2.4, duration: fx.popDuration) }
       if fx.shockwave { shockwave(at: items[focus]?.center ?? anchor) }
-      react(v, at: items[focus]?.center ?? anchor)
     }
     visible = Set(items.keys)
     focusID = focus
@@ -697,26 +690,20 @@ final class OverlayLayerView: NSView {
     if ghostDuration > 0 { ghostExit(duration: ghostDuration) }
     let root = displayed.first(where: { nodes[$0.key]?.key == nil })?.value.center
       ?? displayed[focusID ?? ""]?.center ?? .zero
+    cancelPendingHover()
+    let delays = stagger(displayed, focus: root)
     for id in visible {
       guard let v = visuals[id] else { continue }
-      if fx.close && duration > 0 {
-        animate(v.container, "position", to: NSValue(point: root), duration: duration)
-        animate(v.container, "transform.scale", to: CGFloat(0.15), duration: duration)
-        let spin = CABasicAnimation(keyPath: "transform.rotation.z")
-        spin.fromValue = 0; spin.toValue = 0.12; spin.duration = duration
-        v.container.add(spin, forKey: "closeSpin")
-      }
-      if let edge = edges[id] { animate(edge, "strokeEnd", to: CGFloat(0), duration: duration) }
-      if nodes[id]?.key == nil && fx.close { pulse(v.skull, strength: 1.15, duration: duration) }
+      let item = displayed[id]
+      let delay = duration > 0 ? delays[id, default: 0] : 0
+      animate(v.container, "position", to: NSValue(point: radialOffset(item?.center ?? v.container.position, from: root, travel: 5)), duration: duration, delay: delay, timing: .easeInEaseOut)
+      animate(v.container, "transform.scale", to: (item?.scale ?? 1) * 0.92, duration: duration, delay: delay, timing: .easeInEaseOut)
+      animate(v.container, "opacity", to: Float(0), duration: duration, delay: delay, timing: .easeInEaseOut)
+      if let edge = edges[id] { animate(edge, "opacity", to: Float(0), duration: duration, delay: delay) }
     }
     for ring in rings { ring.removeAllAnimations() }
-    if ghostDuration > 0 {
-      let fade = CAKeyframeAnimation(keyPath: "opacity")
-      let current = scene.presentation()?.opacity ?? scene.opacity
-      fade.values = [current, current, 0]; fade.keyTimes = [0, 0.9, 1]
-      fade.duration = max(duration, ghostDuration)
-      scene.opacity = 0; scene.add(fade, forKey: "opacity")
-    } else { animate(scene, "opacity", to: Float(0), duration: duration) }
+    animate(scene, "opacity", to: Float(0),
+      duration: max(ghostDuration, duration + (duration > 0 ? delays.values.max() ?? 0 : 0)), timing: .easeInEaseOut)
   }
 
   func finishClose() {
@@ -805,16 +792,6 @@ final class OverlayLayerView: NSView {
     let animation = CAKeyframeAnimation(keyPath: key)
     animation.values = values; animation.calculationMode = .discrete; animation.duration = duration
     layer.add(animation, forKey: "jitter." + key)
-  }
-
-  private func arrivalJitter(_ layer: CALayer) {
-    guard fx.randomness > 0, fx.openingDuration > 0 else { return }
-    let x = Double.random(in: -3...3) * fx.randomness
-    let y = Double.random(in: -3...3) * fx.randomness
-    let angle = Double.random(in: -0.09...0.09) * fx.randomness
-    stepped(layer, key: "transform.translation.x", values: [x, -x * 0.4, 0], duration: 0.1)
-    stepped(layer, key: "transform.translation.y", values: [y, -y * 0.4, 0], duration: 0.1)
-    stepped(layer, key: "transform.rotation.z", values: [angle, -angle * 0.4, 0], duration: 0.1)
   }
 
   private func react(_ visual: NodeLayers, at point: CGPoint) {
@@ -938,12 +915,43 @@ final class OverlayLayerView: NSView {
     }
   }
 
+  private func radialOffset(_ point: CGPoint, from focus: CGPoint, travel: CGFloat) -> CGPoint {
+    let dx = point.x - focus.x, dy = point.y - focus.y
+    let distance = hypot(dx, dy)
+    guard distance > 0.001 else { return point }
+    return CGPoint(x: point.x + dx / distance * travel, y: point.y + dy / distance * travel)
+  }
+
+  /// Distance bands keep dense neighborhoods from accumulating seconds of delay.
+  private func stagger(_ items: [String: OverlayScene.Item], focus: CGPoint) -> [String: Double] {
+    items.mapValues { min(6, floor(hypot($0.center.x - focus.x, $0.center.y - focus.y) / 60)) * 0.02 }
+  }
+
+  func requestHover(_ id: String?) {
+    guard requestedHover != id else { return }
+    pendingHover?.cancel(); requestedHover = id
+    let work = DispatchWorkItem { [weak self] in
+      guard let self else { return }
+      self.pendingHover = nil; self.hover(id)
+    }
+    pendingHover = work
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.06, execute: work)
+  }
+
+  private func cancelPendingHover() {
+    pendingHover?.cancel(); pendingHover = nil; requestedHover = nil
+  }
+
+  func cancelHover() { cancelPendingHover(); hover(nil) }
+
   func hover(_ id: String?) {
     let id = fx.hover ? id.flatMap { displayed[$0] == nil ? nil : $0 } : nil
     guard hovered != id else { return }
     hovered = id
     let active = id.map { route(to: $0).union(focusID.map { route(to: $0) } ?? []) } ?? []
-    let duration = fx.hoverDuration * (id == nil ? 10.0 / 7.0 : 1)
+    let duration = fx.hoverDuration * (id == nil ? 4 / 3 : 1)
+    let fadeDuration = duration > 0 ? 0.5 : 0
+    let delays = stagger(displayed, focus: id.flatMap { displayed[$0]?.center } ?? displayed[focusID ?? ""]?.center ?? .zero)
     let origin = id.flatMap { displayed[$0]?.center }
     var targets = displayed.mapValues(\.center)
     // One set of radial destinations per hover event; CA interpolates the rest.
@@ -952,8 +960,7 @@ final class OverlayLayerView: NSView {
       let dx = item.center.x - origin.x, dy = item.center.y - origin.y
       let distance = hypot(dx, dy)
       guard distance > 0.001 else { continue }
-      let jitter = CGFloat.random(in: -1.5...1.5) * fx.randomness
-      var drift = min(14, max(6, 6 + 8 * exp(-distance / 220) + jitter))
+      var drift = 3 + 5 * exp(-distance / 220)
       let ux = dx / distance, uy = dy / distance
       // At an edge, reduce travel along the same ray to keep the label visible.
       if !safeRect.isEmpty, nodes[node]?.key != nil, let v = visuals[node] {
@@ -974,12 +981,13 @@ final class OverlayLayerView: NSView {
       let highlighted = active.contains(node)
       let dimmed = id != nil && !highlighted
       if let v = visuals[node] {
-        animate(v.container, "position", to: NSValue(point: targets[node]!), duration: duration)
-        animate(v.container, "transform.scale", to: item.scale * (highlighted ? 1.08 : 1),
-                duration: duration, springy: highlighted)
-        animate(v.container, "opacity", to: highlighted ? Float(1) : item.opacity * (dimmed ? 0.45 : 1), duration: duration)
+        let delay = duration > 0 ? delays[node, default: 0] : 0
+        animate(v.container, "position", to: NSValue(point: targets[node]!), duration: duration, delay: delay)
+        animate(v.container, "transform.scale", to: item.scale * (highlighted ? 1.08 : (dimmed ? 0.92 : 1)),
+                duration: duration > 0 ? (nodes[node]?.key == nil ? (highlighted ? 0.25 : 1.4) : 0.35) : 0, delay: delay)
+        animate(v.container, "opacity", to: highlighted ? Float(1) : item.opacity * (dimmed ? 0.45 : 1), duration: fadeDuration, delay: delay, timing: .easeInEaseOut)
         if !v.disc.isHidden {
-          animate(v.disc, "shadowOpacity", to: Float(highlighted && fx.skullGlow ? 0.65 : 0), duration: duration)
+          animate(v.disc, "shadowOpacity", to: Float(fx.skullGlow && highlighted ? 0.65 : 0), duration: duration)
         }
         if nodes[node]?.key == nil && !v.skull.isHidden {
           animate(v.skull, "shadowOpacity", to: Float(fx.skullGlow ? (highlighted ? 0.85 : 0.55) : 0), duration: duration)
@@ -987,9 +995,9 @@ final class OverlayLayerView: NSView {
         }
       }
       if let edge = edges[node], let parent = item.parent, let source = targets[parent] {
-        animate(edge, "path", to: tracePath(from: source, to: targets[node]!), duration: duration)
+        animate(edge, "path", to: tracePath(from: source, to: targets[node]!), duration: duration, delay: duration > 0 ? delays[node, default: 0] : 0)
         animate(edge, "lineWidth", to: CGFloat(highlighted ? 1.5 : 1), duration: duration)
-        animate(edge, "opacity", to: highlighted ? Float(0.95) : item.opacity * (dimmed ? 0.25 : 0.55), duration: duration)
+        animate(edge, "opacity", to: highlighted ? Float(0.95) : item.opacity * (dimmed ? 0.25 : 0.55), duration: fadeDuration, delay: duration > 0 ? delays[node, default: 0] : 0)
       }
     }
   }

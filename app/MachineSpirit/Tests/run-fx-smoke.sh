@@ -10,7 +10,6 @@ for test in OverlayLayerSmoke StatsSmoke OverlayIPCSmoke; do
     -Xlinker -rpath -Xlinker "$products/MachineSpirit.app/Contents/MacOS" -o "$scratch/$test"
 done
 swiftc -swift-version 6 -parse-as-library -I "$products" Tests/PlacementGeometrySmoke.swift \
-  ../../tools/ms/Sources/ms/WindowGeometry.swift \
   "$products/MachineSpirit.app/Contents/MacOS/MachineSpirit.debug.dylib" \
   -Xlinker -rpath -Xlinker "$products/MachineSpirit.app/Contents/MacOS" -o "$scratch/PlacementGeometrySmoke"
 swiftc -swift-version 6 -parse-as-library -I "$products" Sources/OverlayScene.swift Sources/NodePresentation.swift \

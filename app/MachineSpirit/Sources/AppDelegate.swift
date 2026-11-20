@@ -14,6 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   var openBoardAction: (() -> Void)?
   private(set) var overlay: TypingOverlay?
   let hud = OverlayHUD()
+  private lazy var windowMorph = WindowMorph()
   let capsFollower: CapsFollower
   private var closeObserver: NSObjectProtocol?
   private var launched = false
@@ -24,6 +25,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     installURLHandler()
     state.start()
     installOverlayObservers()
+    DistributedNotificationCenter.default().addObserver(self, selector: #selector(windowWillMove(_:)),
+      name: Notification.Name("com.machinespirit.win.morph"), object: nil, suspensionBehavior: .deliverImmediately)
     capsFollower.start()
   }
 
@@ -40,6 +43,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     center.addObserver(self, selector: #selector(feedback(_:)),
       name: Notification.Name("\(prefix).feedback"), object: nil,
       suspensionBehavior: .deliverImmediately)
+    center.addObserver(self, selector: #selector(placementAim(_:)),
+      name: Notification.Name("\(prefix).aim"), object: nil, suspensionBehavior: .deliverImmediately)
     overlay = TypingOverlay(state: state)
   }
 
@@ -50,6 +55,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // fired pings are model updates, never scene requests.
     installURLHandler()
     launched = true
+  }
+
+  @objc private func windowWillMove(_ note: Notification) {
+    windowMorph.receive(note, preview: overlay?.placementPreview)
+  }
+
+  @objc private func placementAim(_ note: Notification) {
+    guard let info = note.userInfo, let preview = overlay?.placementPreview else { return }
+    switch info["state"] as? String {
+    case "commit":
+      guard let x = info["x"] as? Double, let y = info["y"] as? Double,
+            x.isFinite, y.isFinite, let time = info["time"] as? Double else { return }
+      preview.commit(at: CGPoint(x: x, y: y), time: time)
+    case "cancel":
+      preview.leaveNavigation()
+    default: break
+    }
   }
 
   private func installURLHandler() {
