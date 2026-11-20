@@ -65,8 +65,8 @@ struct OverlayFX {
     backDuration = duration("backDuration", 0.09)
     doneDuration = duration("doneDuration", 0.45)
     holdDuration = duration("holdDuration", 0.16)
-    closeDuration = duration("closeDuration", 0.35)
-    hoverDuration = duration("hoverDuration", 1.05)
+    closeDuration = duration("closeDuration", openingDuration * 0.5)
+    hoverDuration = duration("hoverDuration", 0.14)
   }
   static func color(hex: String) -> NSColor? {
     let digits = hex.hasPrefix("#") ? String(hex.dropFirst()) : hex

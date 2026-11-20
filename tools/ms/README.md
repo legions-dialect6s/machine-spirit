@@ -87,8 +87,10 @@ then first standard window. `--app` accepts an exact running app name or bundle 
 (case-insensitive). No target window is a miss (exit 11).
 
 `smart` selects the display under the mouse, falling back to the main screen.
-Within the usable frame the outer 25% on both axes selects a quarter. Elsewhere the outer 10% of an edge selects a half. The interior selects the centered 90% window. The board preview uses the same geometry. The launcher passes the pointer position from key release with `win place smart --point X,Y`, in global AppKit coordinates.
-`win place next-display` and `prev-display` transfer the relative frame between usable screens. The `display-left`, `display-right`, `display-up`, and `display-down` modes first look for a monitor aligned with the source in that direction, then consider diagonals. They return `status: "unchanged"` when no neighbor exists. `win resize --delta -120` shrinks a window about its center. Frame changes post a visual cue to the running board before applying the final bounds.
+Within its usable frame, the outer 10% edge bands select halves; intersecting
+bands select quarters; the interior selects `amm`. Points over the menu bar or
+Dock clamp to the nearest edge. Named modes use the screen with the largest
+intersection with the current window:
 
 | Mode | Requested frame within the screen's visibleFrame |
 | --- | --- |
@@ -110,7 +112,7 @@ back to a stable AX-title hash (identical titles can collide). All other placeme
 clear the bounce marker; tile-all clears the file.
 
 Exiting fullscreen waits only while the command is active: at most 1.2 seconds,
-checking every 50 ms. When move feedback is enabled, the mover checks the same window after the write, every 35 ms for up to 550 ms (1.3 s for native fullscreen). A matching frame within two points triggers the landing fade. A refused or constrained frame clears the outline through its cancellation path. Frame writes are
+checking every 50 ms. Other placements have no sleeps/retries. Frame writes are
 position → size → position to accommodate apps that clamp against the old position.
 JSON reports `status: "requested"` and the requested frame, not verified geometry:
 apps may silently clamp sizes or reject AX writes. Explicit write errors fail.

@@ -29,20 +29,6 @@ struct ModelTests {
     #expect(ActionPayload.application(path: "/Applications/X.app").windowAction == nil)
   }
 
-  @Test func nativeWindowBindsKeepTheirTypeWithoutDependingOnRectangle() {
-    struct NativeOnly: AvailabilityProbe {
-      func pathExists(_ path: String) -> Bool { ["~/bin/ms", "~/bin/run-quiet.sh"].contains(path) }
-      func rectanglePresent() -> Bool { false }
-      func tmuxPresent() -> Bool { false }
-    }
-    let wrapped = ActionPayload.command("~/bin/run-quiet.sh ~/bin/ms win place display-up")
-    #expect(wrapped.windowAction == "display-up")
-    #expect(Availability.status(of: wrapped, probe: NativeOnly()) == .active)
-    let missing = ActionPayload.command("/missing/bin/ms win place tr")
-    #expect(Availability.status(of: missing, probe: NativeOnly()) == .inert(reason: "missing: /missing/bin/ms"))
-    #expect(ActionPayload.command("echo ms win place left").windowAction == nil)
-  }
-
   @Test func fixtureCarriesTheWindowActionFleet() throws {
     // The live config holds ~17 rectangle:// binds (halves, thirds, corners,
     // maximize, next-display); the fixture tracks it closely. Assert the

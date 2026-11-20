@@ -8,49 +8,6 @@ func flipScreenRect(_ rect: CGRect, primaryTop: CGFloat) -> CGRect {
 
 enum Placement: String, CaseIterable, Codable {
     case smart, step, amm, max, left, right, top, bottom, tl, tr, bl, br, center, fullscreen
-    case nextDisplay = "next-display", previousDisplay = "prev-display"
-    case displayLeft = "display-left", displayRight = "display-right"
-    case displayUp = "display-up", displayDown = "display-down"
-
-    var isDisplayTransfer: Bool {
-        switch self {
-        case .nextDisplay, .previousDisplay, .displayLeft, .displayRight, .displayUp, .displayDown: return true
-        default: return false
-        }
-    }
-}
-
-/// Display frames use AX coordinates (up is negative y). Prefer a neighbor across
-/// the requested edge, then the nearest diagonal if there is no aligned display.
-func destinationDisplay(for mode: Placement, from index: Int, screens: [CGRect]) -> Int? {
-    guard screens.indices.contains(index), screens.count > 1, mode.isDisplayTransfer else { return nil }
-    if mode == .nextDisplay { return (index + 1) % screens.count }
-    if mode == .previousDisplay { return (index + screens.count - 1) % screens.count }
-
-    let horizontal = mode == .displayLeft || mode == .displayRight
-    let positive = mode == .displayRight || mode == .displayDown
-    // Project onto the travel axis and the perpendicular axis for all four arrows.
-    func axes(_ rect: CGRect) -> (along: ClosedRange<CGFloat>, across: ClosedRange<CGFloat>) {
-        let x = rect.minX...rect.maxX, y = rect.minY...rect.maxY
-        return horizontal ? (x, y) : (y, x)
-    }
-    let source = axes(screens[index])
-    var best: (aligned: Int, distance: CGFloat, offset: CGFloat, index: Int)?
-    for candidate in screens.indices where candidate != index {
-        let next = axes(screens[candidate])
-        let forward = positive ? next.along.lowerBound - source.along.upperBound
-                               : source.along.lowerBound - next.along.upperBound
-        guard forward >= 0 else { continue }
-        let overlap = min(source.across.upperBound, next.across.upperBound)
-                    - max(source.across.lowerBound, next.across.lowerBound)
-        let offset = horizontal ? abs(screens[index].midY - screens[candidate].midY)
-                                : abs(screens[index].midX - screens[candidate].midX)
-        let distance: CGFloat = hypot(forward, max(0, -overlap))
-        let rank = (overlap > 0 ? 0 : 1, distance, offset, candidate)
-        if let best, best <= rank { continue }
-        best = rank
-    }
-    return best?.index
 }
 
 /// Mouse and visibleFrame are AppKit coordinates; normalized v increases downward.
@@ -58,39 +15,12 @@ func mouseZone(_ point: CGPoint, visibleFrame: CGRect) -> Placement {
     guard visibleFrame.width > 0, visibleFrame.height > 0 else { return .amm }
     let u = min(1, max(0, (point.x - visibleFrame.minX) / visibleFrame.width))
     let v = min(1, max(0, (visibleFrame.maxY - point.y) / visibleFrame.height))
-    if v < 0.25 {
-        if u < 0.25 { return .tl }
-        if u > 0.75 { return .tr }
-    }
-    if v > 0.75 {
-        if u < 0.25 { return .bl }
-        if u > 0.75 { return .br }
-    }
-    if u < 0.10 { return .left }
-    if u > 0.90 { return .right }
-    if v < 0.10 { return .top }
-    if v > 0.90 { return .bottom }
+    let left = u < 0.10, right = u > 0.90, top = v < 0.10, bottom = v > 0.90
+    if top && left { return .tl }; if top && right { return .tr }
+    if bottom && left { return .bl }; if bottom && right { return .br }
+    if left { return .left }; if right { return .right }
+    if top { return .top }; if bottom { return .bottom }
     return .amm
-}
-
-/// Preserve the relative position and size within the usable area of each display.
-func transferredFrame(_ frame: CGRect, from source: CGRect, to destination: CGRect) -> CGRect {
-    guard source.width > 0, source.height > 0 else { return destination }
-    let scaleX = destination.width / source.width, scaleY = destination.height / source.height
-    let width = min(frame.width * scaleX, destination.width)
-    let height = min(frame.height * scaleY, destination.height)
-    let x = destination.minX + (frame.minX - source.minX) * scaleX
-    let y = destination.minY + (frame.minY - source.minY) * scaleY
-    return CGRect(x: min(max(x, destination.minX), destination.maxX - width),
-                  y: min(max(y, destination.minY), destination.maxY - height), width: width, height: height)
-}
-
-func resizedFrame(_ frame: CGRect, delta: CGFloat, within screen: CGRect) -> CGRect {
-    let width = min(screen.width, max(300, frame.width + delta))
-    let height = min(screen.height, max(200, frame.height + delta))
-    return CGRect(x: min(max(frame.midX - width / 2, screen.minX), screen.maxX - width),
-                  y: min(max(frame.midY - height / 2, screen.minY), screen.maxY - height),
-                  width: width, height: height)
 }
 
 /// All layout geometry below is in AX coordinates (top-left, y down).

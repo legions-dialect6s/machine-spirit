@@ -84,17 +84,3 @@ private func sample(_ timestamp: String, tabs: Int? = nil) -> PulseSnapshot {
     #expect(throws: Failure.self) { try pulse(["report", "--hours", "nan"]) }
     await #expect(throws: Failure.self) { _ = try await translateArea(["--to", "bad?target", "--image", "/does-not-exist"]) }
 }
-
-@Test func placementUsesReleaseCoordinatesAndObservedWindowEdges() throws {
-    #expect(try placementPoint("-247.5,1048.25") == CGPoint(x: -247.5, y: 1048.25))
-    for bad in ["1", ",0", "nan,1", "1,inf", "1,2,3"] {
-        #expect(throws: Failure.self) { try placementPoint(bad) }
-    }
-    let target = CGRect(x: -1800, y: 40, width: 740, height: 550)
-    let halfway = target.offsetBy(dx: 300, dy: 0)
-    var samples = [halfway, target]
-    #expect(confirmedArrival(at: target, timeout: 1) { samples.removeFirst() })
-    #expect(samples.isEmpty)
-    #expect(!confirmedArrival(at: target, timeout: 0) { halfway })
-    #expect(!confirmedArrival(at: target, timeout: 0) { nil })
-}

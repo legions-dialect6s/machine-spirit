@@ -156,47 +156,8 @@ private func savePlacementState(_ state: PlacementState) throws {
     } catch { throw Failure("placement applied but cannot save ladder state: \(error.localizedDescription)") }
 }
 
-/// The mover announces intent, writes the real window immediately, and only then
-/// samples the same AX window for arrival. Polling never writes intermediate frames.
-private struct MoveFeedback {
-    let id = UUID().uuidString
-    let from: String
-    let to: String
-
-    init?(from source: CGRect, to target: CGRect, primaryTop: CGFloat) {
-        guard ProcessInfo.processInfo.environment["MS_WINDOW_TRANSITION"] != "0" else { return nil }
-        from = NSStringFromRect(flipScreenRect(source, primaryTop: primaryTop))
-        to = NSStringFromRect(flipScreenRect(target, primaryTop: primaryTop))
-    }
-
-    func post(_ phase: String) {
-        DistributedNotificationCenter.default().postNotificationName(
-            Notification.Name("com.machinespirit.win.morph"), object: nil,
-            userInfo: ["id": id, "phase": phase, "from": from, "to": to,
-                       "time": ProcessInfo.processInfo.systemUptime], deliverImmediately: true)
-    }
-}
-
-func confirmedArrival(at target: CGRect, timeout: TimeInterval, read: () -> CGRect?) -> Bool {
-    let deadline = ProcessInfo.processInfo.systemUptime + timeout
-    repeat {
-        guard let current = read() else { return false }
-        if sameFrame(current, target) { return true }
-        let remaining = deadline - ProcessInfo.processInfo.systemUptime
-        guard remaining > 0 else { return false }
-        Thread.sleep(forTimeInterval: min(0.035, remaining))
-    } while true
-}
-
-func placementPoint(_ argument: String) throws -> CGPoint {
-    let parts = argument.split(separator: ",", omittingEmptySubsequences: false)
-    guard parts.count == 2, let x = Double(parts[0]), let y = Double(parts[1]),
-          x.isFinite, y.isFinite else { throw Failure("expected --point X,Y in global mouse coordinates") }
-    return CGPoint(x: x, y: y)
-}
-
 @MainActor
-private func placeWindow(_ requested: Placement, appName: String?, pointOverride: CGPoint?) throws -> Output {
+private func placeWindow(_ requested: Placement, appName: String?) throws -> Output {
     let app = try targetApp(appName)
     let snapshot = try AXWindowSnapshot(targetWindow(appElement(app.processIdentifier)))
     guard let currentFrame = snapshot.frame else { throw Failure("window does not expose a valid frame") }
@@ -204,18 +165,10 @@ private func placeWindow(_ requested: Placement, appName: String?, pointOverride
     let primaryTop = screens[0].frame.maxY
     let screenFrames = screens.map { flipScreenRect($0.frame, primaryTop: primaryTop) }
     let fallback = screens.firstIndex { screenID($0) == CGMainDisplayID() } ?? 0
-    let point = pointOverride ?? NSEvent.mouseLocation
-    let currentIndex = overlapScreen(currentFrame, screens: screenFrames, fallback: fallback)
-    var index = requested == .smart
+    let point = NSEvent.mouseLocation
+    let index = requested == .smart
         ? (screens.firstIndex { $0.frame.contains(point) } ?? screens.firstIndex { $0 == NSScreen.main } ?? fallback)
-        : currentIndex
-    if requested.isDisplayTransfer {
-        guard let neighbor = destinationDisplay(for: requested, from: currentIndex, screens: screenFrames) else {
-            return Output(json: ["status": "unchanged", "screen": screenID(screens[currentIndex]),
-                                 "mode": requested.rawValue], text: "No display in that direction")
-        }
-        index = neighbor
-    }
+        : overlapScreen(currentFrame, screens: screenFrames, fallback: fallback)
     let screen = screens[index]
     let visible = flipScreenRect(screen.visibleFrame, primaryTop: primaryTop)
     let key = snapshot.key(pid: app.processIdentifier, windows: (try? windowList(allSpaces: true)) ?? [])
@@ -229,36 +182,19 @@ private func placeWindow(_ requested: Placement, appName: String?, pointOverride
     }
     let fromFullscreen = requested == .step && snapshot.fullscreen
     var frame: CGRect?
-    var cue: MoveFeedback?
-    var arrived = false
-    defer { cue?.post(arrived ? "landed" : "cancel") }
-    let target: CGRect
     if mode == .fullscreen {
-        target = screenFrames[index]
-        cue = MoveFeedback(from: currentFrame, to: target, primaryTop: primaryTop)
-        cue?.post("begin")
         if !snapshot.fullscreen { try setAX(snapshot.element, fullscreenAttribute, kCFBooleanTrue) }
     } else {
         if snapshot.fullscreen { try leaveFullscreen(snapshot.element) }
-        // The Dock/menu-bar reservations can change when exiting native fullscreen.
+        // Native fullscreen can change Dock/menu-bar reservations. Re-read the usable
+        // area after leaving, retaining the destination display selected above.
         let destination = NSScreen.screens.first { screenID($0) == screenID(screen) } ?? screen
         let usable = flipScreenRect(destination.visibleFrame, primaryTop: primaryTop)
-        if requested.isDisplayTransfer {
-            let source = flipScreenRect(screens[currentIndex].visibleFrame, primaryTop: primaryTop)
-            target = transferredFrame(currentFrame, from: source, to: usable)
-        } else {
-            target = placementFrame(mode, visibleFrame: usable, current: currentFrame)
-        }
-        cue = MoveFeedback(from: currentFrame, to: target, primaryTop: primaryTop)
-        cue?.post("begin")
-        if snapshot.fullscreen || !sameFrame(currentFrame, target) { try setFrame(snapshot.element, target) }
+        let target = placementFrame(mode, visibleFrame: usable, current: currentFrame)
+        try setFrame(snapshot.element, target)
         frame = target
     }
-    // Record the committed command before waiting, so rapid ladder presses see the new rung.
     try savePlacementState(PlacementState(windowKey: key, last: mode.rawValue, fromFullscreen: fromFullscreen, t: now))
-    if cue != nil {
-        arrived = confirmedArrival(at: target, timeout: mode == .fullscreen ? 1.3 : 0.55) { axFrame(snapshot.element) }
-    }
     return Output(json: ["windowKey": key, "pid": app.processIdentifier, "mode": mode.rawValue,
                          "screen": screenID(screen), "frame": frame.map(frameJSON) as Any? ?? NSNull(),
                          "fromFullscreen": fromFullscreen, "status": "requested"],
@@ -362,47 +298,13 @@ func tileAllWindows(onlyPIDs: Set<pid_t>? = nil, underMouse: Bool = false) throw
 }
 
 @MainActor
-private func resizeWindow(by delta: Int, appName: String?) throws -> Output {
-    let app = try targetApp(appName)
-    let snapshot = try AXWindowSnapshot(targetWindow(appElement(app.processIdentifier)))
-    guard let frame = snapshot.frame, !snapshot.fullscreen else { throw Failure("window is not resizable in this state") }
-    let screens = try availableScreens()
-    let top = screens[0].frame.maxY
-    let index = overlapScreen(frame, screens: screens.map { flipScreenRect($0.frame, primaryTop: top) })
-    let target = resizedFrame(frame, delta: CGFloat(delta), within: flipScreenRect(screens[index].visibleFrame, primaryTop: top))
-    if frame != target {
-        let cue = MoveFeedback(from: frame, to: target, primaryTop: top)
-        cue?.post("begin")
-        var arrived = false
-        defer { cue?.post(arrived ? "landed" : "cancel") }
-        try setFrame(snapshot.element, target)
-        if cue != nil { arrived = confirmedArrival(at: target, timeout: 0.55) { axFrame(snapshot.element) } }
-    }
-    return Output(json: ["frame": frameJSON(target), "status": "requested"], text: "Requested window resize")
-}
-
-@MainActor
 func win(_ args: [String]) throws -> Output {
-    let options: Set<String>
-    switch args.first {
-    case "resize": options = ["--app", "--delta"]
-    case "place": options = ["--app", "--point"]
-    default: options = ["--app"]
-    }
-    let parsed = try Arguments(args, values: options)
-    let point = try parsed.options["--point"].map(placementPoint)
+    let parsed = try Arguments(args, values: ["--app"])
     guard let verb = parsed.positionals.first else { throw Failure("usage: ms win <place|tile-all|hide-all|cycle>") }
     let mode: Placement?
-    if verb == "resize" {
-        try parsed.count(1)
-        guard let delta = parsed.options["--delta"].flatMap(Int.init) else { throw Failure("expected --delta <points>") }
-        guard AXIsProcessTrusted() else { throw Failure("Accessibility not granted to the calling process") }
-        return try resizeWindow(by: delta, appName: parsed.options["--app"])
-    }
     if verb == "place" {
         try parsed.count(2)
         guard let placement = Placement(rawValue: parsed.positionals[1]) else { throw Failure("unknown placement mode; see ms --help") }
-        guard point == nil || placement == .smart else { throw Failure("--point requires win place smart") }
         mode = placement
     } else {
         try parsed.count(1)
@@ -412,7 +314,7 @@ func win(_ args: [String]) throws -> Output {
     }
     guard AXIsProcessTrusted() else { throw Failure("Accessibility not granted to the calling process") }
     switch verb {
-    case "place": return try placeWindow(mode!, appName: parsed.options["--app"], pointOverride: point)
+    case "place": return try placeWindow(mode!, appName: parsed.options["--app"])
     case "tile-all": return try tileAllWindows()
     case "hide-all": return hideAllWindows()
     default: return try cycleWindow(appName: parsed.options["--app"])

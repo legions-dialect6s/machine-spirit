@@ -7,20 +7,24 @@ struct SmartPlacement: Equatable {
   let frame: CGRect
   let label: String
   static func target(mouse: CGPoint, visibleFrame s: CGRect) -> Self {
-    let mode = mouseZone(mouse, visibleFrame: s)
-    let label: String
-    switch mode {
-    case .tl: label = "top-left quarter"
-    case .tr: label = "top-right quarter"
-    case .bl: label = "bottom-left quarter"
-    case .br: label = "bottom-right quarter"
-    case .left, .right, .top, .bottom: label = mode.rawValue + " half"
-    default: label = "almost maximize"
+    guard s.width > 0, s.height > 0 else { return Self(frame: s, label: "almost maximize") }
+    let u = min(1, max(0, (mouse.x - s.minX) / s.width))
+    let v = min(1, max(0, (s.maxY - mouse.y) / s.height))
+    let left = u < 0.10, right = u > 0.90, top = v < 0.10, bottom = v > 0.90
+    if (left || right) && (top || bottom) {
+      return Self(frame: CGRect(x: right ? s.midX : s.minX, y: top ? s.midY : s.minY,
+        width: s.width / 2, height: s.height / 2),
+        label: "\(top ? "top" : "bottom")-\(left ? "left" : "right") quarter")
     }
-    // Reflect into the CLI's y-down coordinate space and back around the same axis.
-    let bounds = flipScreenRect(s, primaryTop: s.maxY)
-    let target = placementFrame(mode, visibleFrame: bounds, current: .zero)
-    return Self(frame: flipScreenRect(target, primaryTop: s.maxY), label: label)
+    if left || right {
+      return Self(frame: CGRect(x: right ? s.midX : s.minX, y: s.minY, width: s.width / 2, height: s.height),
+                  label: left ? "left half" : "right half")
+    }
+    if top || bottom {
+      return Self(frame: CGRect(x: s.minX, y: top ? s.midY : s.minY, width: s.width, height: s.height / 2),
+                  label: top ? "top half" : "bottom half")
+    }
+    return Self(frame: s.insetBy(dx: s.width * 0.05, dy: s.height * 0.05), label: "almost maximize")
   }
 }
 
@@ -45,51 +49,34 @@ final class PlacementPreview {
   private var globalMonitor: Any?
   private var localMonitor: Any?
   private var displayObserver: NSObjectProtocol?
-  private enum Phase: Equatable {
-    case idle, aiming, committed(Double), moving(String), fading
-  }
-  private var phase: Phase = .idle
-  private var cleanup: DispatchWorkItem?
-  var active: Bool { phase == .aiming }
+  private(set) var active = false
   private(set) var target: SmartPlacement?
   private var fx = OverlayFX()
   var monitoring: Bool { globalMonitor != nil || localMonitor != nil }
 
-  @discardableResult
-  func preparePanel() -> OverlaySurfacePanel {
-    if let panel { return panel }
-    let panel = OverlaySurfacePanel()
-    let view = NSView(); view.wantsLayer = true
-    panel.contentView = view
-    outline.cornerRadius = 12; outline.borderWidth = 2
-    outline.shadowRadius = 10; outline.shadowOffset = .zero
-    label.font = NSFont.monospacedSystemFont(ofSize: 13, weight: .semibold)
-    label.fontSize = 13; label.alignmentMode = .center
-    label.backgroundColor = NSColor(calibratedWhite: 0.025, alpha: 0.94).cgColor
-    label.cornerRadius = 7
-    view.layer?.addSublayer(outline); outline.addSublayer(label)
-    self.panel = panel
-    return panel
-  }
-
   func show(fx: OverlayFX) {
     guard fx.placementPreview else { hide(); return }
     self.fx = fx
-    preparePanel()
-    cleanup?.cancel()
-    cleanup = nil
-    phase = .aiming
-    outline.removeAnimation(forKey: "dismiss")
-    CATransaction.begin(); CATransaction.setDisableActions(true)
-    outline.opacity = 1
-    CATransaction.commit()
+    if panel == nil {
+      let panel = OverlaySurfacePanel()
+      let view = NSView(); view.wantsLayer = true
+      panel.contentView = view
+      outline.cornerRadius = 12; outline.borderWidth = 2
+      outline.shadowRadius = 10; outline.shadowOffset = .zero
+      label.font = NSFont.monospacedSystemFont(ofSize: 13, weight: .semibold)
+      label.fontSize = 13; label.alignmentMode = .center
+      label.backgroundColor = NSColor(calibratedWhite: 0.025, alpha: 0.94).cgColor
+      label.cornerRadius = 7
+      view.layer?.addSublayer(outline); outline.addSublayer(label)
+      self.panel = panel
+    }
+    active = true
     update(mouse: NSEvent.mouseLocation)
     guard !monitoring else { return }
-    let motion: NSEvent.EventTypeMask = [.mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged]
-    globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: motion) { [weak self] _ in
+    globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved) { [weak self] _ in
       MainActor.assumeIsolated { self?.update(mouse: NSEvent.mouseLocation) }
     }
-    localMonitor = NSEvent.addLocalMonitorForEvents(matching: motion) { [weak self] event in
+    localMonitor = NSEvent.addLocalMonitorForEvents(matching: .mouseMoved) { [weak self] event in
       self?.update(mouse: NSEvent.mouseLocation); return event
     }
     displayObserver = NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
@@ -121,7 +108,7 @@ final class PlacementPreview {
     label.foregroundColor = color; label.string = next.label
     label.frame = CGRect(x: max(4, (outline.bounds.width - 220) / 2), y: outline.bounds.height - 40,
                          width: min(220, outline.bounds.width - 8), height: 26)
-    if hadTarget && !movedScreen && fx.openingDuration > 0 && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+    if hadTarget && !movedScreen && fx.openingDuration > 0 {
       for (key, from, to) in [("position", NSValue(point: CGPoint(x: previous.midX, y: previous.midY)), NSValue(point: outline.position)),
                              ("bounds", NSValue(rect: CGRect(origin: .zero, size: previous.size)), NSValue(rect: outline.bounds))] {
         let animation = CABasicAnimation(keyPath: key)
@@ -134,69 +121,13 @@ final class PlacementPreview {
     panel.orderFrontRegardless()
   }
 
-  // Capture the release point before the key tree closes. The same outline and
-  // label stay on screen while the command starts and the AX window catches up.
-  func commit(at point: CGPoint, time: Double) {
-    guard active, (0...0.5).contains(ProcessInfo.processInfo.systemUptime - time) else { return }
-    update(mouse: point)
-    stopMonitoring()
-    phase = .committed(time)
-    let work = DispatchWorkItem { [weak self] in
-      guard let self, self.phase == .committed(time) else { return }
-      self.dismiss(duration: 0.08)
-    }
-    cleanup = work
-    DispatchQueue.main.asyncAfter(deadline: .now() + WindowMorph.timeout, execute: work)
-  }
-
-  func attachMove(id: String, destination: CGRect, time: Double) -> Bool {
-    guard case .committed(let release) = phase, time >= release, let frame = target?.frame,
-          abs(frame.minX - destination.minX) <= 1, abs(frame.minY - destination.minY) <= 1,
-          abs(frame.width - destination.width) <= 1, abs(frame.height - destination.height) <= 1 else { return false }
-    cleanup?.cancel(); cleanup = nil
-    phase = .moving(id)
-    return true
-  }
-
-  func finishMove(id: String, duration: TimeInterval) {
-    if phase == .moving(id) { dismiss(duration: duration) }
-  }
-
-  func leaveNavigation() {
-    if active { hide() }
-  }
-
-  private func dismiss(duration: TimeInterval) {
-    cleanup?.cancel()
-    guard duration > 0, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else { hide(); return }
-    phase = .fading
-    let fade = CABasicAnimation(keyPath: "opacity")
-    fade.fromValue = outline.opacity
-    fade.toValue = 0
-    fade.duration = duration
-    CATransaction.begin(); CATransaction.setDisableActions(true)
-    outline.opacity = 0
-    outline.add(fade, forKey: "dismiss")
-    CATransaction.commit()
-    let work = DispatchWorkItem { [weak self] in
-      if self?.phase == .fading { self?.hide() }
-    }
-    cleanup = work
-    DispatchQueue.main.asyncAfter(deadline: .now() + duration, execute: work)
-  }
-
   func hide() {
-    cleanup?.cancel(); cleanup = nil
-    phase = .idle; target = nil
-    stopMonitoring()
-    outline.removeAllAnimations(); panel?.orderOut(nil)
-  }
-
-  private func stopMonitoring() {
+    active = false; target = nil
     if let globalMonitor { NSEvent.removeMonitor(globalMonitor) }
     if let localMonitor { NSEvent.removeMonitor(localMonitor) }
     if let displayObserver { NotificationCenter.default.removeObserver(displayObserver) }
     globalMonitor = nil; localMonitor = nil; displayObserver = nil
+    outline.removeAllAnimations(); panel?.orderOut(nil)
   }
 }
 

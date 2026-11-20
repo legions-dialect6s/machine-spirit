@@ -88,9 +88,6 @@ class MainWindow: PanelWindow, NSWindowDelegate {
       controller.keyDown(with: event)
       return
     }
-    if event.type == .keyUp, event.keyCode == KeyHelpers.space.rawValue {
-      controller.spaceReleased(with: event)
-    }
     super.sendEvent(event)
   }
 

@@ -8,9 +8,7 @@ ms — structured access to this Mac (append --json for machine-readable output)
   windows [--app NAME] [--all-spaces] [--all-layers]
   focus <app-name|bundle-id|window-id>
   mouse
-  win place <smart|step|amm|max|left|right|top|bottom|tl|tr|bl|br|center|fullscreen|next-display|prev-display|display-left|display-right|display-up|display-down> [--app NAME]
-  win place smart --point X,Y [--app NAME]
-  win resize --delta <points> [--app NAME]
+  win place <smart|step|amm|max|left|right|top|bottom|tl|tr|bl|br|center|fullscreen> [--app NAME]
   win <tile-all|hide-all>
   win cycle [--app NAME]
   binds [--flat|--tree] [--grep TEXT]
