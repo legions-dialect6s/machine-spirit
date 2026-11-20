@@ -120,18 +120,20 @@ The tree follows four rules, by escalating "weight" of the action:
 |---|---|---|---|---|
 | `⇪ a c` | Activity Monitor | | `⇪ n o` | Notes ✕ |
 | `⇪ c l` | Claude | | `⇪ p h` | Photos ✕ |
-| `⇪ c o` | Codex | | `⇪ p s` | Photoshop (hold `s`: next document) |
+| `⇪ c o d` | Codex | | `⇪ p s` | Photoshop (hold `s`: next document) |
 | `⇪ f c 2` | Focusrite Control 2 | | `⇪ p b` | Photo Booth ✕ |
 | `⇪ t e l` / `⇪ t g` | Telegram | | `⇪ u r` | Unreal Editor (cycle; hold `r`) |
 | `⇪ c h r` | Chrome (jump/cycle) | | `⇪ s a` | Safari (jump/cycle) |
 | `⇪ f i` | Finder (jump/cycle) | | `⇪ s i g` | Signal (jump/cycle) |
-| `⇪ d i` | Discord | | `⇪ s e` | System Settings |
+| `⇪ d i` | Discord | | `⇪ s e` | System Settings ✕ |
 | `⇪ f a c` / `⇪ f t` | FaceTime ✕ (from Messages: FaceTime the selected chat) | | `⇪ s p` | Spotify |
 | `⇪ f i` (hold `i`) | Finder — hold to gather windows into tabs | | `⇪ t e x` | TextEdit ✕ (closes all; asks if unsaved) |
 | `⇪ g p` | ChatGPT | | `⇪ t e r` | Terminal |
 | `⇪ i t` | iTerm | | `⇪ v l c` | VLC (jump/cycle) |
-| `⇪ m e` | Messages | | `⇪ v m w` | VMware Fusion |
+| `⇪ m e` | Messages → straight into conversation search (type a name) | | `⇪ v m w` | VMware Fusion |
 | `⇪ w h` | WhatsApp | | `⇪ k` | Clipboard history |
+| `⇪ c a l` | Calendar ✕ | | `⇪ c o n` | Contacts ✕ |
+| `⇪ m a i l` | Mail ✕ | | `⇪ t 3` | T3 Code |
 
 `⇪ s a` (Safari), `⇪ c h r` (Chrome), and `⇪ f i` (Finder) all run [`bin/app-jump.applescript`](bin/app-jump.applescript) with an app name — the whole-app analogue of `web-jump`, one ladder for every app: **not running → launch; backgrounded → restore its minimized windows and bring it forward (opening a window if none); already frontmost → cycle its windows in order, wrapping**. It rides macOS's native ⌘\` / ⌘N, so the implementation is shared rather than scripted per app; apps must still honor those native shortcuts and expose accessible windows. (Its predecessor, [`bin/browser-window-cycle.applescript`](bin/browser-window-cycle.applescript), cycled only the frontmost browser and stranded minimized windows; it stays in `bin/` unused.)
 
@@ -187,6 +189,9 @@ Every site key runs the same script, [`bin/web-jump.applescript`](bin/web-jump.a
 | Keys | Action |
 |---|---|
 | `⇪ h h` | hide frontmost app (⌘H) |
+| `⇪ c a p s` | real Caps Lock on/off (⇪ is F19), with a light HUD pill |
+| `⇪ e t` | drag a screen area → on-device OCR + Translation → clipboard + HUD card |
+| `⇪ a u` | tile the windows of every app currently playing audio |
 | `⇪ h i d e` | hide everything (`ms win hide-all`) |
 | `⇪ s h o w` | unhide + un-minimize everything and tile every window across all displays (`ms win tile-all`) |
 | `⇪ m a c h i n e s p i r i t` | the board, transient (closes when you click away, reopens where you were) |

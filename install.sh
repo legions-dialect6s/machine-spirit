@@ -109,6 +109,19 @@ if [[ -f "$TMUX_CONF_SRC" ]]; then
   echo "    installed tmux.conf + resurrect/continuum + launchd auto-save (every 15m)"
 fi
 
+# Pulse — an hourly, local-only usage snapshot (`ms pulse collect`, ~0.1s CPU
+# per run, background QoS) feeding `ms pulse report`. Opt-out: set
+# MS_NO_PULSE=1 before install, or `launchctl bootout gui/$UID/com.machinespirit.pulse`.
+PULSE_SRC="$REPO_ROOT/config/pulse/com.machinespirit.pulse.plist"
+PULSE_DEST="$HOME/Library/LaunchAgents/com.machinespirit.pulse.plist"
+if [[ -f "$PULSE_SRC" && -z "${MS_NO_PULSE:-}" ]]; then
+  mkdir -p "$(dirname "$PULSE_DEST")"
+  sed "s|__HOME__|$HOME|g" "$PULSE_SRC" > "$PULSE_DEST"
+  launchctl bootout "gui/$(id -u)/com.machinespirit.pulse" 2>/dev/null || true
+  launchctl bootstrap "gui/$(id -u)" "$PULSE_DEST" 2>/dev/null || true
+  echo "    installed hourly pulse (local only; ms pulse report)"
+fi
+
 # MachineSpirit Leader Key fork — the daily-driver launcher. Built from source
 # (forks/LeaderKey) and auto-started by a self-healing LaunchAgent (relaunches
 # on crash, respects a deliberate Quit). Needs full Xcode; if absent, stock

@@ -114,6 +114,12 @@
           ],
           "key" : "m",
           "type" : "group"
+        },
+        {
+          "key" : "u",
+          "label" : "Tile apps playing audio",
+          "type" : "command",
+          "value" : "~/bin/run-quiet.sh ~/bin/ms audio tile"
         }
       ],
       "key" : "a",
@@ -166,11 +172,6 @@
           "value" : "/Applications/Claude.app"
         },
         {
-          "key" : "o",
-          "type" : "application",
-          "value" : "/Applications/Codex.app"
-        },
-        {
           "actions" : [
             {
               "key" : "n",
@@ -201,6 +202,48 @@
             }
           ],
           "key" : "b",
+          "type" : "group"
+        },
+        {
+          "actions" : [
+            {
+              "key" : "d",
+              "label" : "Codex",
+              "type" : "application",
+              "value" : "/Applications/Codex.app"
+            },
+            {
+              "key" : "n",
+              "label" : "Contacts",
+              "type" : "command",
+              "value" : "~/bin/run-quiet.sh ~/bin/app-toggle.sh \"Contacts\""
+            }
+          ],
+          "key" : "o",
+          "type" : "group"
+        },
+        {
+          "actions" : [
+            {
+              "key" : "l",
+              "label" : "Calendar",
+              "type" : "command",
+              "value" : "~/bin/run-quiet.sh ~/bin/app-toggle.sh \"Calendar\""
+            },
+            {
+              "actions" : [
+                {
+                  "key" : "s",
+                  "label" : "Real Caps Lock toggle",
+                  "type" : "command",
+                  "value" : "~/bin/run-quiet.sh ~/bin/ms capslock toggle"
+                }
+              ],
+              "key" : "p",
+              "type" : "group"
+            }
+          ],
+          "key" : "a",
           "type" : "group"
         }
       ],
@@ -249,6 +292,12 @@
           ],
           "key" : "e",
           "type" : "group"
+        },
+        {
+          "key" : "t",
+          "label" : "Translate a screen area",
+          "type" : "command",
+          "value" : "~/bin/run-quiet.sh ~/bin/ms translate-area"
         }
       ],
       "key" : "e",
@@ -535,8 +584,9 @@
       "actions" : [
         {
           "key" : "e",
-          "type" : "application",
-          "value" : "/System/Applications/Messages.app"
+          "label" : "Messages → type a name",
+          "type" : "command",
+          "value" : "~/bin/run-quiet.sh ~/bin/messages-find.sh"
         },
         {
           "actions" : [
@@ -616,6 +666,18 @@
                 }
               ],
               "key" : "c",
+              "type" : "group"
+            },
+            {
+              "actions" : [
+                {
+                  "key" : "l",
+                  "label" : "Mail",
+                  "type" : "command",
+                  "value" : "~/bin/run-quiet.sh ~/bin/app-toggle.sh \"Mail\""
+                }
+              ],
+              "key" : "i",
               "type" : "group"
             }
           ],
@@ -733,8 +795,9 @@
         },
         {
           "key" : "e",
-          "type" : "application",
-          "value" : "/System/Applications/System Settings.app"
+          "label" : "System Settings",
+          "type" : "command",
+          "value" : "~/bin/run-quiet.sh ~/bin/app-toggle.sh \"System Settings\""
         },
         {
           "actions" : [
@@ -985,6 +1048,12 @@
           "label" : "Tripo",
           "type" : "command",
           "value" : "osascript ~/bin/web-jump.applescript tripo3d.ai"
+        },
+        {
+          "key" : "3",
+          "label" : "T3 Code",
+          "type" : "application",
+          "value" : "/Applications/T3 Code (Beta).app"
         }
       ],
       "key" : "t",
