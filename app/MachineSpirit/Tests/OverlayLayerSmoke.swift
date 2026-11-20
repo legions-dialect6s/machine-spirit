@@ -61,9 +61,19 @@ import MachineSpiritKit
     precondition(panel.frame == panel.screen!.frame && !panel.canBecomeKey && !panel.canBecomeMain)
     precondition(panel.level.rawValue > Int(CGWindowLevelForKey(.statusWindow)))
     precondition(layers(panel.contentView?.layer).allSatisfy { $0.contentsScale == panel.screen!.backingScaleFactor })
+    func checkNodeTravel(_ expected: TimeInterval) {
+      let animations = layers(panel.contentView?.layer).filter { $0.name != nil && $0.bounds.width == 48 }
+        .compactMap { $0.animation(forKey: "position") }
+      precondition(!animations.isEmpty && animations.allSatisfy { abs($0.duration - expected) < 0.001 },
+                   "Node navigation stopped honoring its configured duration")
+    }
     overlay.show(path: "a/x", screen: nil); pump(0.02)
+    checkNodeTravel(0.14)
     precondition(layers(panel.contentView?.layer).contains { $0.animation(forKey: "pop") is CASpringAnimation })
-    overlay.show(path: "a", screen: nil); pump()
+    pump(0.20)
+    overlay.show(path: "a", screen: nil); pump(0.02)
+    checkNodeTravel(0.09)
+    pump()
     overlay.feedback(kind: "miss", path: "a"); pump(0.02)
     precondition(layers(panel.contentView?.layer).contains { $0.animation(forKey: "feedbackPulse") != nil })
     overlay.feedback(kind: "done", path: "a"); pump(0.02)

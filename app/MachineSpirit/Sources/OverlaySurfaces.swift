@@ -52,11 +52,100 @@ final class PlacementPreview {
   private(set) var active = false
   private(set) var target: SmartPlacement?
   private var fx = OverlayFX()
+  private var armedPath: String?
+  private var committed = false
+  private var intent: PlacementIntent?
+  private var window: ObservedWindow?
+  private var owner: pid_t?
+  private var observation: Task<Void, Never>?
+  private var activationObserver: NSObjectProtocol?
+  private let currentOwner: () -> pid_t?
+  private let query: @Sendable (pid_t, CGWindowID?) async -> ObservedWindow?
+
+  init(currentOwner: @escaping () -> pid_t? = { NSWorkspace.shared.frontmostApplication?.processIdentifier },
+       query: @escaping @Sendable (pid_t, CGWindowID?) async -> ObservedWindow? = ObservedWindow.read) {
+    self.currentOwner = currentOwner
+    self.query = query
+  }
   var monitoring: Bool { globalMonitor != nil || localMonitor != nil }
 
-  func show(fx: OverlayFX) {
+  func arm(_ next: PlacementIntent, path: String, fx: OverlayFX) {
     guard fx.placementPreview else { hide(); return }
+    if armedPath == path && !committed { return }
+    hide()
+    intent = next
+    armedPath = path
     self.fx = fx
+    active = true
+    if next == .mouse { showMouse() }
+    guard let pid = currentOwner() else { return }
+    owner = pid
+    activationObserver = NSWorkspace.shared.notificationCenter.addObserver(
+      forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
+    ) { [weak self] _ in
+      MainActor.assumeIsolated {
+        if let self, self.currentOwner() != self.owner { self.hide() }
+      }
+    }
+    observation = Task { [weak self, query] in
+      let source = await query(pid, nil)
+      guard let self, !Task.isCancelled, armedPath == path, !committed, currentOwner() == pid else { return }
+      window = source
+      guard let source, let (placement, screen) = next.destination(window: source.frame, screens: NSScreen.screens) else { return }
+      render(placement, on: screen)
+    }
+  }
+
+  /// A fired bind is posted before the launcher runs the command. The board alone
+  /// watches for its landing. No monitor or animation lies on the launcher's key path.
+  func fire(path: String) {
+    guard armedPath == path, active, !committed, let owner, currentOwner() == owner,
+          let window, let intent, let primary = NSScreen.screens.first else { hide(); return }
+    if intent == .mouse { update(mouse: NSEvent.mouseLocation) }
+    guard let target, let display = panel?.screen else { hide(); return }
+    committed = true
+    active = false
+    stopTrackingMouse()
+    let expected = flipScreenRect(target.frame, primaryTop: primary.frame.maxY)
+    let screens = NSScreen.screens
+    let frames = screens.map { flipScreenRect($0.frame, primaryTop: primary.frame.maxY) }
+    let displayIndex = screens.firstIndex(of: display)
+    observation?.cancel()
+    observation = Task { [weak self, query] in
+      let deadline = ContinuousClock.now + .milliseconds(700)
+      repeat {
+        // The first sample follows command dispatch. This task suspends off the launcher queue.
+        try? await Task.sleep(for: .milliseconds(25))
+        guard !Task.isCancelled else { return }
+        let current = await query(owner, window.id)
+        guard let self, !Task.isCancelled else { return }
+        guard let current, currentOwner() == owner else { hide(); return }
+        let landed: Bool
+        if case .cycle = intent { landed = overlapScreen(current.frame, screens: frames) == displayIndex }
+        else { landed = ObservedWindow.matches(current.frame, expected) }
+        if landed {
+          let duration = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0 : 0.13
+          if duration > 0 {
+            let fade = CABasicAnimation(keyPath: "opacity")
+            fade.fromValue = Float(1); fade.toValue = Float(0); fade.duration = duration
+            CATransaction.begin(); CATransaction.setDisableActions(true)
+            outline.opacity = 0; outline.add(fade, forKey: "landing")
+            CATransaction.commit()
+            try? await Task.sleep(for: .seconds(duration))
+          }
+          if !Task.isCancelled { hide() }
+          return
+        }
+      } while ContinuousClock.now < deadline
+      if !Task.isCancelled { self?.hide() }
+    }
+  }
+
+  func leaveNavigation() {
+    if !committed { hide() }
+  }
+
+  @discardableResult func preparePanel() -> OverlaySurfacePanel {
     if panel == nil {
       let panel = OverlaySurfacePanel()
       let view = NSView(); view.wantsLayer = true
@@ -70,7 +159,10 @@ final class PlacementPreview {
       view.layer?.addSublayer(outline); outline.addSublayer(label)
       self.panel = panel
     }
-    active = true
+    return panel!
+  }
+
+  private func showMouse() {
     update(mouse: NSEvent.mouseLocation)
     guard !monitoring else { return }
     globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved) { [weak self] _ in
@@ -86,8 +178,12 @@ final class PlacementPreview {
   }
 
   func update(mouse: CGPoint) {
-    guard active, let panel, let screen = NSScreen.screens.first(where: { $0.frame.contains(mouse) }) else { return }
-    let next = SmartPlacement.target(mouse: mouse, visibleFrame: screen.visibleFrame)
+    guard active, intent == .mouse, let screen = NSScreen.screens.first(where: { $0.frame.contains(mouse) }) else { return }
+    render(SmartPlacement.target(mouse: mouse, visibleFrame: screen.visibleFrame), on: screen)
+  }
+
+  private func render(_ next: SmartPlacement, on screen: NSScreen) {
+    let panel = preparePanel()
     let movedScreen = panel.frame != screen.frame
     guard next != target || movedScreen else { return }
     let previous = outline.presentation()?.frame ?? outline.frame
@@ -95,6 +191,7 @@ final class PlacementPreview {
     target = next
     CATransaction.begin(); CATransaction.setDisableActions(true)
     panel.setFrame(screen.frame, display: false)
+    outline.opacity = 1
     outline.contentsScale = screen.backingScaleFactor; label.contentsScale = screen.backingScaleFactor
     let color = fx.accentColor.cgColor
     outline.borderColor = color; outline.shadowColor = color
@@ -108,7 +205,7 @@ final class PlacementPreview {
     label.foregroundColor = color; label.string = next.label
     label.frame = CGRect(x: max(4, (outline.bounds.width - 220) / 2), y: outline.bounds.height - 40,
                          width: min(220, outline.bounds.width - 8), height: 26)
-    if hadTarget && !movedScreen && fx.openingDuration > 0 {
+    if hadTarget && !movedScreen && fx.openingDuration > 0 && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
       for (key, from, to) in [("position", NSValue(point: CGPoint(x: previous.midX, y: previous.midY)), NSValue(point: outline.position)),
                              ("bounds", NSValue(rect: CGRect(origin: .zero, size: previous.size)), NSValue(rect: outline.bounds))] {
         let animation = CABasicAnimation(keyPath: key)
@@ -122,12 +219,21 @@ final class PlacementPreview {
   }
 
   func hide() {
-    active = false; target = nil
+    guard armedPath != nil || active || committed else { return }
+    observation?.cancel(); observation = nil
+    if let activationObserver { NSWorkspace.shared.notificationCenter.removeObserver(activationObserver) }
+    activationObserver = nil
+    active = false; target = nil; armedPath = nil; committed = false
+    owner = nil; intent = nil; window = nil
+    stopTrackingMouse()
+    outline.removeAllAnimations(); panel?.orderOut(nil)
+  }
+
+  private func stopTrackingMouse() {
     if let globalMonitor { NSEvent.removeMonitor(globalMonitor) }
     if let localMonitor { NSEvent.removeMonitor(localMonitor) }
     if let displayObserver { NotificationCenter.default.removeObserver(displayObserver) }
     globalMonitor = nil; localMonitor = nil; displayObserver = nil
-    outline.removeAllAnimations(); panel?.orderOut(nil)
   }
 }
 

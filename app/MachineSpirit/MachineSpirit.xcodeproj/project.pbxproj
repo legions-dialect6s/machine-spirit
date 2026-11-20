@@ -7,15 +7,17 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		CA95F0110000000000000001 /* CapsFollower.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA95F0110000000000000002 /* CapsFollower.swift */; };
 		019F7D79E1E876626E11B9A2 /* GraphView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98EAE5FFEBA7D1FAEEF81FAE /* GraphView.swift */; };
 		03CC4C60DC362CD4DC476CD7 /* NodePresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3459338B1304703BA890A8E0 /* NodePresentation.swift */; };
 		2783C8C8E6335417108C3E82 /* TypingOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB996D2207146A3239C199E7 /* TypingOverlay.swift */; };
 		29CA3C829C1BB591EF6C2938 /* ITermColors.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9B9B3AF4EADBCCCF104CC61 /* ITermColors.swift */; };
 		45A0EF1FFC3093AF6A7A4DEC /* StatsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CC732F3DE1F0F906BDE16CB /* StatsStore.swift */; };
+		470F60C816B9DE6F37C9C478 /* WindowGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B383E80DB7E545B8FCBEAE6 /* WindowGeometry.swift */; };
 		4761260309A45D32C4754ECA /* PenForm.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8436DE853B6E96250F95BCFF /* PenForm.swift */; };
 		78AD8841C80E6169F5C5772E /* IconStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 271503FD6BBFFFE7B766D1E8 /* IconStore.swift */; };
+		795D82A7A4CBF3845D956911 /* CapsFollower.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86C95A04F08E4A400E7DE67E /* CapsFollower.swift */; };
 		86F32D191CB8DA83C493D46F /* MachineSpiritApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D78116A2645238BBF41D3FF7 /* MachineSpiritApp.swift */; };
+		8C6FC227E74A60E474E20DDE /* PlacementIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B99CD65D105924E5F72B86 /* PlacementIntent.swift */; };
 		8F78FE96C639C89C1CD51337 /* SkullMark.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF2D5534392BEBDC5965DDCB /* SkullMark.swift */; };
 		989B5E562D7D3E40A4F22669 /* OverlayScene.swift in Sources */ = {isa = PBXBuildFile; fileRef = D84D34F9CD342ECBD163572B /* OverlayScene.swift */; };
 		B7025D3CB60D86436740126C /* GraphicsSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1FA73B74A525F333E96C2DB /* GraphicsSettings.swift */; };
@@ -34,7 +36,6 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		CA95F0110000000000000002 /* CapsFollower.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CapsFollower.swift; sourceTree = "<group>"; };
 		03C338F8057743822B0E18EA /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		0C61D57EF5E1027553CA1962 /* SheolService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SheolService.swift; sourceTree = "<group>"; };
 		271503FD6BBFFFE7B766D1E8 /* IconStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IconStore.swift; sourceTree = "<group>"; };
@@ -45,8 +46,10 @@
 		6D41AF5985D266C2D8932BAA /* OverlayFX.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverlayFX.swift; sourceTree = "<group>"; };
 		724FBCC190FD8D5C54BA1753 /* MachineSpiritKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = MachineSpiritKit; path = ../../kit/MachineSpiritKit; sourceTree = SOURCE_ROOT; };
 		8436DE853B6E96250F95BCFF /* PenForm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PenForm.swift; sourceTree = "<group>"; };
+		86C95A04F08E4A400E7DE67E /* CapsFollower.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CapsFollower.swift; sourceTree = "<group>"; };
 		8CC732F3DE1F0F906BDE16CB /* StatsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatsStore.swift; sourceTree = "<group>"; };
 		98EAE5FFEBA7D1FAEEF81FAE /* GraphView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphView.swift; sourceTree = "<group>"; };
+		9B383E80DB7E545B8FCBEAE6 /* WindowGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowGeometry.swift; sourceTree = "<group>"; };
 		A0324EC861ED085F27A17494 /* OverlaySurfaces.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverlaySurfaces.swift; sourceTree = "<group>"; };
 		AB996D2207146A3239C199E7 /* TypingOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TypingOverlay.swift; sourceTree = "<group>"; };
 		AE260BAD489CB9D25CE5394B /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
@@ -57,6 +60,7 @@
 		D84D34F9CD342ECBD163572B /* OverlayScene.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverlayScene.swift; sourceTree = "<group>"; };
 		E9D11E59FDFE782CBF1FB7B0 /* MachineSpirit.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MachineSpirit.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		F1FA73B74A525F333E96C2DB /* GraphicsSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphicsSettings.swift; sourceTree = "<group>"; };
+		F4B99CD65D105924E5F72B86 /* PlacementIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlacementIntent.swift; sourceTree = "<group>"; };
 		F9B9B3AF4EADBCCCF104CC61 /* ITermColors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ITermColors.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -73,6 +77,15 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		268C0FA2AAAD38327BFB8580 /* machine-spirit */ = {
+			isa = PBXGroup;
+			children = (
+				99A172A87AE1D67D111F8754 /* tools */,
+			);
+			name = "machine-spirit";
+			path = ../..;
+			sourceTree = "<group>";
+		};
 		56C8093687AC5C63D2A8ADB8 /* Products */ = {
 			isa = PBXGroup;
 			children = (
@@ -81,12 +94,20 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
+		5BBE22464A12253671909B19 /* ms */ = {
+			isa = PBXGroup;
+			children = (
+				9B383E80DB7E545B8FCBEAE6 /* WindowGeometry.swift */,
+			);
+			path = ms;
+			sourceTree = "<group>";
+		};
 		7746AEE7D6B8C6DEE1A62BA0 /* Sources */ = {
 			isa = PBXGroup;
 			children = (
 				03C338F8057743822B0E18EA /* AppDelegate.swift */,
-				CA95F0110000000000000002 /* CapsFollower.swift */,
 				5D03F1A0DE367DED4735C5E1 /* AppState.swift */,
+				86C95A04F08E4A400E7DE67E /* CapsFollower.swift */,
 				C8FE015A691BDC6F292D49AE /* ConfigWatcher.swift */,
 				41BA055CA9A05CA859DBB7D0 /* ContentView.swift */,
 				F1FA73B74A525F333E96C2DB /* GraphicsSettings.swift */,
@@ -100,6 +121,7 @@
 				D84D34F9CD342ECBD163572B /* OverlayScene.swift */,
 				A0324EC861ED085F27A17494 /* OverlaySurfaces.swift */,
 				8436DE853B6E96250F95BCFF /* PenForm.swift */,
+				F4B99CD65D105924E5F72B86 /* PlacementIntent.swift */,
 				0C61D57EF5E1027553CA1962 /* SheolService.swift */,
 				BF2D5534392BEBDC5965DDCB /* SkullMark.swift */,
 				8CC732F3DE1F0F906BDE16CB /* StatsStore.swift */,
@@ -109,14 +131,39 @@
 			path = Sources;
 			sourceTree = "<group>";
 		};
+		99A172A87AE1D67D111F8754 /* tools */ = {
+			isa = PBXGroup;
+			children = (
+				ACC439AC5F5BC6BFCCD4F69C /* ms */,
+			);
+			path = tools;
+			sourceTree = "<group>";
+		};
 		9EF7AA6FDFC3F2302106A398 = {
 			isa = PBXGroup;
 			children = (
 				32D65BB0E4B6A0D0BB110E46 /* Assets.xcassets */,
+				268C0FA2AAAD38327BFB8580 /* machine-spirit */,
 				CD174ECF25B6D22FAEA81C58 /* Packages */,
 				7746AEE7D6B8C6DEE1A62BA0 /* Sources */,
 				56C8093687AC5C63D2A8ADB8 /* Products */,
 			);
+			sourceTree = "<group>";
+		};
+		ACC439AC5F5BC6BFCCD4F69C /* ms */ = {
+			isa = PBXGroup;
+			children = (
+				B4FD2C7416DD3CC3C3277073 /* Sources */,
+			);
+			path = ms;
+			sourceTree = "<group>";
+		};
+		B4FD2C7416DD3CC3C3277073 /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				5BBE22464A12253671909B19 /* ms */,
+			);
+			path = Sources;
 			sourceTree = "<group>";
 		};
 		CD174ECF25B6D22FAEA81C58 /* Packages */ = {
@@ -205,9 +252,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				CA95F0110000000000000001 /* CapsFollower.swift in Sources */,
 				EE9DC96225DDD378E7F5B9E5 /* AppDelegate.swift in Sources */,
 				EFBAA750BEEE2D52CB8BC739 /* AppState.swift in Sources */,
+				795D82A7A4CBF3845D956911 /* CapsFollower.swift in Sources */,
 				DE1E4416918E309ED3644824 /* ConfigWatcher.swift in Sources */,
 				BAFAFC9DCF47C32765544359 /* ContentView.swift in Sources */,
 				019F7D79E1E876626E11B9A2 /* GraphView.swift in Sources */,
@@ -221,11 +268,13 @@
 				989B5E562D7D3E40A4F22669 /* OverlayScene.swift in Sources */,
 				C81F6E8A96F592D32DB43AB3 /* OverlaySurfaces.swift in Sources */,
 				4761260309A45D32C4754ECA /* PenForm.swift in Sources */,
+				8C6FC227E74A60E474E20DDE /* PlacementIntent.swift in Sources */,
 				FF7001114F0F6CE852FA0578 /* SheolService.swift in Sources */,
 				8F78FE96C639C89C1CD51337 /* SkullMark.swift in Sources */,
 				45A0EF1FFC3093AF6A7A4DEC /* StatsStore.swift in Sources */,
 				F38442DA220CA4A379FAFC8B /* Theme.swift in Sources */,
 				2783C8C8E6335417108C3E82 /* TypingOverlay.swift in Sources */,
+				470F60C816B9DE6F37C9C478 /* WindowGeometry.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

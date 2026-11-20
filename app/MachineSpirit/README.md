@@ -54,14 +54,10 @@ See [the wave verification report](Tests/OverlayWaveVerification.md) for the iso
 
 ## Placement preview and HUD
 
-Nav `shown` with textual path `space` opens a click-through outline on the screen
-under the mouse. The preview owns mouse-moved monitors only in that state and
-removes them on path change, hold, or hide. It uses the same 10% edge bands as
-`ms win place smart`: corners select quarters, a single edge selects a half,
-and the interior selects a centered 90% rectangle. Zones animate in 150ms;
-setting `openingDuration` to zero disables this transition. The glow follows
-the stroke and the interior fill is 3.5% alpha. Existing graph hover monitors
-remain separate and retain their original shown-session lifetime.
+The green outline shows the destination while a placement shortcut is still incomplete. Q/Q and E/E preview a quarter. The first directional arrow previews the transferred frame. F/F and G/G mark the destination display because Rectangle may restore a prior window size there. A path change or cancellation clears the outline. If the source or destination is ambiguous, the command can proceed without a preview.
+
+At commit the board follows the original window ID using WindowServer metadata and fades the outline on arrival. Observation runs independently of the launcher and expires after 700 ms if the window refuses the geometry. The existing Space prefix follows the pointer and uses the classic quarter, half and almost-maximize zones.
+
 
 - `machinespirit://hud?style=caps&state=on` (or `off`) shows a 240×40pt pill at the top-center of
   every screen, 10pt inside the visible frame. A small ⇪ and CAPS ON/OFF sit

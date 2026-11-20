@@ -29,7 +29,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
   // A namespaced center allows the smoke harness to exercise real IPC without
   // sending synthetic navigation to the installed app.
-  func installOverlayObservers(prefix: String = "com.machinespirit.leader") {
+  func installOverlayObservers(prefix: String = "com.machinespirit.leader", placementPreview: PlacementPreview = PlacementPreview()) {
     let center = DistributedNotificationCenter.default()
     center.addObserver(self, selector: #selector(navigation(_:)),
       name: Notification.Name("\(prefix).nav"), object: nil,
@@ -40,7 +40,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     center.addObserver(self, selector: #selector(feedback(_:)),
       name: Notification.Name("\(prefix).feedback"), object: nil,
       suspensionBehavior: .deliverImmediately)
-    overlay = TypingOverlay(state: state)
+    overlay = TypingOverlay(state: state, placementPreview: placementPreview)
   }
 
   func applicationDidFinishLaunching(_ notification: Notification) {
@@ -143,7 +143,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       let navigationState = info["state"] as? String else { return }
     if navigationState == "hidden" { overlay?.hide(); return }
     guard navigationState == "shown" || navigationState == "hold", let path = info["path"] as? String else { return }
-    overlay?.show(path: path, screen: info["screen"] as? String, preview: navigationState == "shown" && path == "space")
+    overlay?.show(path: path, screen: info["screen"] as? String, preview: navigationState == "shown" && path == "space", held: navigationState == "hold")
   }
 
   @objc private func feedback(_ notification: Notification) {
@@ -154,6 +154,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   @objc private func fired(_ notification: Notification) {
     guard let path = notification.userInfo?["path"] as? String,
       let route = state.route(atPath: path), route.count > 1 else { return }
+    overlay?.placementPreview.fire(path: path)
     state.fireBind(atPath: path)
     let nodes = route.compactMap { state.model?.node(withID: $0) }
     let keyPath = nodes.compactMap(\.key).map { $0 == " " ? "space" : $0 }.joined(separator: "/")

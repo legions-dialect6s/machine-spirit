@@ -7,7 +7,6 @@ final class TypingOverlay {
   private struct Request {
     var path: String? // nil means hidden
     var screen: String?
-    var preview = false
     var received: CFTimeInterval
   }
   private let state: AppState
@@ -20,7 +19,7 @@ final class TypingOverlay {
   private var hideRequested = false
   private var deferredHide: DispatchWorkItem?
   private var tempo = OverlayTempo()
-  let placementPreview = PlacementPreview()
+  let placementPreview: PlacementPreview
   private var currentPath = ""
   private var revision = 0
   private var anchor = CGPoint.zero
@@ -31,7 +30,8 @@ final class TypingOverlay {
   private let keepOrdered = ProcessInfo.processInfo.environment["MS_OVERLAY_ORDER_OUT"] != "1"
   private let diagnostics = ProcessInfo.processInfo.environment["MS_OVERLAY_DIAGNOSTICS"] == "1"
 
-  init(state: AppState) {
+  init(state: AppState, placementPreview: PlacementPreview = PlacementPreview()) {
+    self.placementPreview = placementPreview
     self.state = state
     panel = PassivePanel(contentRect: NSScreen.main?.frame ?? .zero,
       styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
@@ -70,11 +70,21 @@ final class TypingOverlay {
     }
   }
 
-  func show(path: String, screen: String?, preview: Bool = false) {
-    enqueue(Request(path: path, screen: screen, preview: preview, received: CACurrentMediaTime()))
+  func show(path: String, screen: String?, preview: Bool = false, held: Bool = false) {
+    if held { placementPreview.leaveNavigation() }
+    else if preview { placementPreview.arm(.mouse, path: "space/space", fx: shown ? renderer.fx : OverlayFX()) }
+    else if !path.isEmpty, let id = state.route(atPath: path)?.last, let node = renderer.nodes[id],
+            node.children.count == 1, let child = node.children.first, let key = child.key,
+            let intent = PlacementIntent(action: child.action) {
+      placementPreview.arm(intent, path: path + "/" + key, fx: shown ? renderer.fx : OverlayFX())
+    } else { placementPreview.hide() }
+    enqueue(Request(path: path, screen: screen, received: CACurrentMediaTime()))
   }
 
-  func hide() { enqueue(Request(path: nil, received: CACurrentMediaTime())) }
+  func hide() {
+    placementPreview.leaveNavigation()
+    enqueue(Request(path: nil, received: CACurrentMediaTime()))
+  }
 
   func feedback(kind: String, path: String?) {
     guard ["miss", "back", "done", "hold"].contains(kind),
@@ -175,7 +185,6 @@ final class TypingOverlay {
     pending = nil
     let started = CACurrentMediaTime()
     guard let path = request.path else {
-      placementPreview.hide()
       guard shown else { return }
       hideRequested = true
       stopMouseMonitoring()
@@ -212,13 +221,10 @@ final class TypingOverlay {
       CATransaction.commit()
       return
     }
-    if !request.preview { placementPreview.hide() }
     guard let route = state.route(atPath: path), let focusID = route.last,
           let focus = renderer.nodes[focusID] else { return }
     deferredHide?.cancel(); deferredHide = nil
     hideRequested = false
-    if request.preview { placementPreview.show(fx: shown ? renderer.fx : OverlayFX()) }
-    else { placementPreview.hide() }
     if shown && renderer.focusID == focusID {
       startMouseMonitoring(); updateMouse(); return
     }
