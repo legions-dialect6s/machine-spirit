@@ -57,7 +57,7 @@ try:
     result = call(2, "tools/list")
     names = [tool["name"] for tool in result["tools"]]
     assert set(names) == {"screens", "apps", "windows", "focus", "binds", "run", "tmux", "stats", "screenshot",
-                          "mouse", "win_place", "win_tile_all", "win_cycle"}
+                          "mouse", "win_place", "win_tile_all", "win_cycle", "audio_list", "pulse_report"}
     for tool in result["tools"]:
         assert tool["inputSchema"]["type"] == "object"
         assert tool["inputSchema"]["additionalProperties"] is False
@@ -90,6 +90,13 @@ try:
         error = json.loads(result["content"][0]["text"])["error"]
         assert "no running app" in error or "Accessibility not granted" in error, error
     print("window tools -> routed; nonexistent app rejected without mutation")
+    for identifier, name in [(18, "audio_list"), (19, "pulse_report")]:
+        if name == "pulse_report" and "MS_PULSE_DIR" not in os.environ:
+            continue
+        result = call(identifier, "tools/call", {"name": name, "arguments": {}})
+        assert result["isError"] is False, result
+        json.loads(result["content"][0]["text"])
+        print(f"tools/call {name} -> isError=false; JSON parsed")
     if options.screenshot:
         result = call(7, "tools/call", {"name": "screenshot", "arguments": {}})
         assert result["isError"] is False, result

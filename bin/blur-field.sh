@@ -9,9 +9,7 @@ try
    set frontProcess to first application process whose frontmost is true
    tell frontProcess
     if bundle identifier is "com.apple.MobileSMS" then
-     if not frontmost then return "NONE"
-     keystroke "f" using command down
-     return "OK"
+     return "MESSAGES"
     end if
     set focusedWindow to value of attribute "AXFocusedWindow"
     if focusedWindow is missing value then return "NONE"
@@ -33,6 +31,7 @@ return "NONE"
 AS
 ) || exit 11
 case $result in
+ MESSAGES) exec "${0:A:h}/messages-find.sh" ;;
  OK) exit 0 ;;
  DONE) exit 10 ;;
  *) exit 11 ;;

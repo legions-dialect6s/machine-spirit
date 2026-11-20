@@ -15,6 +15,10 @@ ms — structured access to this Mac (append --json for machine-readable output)
   run <keypath> [--dry-run]
   tmux [list | revive NAME | detach NAME]
   stats
+  capslock [on|off|toggle|status]
+  audio [list|tile]
+  translate-area [--to LANG]
+  pulse [collect|report [--hours N]]
   screenshot [--screen ID | --window ID | --rect x,y,w,h] [--out PATH]
   clipboard [list [-n 20] | get INDEX]  (requires MS_ALLOW_CLIPBOARD=1)
   mcp  (newline-delimited JSON-RPC on stdio; --json has no effect)
@@ -32,6 +36,10 @@ func command(_ name: String, _ args: [String]) throws -> Output {
     case "binds": return try binds(args)
     case "run": return try runBind(args)
     case "tmux": return try tmux(args)
+    case "messages-find": return try messagesFind(args)
+    case "capslock": return try capslock(args)
+    case "audio": return try audio(args)
+    case "pulse": return try pulse(args)
     case "stats": try Arguments(args).count(0); return try stats()
     case "screenshot": return try screenshot(args)
     case "clipboard": return try clipboard(args)
@@ -41,7 +49,7 @@ func command(_ name: String, _ args: [String]) throws -> Output {
 
 @main
 struct MS {
-    @MainActor static func main() {
+    @MainActor static func main() async {
         var args = Array(CommandLine.arguments.dropFirst())
         // Consume global --json only before `--`, preserving literal positional values.
         let end = args.firstIndex(of: "--") ?? args.count
@@ -56,10 +64,13 @@ struct MS {
                 try Arguments(Array(args.dropFirst())).count(0)
                 MCPServer().serve()
             } else {
-                let output = try command(name, Array(args.dropFirst()))
+                let output: Output
+                if name == "translate-area" { output = try await translateArea(Array(args.dropFirst())) }
+                else { output = try command(name, Array(args.dropFirst())) }
                 print(json ? try jsonString(output.json) : output.text)
             }
         } catch {
+            if (error as? Failure)?.message == "", (error as? Failure)?.exitCode == 11 { exit(11) }
             FileHandle.standardError.write(Data(("ms: \(oneLine(error.localizedDescription))\n").utf8))
             exit((error as? Failure)?.exitCode ?? 1)
         }

@@ -21,8 +21,8 @@ wrapper intentionally does not run SwiftPM on every invocation.
 ## Commands
 
 Every CLI command supports `--json`, including before the command. Errors exit 1
-(window misses described below exit 11),
-leave stdout empty, and print one line to stderr. `--` introduces literal positional
+(window/audio/search misses and capture cancellation exit 11),
+leave stdout empty, and print one line to stderr. Area-capture cancellation is quiet. `--` introduces literal positional
 arguments, e.g. `ms run --dry-run -- -/-`. `ms --help` lists syntax.
 
 | Command | Result / behavior |
@@ -41,6 +41,10 @@ arguments, e.g. `ms run --dry-run -- -/-`. `ms --help` lists syntax.
 | `tmux [list]` | Installed `~/bin/sheol-core list --json`; JSON preserves its array/fields. Human output labels attached > 0 as living and 0 as wandering. |
 | `tmux revive NAME` | Request revival into a new iTerm window through sheol-core. |
 | `tmux detach NAME` | Request detachment of clients, leaving the session alive. |
+| `capslock [on\|off\|toggle\|status]` | Real IOKit Caps Lock state; defaults to status. Changes verify the state and request the caps HUD. |
+| `audio [list\|tile]` | CoreAudio active output apps/processes (14.4+); tile their standard windows on the mouse screen. |
+| `translate-area [--to LANG]` | Interactive area capture, accurate Vision OCR, installed on-device translation, copy and text HUD. |
+| `pulse [collect\|report [--hours N]]` | Append one local usage sample or summarize the last N hours (default 24). |
 | `stats` | CPU busy % over 250ms, memory-pressure estimate %, kernel pressure level, swap used/total bytes, battery % or null, uptime seconds. |
 | `screenshot [--screen ID\|--window ID\|--rect x,y,w,h] [--out PATH]` | Silent PNG; defaults to the main screen and a temporary file. Text prints its path; JSON adds pixel dimensions. |
 | `clipboard [list [-n 20]\|get INDEX]` | Read-only history. Disabled unless `MS_ALLOW_CLIPBOARD=1`. Indices are zero-based, in persisted archive order. |
@@ -147,6 +151,131 @@ It is not Activity Monitor's memory pressure graph. `pressureLevel` separately
 reports the kernel's normal/warning/critical signal, or unavailable. CPU percentage
 is normalized across all processors, from 0 to 100, using `host_processor_info`.
 
+## Caps Lock, audio, and area translation
+
+`capslock` uses IOHIDSystem rather than synthesizing the Caps Lock key (which is
+remapped to F19). Status reads only. Changes read back the state, print `on`/`off`
+(JSON: `{"state":"off"}`), and request the MachineSpirit caps HUD. HUD failures do
+not fail the command.
+
+`audio list` reads CoreAudio process objects and active output streams. This is
+**app-level only**: Safari/Chrome per-tab audio is not exposed by an API. Active
+streams do not prove audible samples. Common helpers are attributed by their
+containing app bundle, or WebKit's AppKit-provided host display name; JSON retains
+`audioProcessPIDs` and the attribution method. Unresolved helpers stay separate.
+Processes disappearing mid-query are skipped. `audio tile` reuses `win tile-all`
+with only these app PIDs and only the screen under the mouse. It may unhide apps
+and unminimize their standard non-fullscreen windows; individual failures are
+reported in JSON. No active audio exits 11. It requires Accessibility.
+
+`translate-area` uses `screencapture -i -x`; drag a rectangle or press Esc to
+cancel quietly (exit 11). It recognizes text with Vision's accurate model,
+language correction and automatic language detection. NaturalLanguage detects
+the source; `--to` defaults to the first `Locale.preferredLanguages` entry.
+On macOS 26+, Apple's [installed-language session initializer](https://developer.apple.com/documentation/translation/translationsession)
+works without SwiftUI. Only an already-installed pair is attempted. Unsupported,
+uninstalled or failed translation returns OCR text with an explicit note; it
+never requests downloads or calls a network translation service. Same-language
+text is copied unchanged. JSON separates `ocrText`, `text`, `source`, `target`,
+`translated`, `copied` and `notes`.
+
+This command **writes the live clipboard**, independently of the opt-in for
+reading clipboard history. Captures use a private temporary directory and are
+removed on completion/cancellation. No recognized text is stored by `ms`.
+The text HUD includes source→target and at most 600 characters, encoded as URL
+query items. A hidden `--image PATH` bypasses interactive capture for OCR tests;
+it still copies the result and requests the HUD. No-text images exit 11.
+
+## Pulse snapshots and reports
+
+```sh
+bin/ms pulse collect --json
+bin/ms pulse report --hours 48
+# Isolated verification, with no access to the default Library directory:
+MS_PULSE_DIR="$TMPDIR/ms-pulse-test" bin/ms pulse collect
+MS_PULSE_DIR="$TMPDIR/ms-pulse-test" bin/ms pulse report --json
+```
+
+`collect` appends exactly one JSON line to
+`~/Library/Application Support/MachineSpirit/pulse/YYYY-MM.jsonl` and prints that
+record. Timestamps and month partitions use UTC, rounded down to the minute.
+Logs are mode 0600 in a newly created mode-0700 directory; append is locked, and
+symlink log files are rejected. `MS_PULSE_DIR` overrides the directory for both
+collect and report. Logs persist until the owner removes them; no retention or
+background work is hidden in the CLI.
+
+A sample includes uptime, load averages (1/5/15 minutes), kernel memory pressure,
+swap used, free disk on `/`, battery percentage/cycles/health when available,
+thermal state, frontmost app, regular app count and per-app window estimates.
+**CGWindowList does not expose AX standard-window subroles or minimized state.**
+`standardWindowsEstimate` counts layer-zero windows at least 120×80;
+`offScreenWindows` also includes hidden and other-Space windows.
+`minimizedWindows` is explicitly null, never mislabeled as an exact count.
+Battery health can be an explicitly labeled raw/design-capacity estimate.
+
+Running Safari and Chrome are queried in bulk through one `osascript`, with a
+three-second Apple-event timeout and a shared three-second subprocess deadline.
+A browser absent from the running-app snapshot is skipped; each script checks
+again before addressing it. No browser is deliberately launched. Failed,
+closed, timed-out or denied Automation queries have a status and unknown counts,
+not zero. Only total tabs, ten leading HTTP(S) hostnames and duplicate counts are
+stored: full URLs, titles and URL query strings are discarded. Duplicates are
+extra copies of identical nonempty URLs within each browser, not across browsers.
+`tmux list-sessions` counts sessions if tmux is on PATH; a missing server counts
+as zero, while other failures remain unknown. Helpers are drained, killed on
+timeout and reaped; no collector survives in the background.
+
+`report` accepts integer hours 1–8760, reads relevant UTC month files and ignores
+future/out-of-range samples. It reports averages/peaks, frontmost observations,
+window peaks per app, tab change and duplicates, latest top domains, swap growth,
+minimum free disk and notable pressure/thermal signals. Malformed lines are
+skipped with a count. Missing browser samples are excluded from averages/trends.
+One sample cannot establish a trend. These are hourly observations, **not time
+spent in applications**; repeated manual collection changes sampling weight.
+
+The target is <400 ms wall and <100 ms combined CPU, including subprocesses.
+The three-second timeout is a failure ceiling, not that performance target.
+On the development Mac, five final end-to-end samples with both browsers
+running took 680/604/351/375/333 ms wall and 105/123/95/87/89 ms CPU. Three warm
+runs met both budgets; the budget is not guaranteed under load/cold startup.
+The first separate-process implementation consumed 140 ms CPU and was replaced
+with the shared interpreter. Re-measure after deployment, especially under a
+LaunchAgent's Automation identity.
+
+`config/pulse/com.machinespirit.pulse.plist` is an **uninstalled template**:
+StartInterval 3600, Background, Nice 10 and LowPriorityIO. The installer owner
+must expand `__HOME__`, ensure `~/bin/ms` points to the prebuilt repo wrapper,
+and handle Automation consent before loading it. No LaunchAgent is installed by
+this change. Pulse contains private usage metadata: keep logs outside the repo.
+
+| MCP tool | Arguments | Behavior |
+| --- | --- | --- |
+| `audio_list` | none | Read-only audio app/process JSON. |
+| `pulse_report` | optional integer `hours` (1–8760, default 24) | Read-only summary from the selected pulse directory. |
+
+Collect, Caps Lock, translation and audio tiling are not exposed through MCP.
+
+## Messages conversation search helper
+
+`bin/messages-find.sh` activates `com.apple.MobileSMS` and delegates to the
+private native `ms messages-find` entry point. It waits up to two seconds for a
+window, then searches the live AX tree (with a separate two-second search budget).
+If search is absent it tries Show Sidebar/Show Conversation List or a sidebar
+button, then the Find menu used by Tahoe's narrow Catalyst layout. It does not
+resize the window or type text. Native AX directly verifies the focused subrole; it selects a standard window
+instead of mistaking a transient Catalyst tooltip for the conversation window.
+
+Catalyst can report successful `AXFocused` writes while leaving compose focused.
+The fallback clicks only a visible `AXSearchField` whose screen hit-test matches
+the same element, then verifies focused subrole. It never sends Return or a
+fallback key into compose. Existing search text is preserved, with best-effort AX selection for replacement. Success exits 0;
+a miss, obscured field or missing Accessibility exits 11.
+`blur-field.sh`'s Messages branch calls this same helper. The `⇪ m e` keybind and
+installation belong to the integration owner; this change does not edit either.
+Live restoration/focus acceptance still needs a quiet Messages session: concurrent
+window changes and typing were observed during verification, so no typing test
+or claim of end-to-end script acceptance is made.
+
 ## Actions and privacy
 
 Live config: `~/Library/Application Support/Leader Key/config.json`. `binds` never
@@ -188,15 +317,15 @@ an existing parent directory for `--out`. Temporary screenshots remain available
 for the caller to consume and delete. MCP returns the same JSON text as the CLI
 and a separate PNG image with long edge at most 1568 pixels; the on-disk original
 keeps full resolution. Captures/config/clipboard content can be private: do not
-check outputs into this public repo. No live content is persisted in this package.
+check outputs into this public repo. Pulse explicitly persists usage metadata outside the package; captures and other live content are not checked into it.
 
 ## Install/registration
 
 For the installer owner to merge: build the release target and expose the wrapper
 on PATH. If installing at `~/bin/ms`, **symlink the repo wrapper**, rather than
 copying it away from its package. Prebuild before registration to avoid a client's
-startup timeout on the first compile. No LaunchAgent, app registration, or daemon
-is needed. No other installer/app files are changed by this package.
+startup timeout on the first compile. The core CLI/MCP needs no LaunchAgent, app registration or daemon. Hourly pulse
+collection has the optional uninstalled template described above.
 
 Replace `<repo>` with the absolute checkout path, keeping quotes if it contains
 spaces. Exact Claude Code registration:

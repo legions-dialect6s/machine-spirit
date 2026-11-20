@@ -241,14 +241,17 @@ private func cycleWindow(appName: String?) throws -> Output {
 }
 
 @MainActor
-private func tileAllWindows() throws -> Output {
-    let screens = try availableScreens()
-    let primaryTop = screens[0].frame.maxY
+func tileAllWindows(onlyPIDs: Set<pid_t>? = nil, underMouse: Bool = false) throws -> Output {
+    let allScreens = try availableScreens()
+    let primaryTop = allScreens[0].frame.maxY
+    let screens = underMouse ? [allScreens.first { $0.frame.contains(NSEvent.mouseLocation) } ?? NSScreen.main ?? allScreens[0]] : allScreens
     let bounds = screens.map { flipScreenRect($0.frame, primaryTop: primaryTop) }
     let visible = screens.map { flipScreenRect($0.visibleFrame, primaryTop: primaryTop) }
     var candidates: [(pid: pid_t, snapshot: AXWindowSnapshot, frame: CGRect)] = []
     var failures: [[String: Any]] = []
-    for app in NSWorkspace.shared.runningApplications.filter({ $0.activationPolicy == .regular }) {
+    for app in NSWorkspace.shared.runningApplications.filter({ app in
+        onlyPIDs.map { $0.contains(app.processIdentifier) } ?? (app.activationPolicy == .regular)
+    }) {
         if app.isHidden && !app.unhide() {
             failures.append(["pid": app.processIdentifier, "error": "cannot unhide app"])
         }
@@ -260,8 +263,8 @@ private func tileAllWindows() throws -> Output {
         for window in windows {
             do {
                 let snapshot = try AXWindowSnapshot(window)
-                if snapshot.minimized { try setAX(window, kAXMinimizedAttribute, kCFBooleanFalse) }
                 if snapshot.standard && !snapshot.fullscreen {
+                    if snapshot.minimized { try setAX(window, kAXMinimizedAttribute, kCFBooleanFalse) }
                     guard let frame = snapshot.frame else { throw Failure("window does not expose a valid frame") }
                     if frame.width >= 120 && frame.height >= 80 {
                         candidates.append((app.processIdentifier, snapshot, frame))

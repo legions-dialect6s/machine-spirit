@@ -583,6 +583,26 @@ The CLI and stdio MCP server expose screens, apps, windows, focus, binds, config
 
 Clipboard-history access is read-only and disabled unless `MS_ALLOW_CLIPBOARD=1`; it never reads the live pasteboard. Screen Recording is needed for captures/complete titles, Accessibility for raising individual windows, and Automation may be needed by configured actions. The invoking terminal/agent host needs its own grants.
 
+New system commands: `ms capslock [on|off|toggle|status]` controls the real lock
+state behind the F19 remap; `ms audio [list|tile]` finds active audio apps and can
+tile their windows on the mouse screen (app-level only, no browser per-tab API).
+`ms translate-area [--to LANG]` captures an area, performs Vision OCR, translates
+with installed on-device languages on macOS 26+, copies the result and shows a
+HUD. Unavailable translation explicitly falls back to OCR text.
+
+`ms pulse collect` appends a private monthly JSONL usage snapshot;
+`ms pulse report [--hours N]` summarizes it. The optional hourly LaunchAgent
+at `config/pulse/com.machinespirit.pulse.plist` is a template, not installed.
+`MS_PULSE_DIR` supports isolated verification. Window counts are CGWindowList
+estimates; exact minimized counts are unavailable without AX. The warmed
+collector can meet 400 ms wall/100 ms CPU, but cold/load outliers remain.
+MCP adds read-only `audio_list` and `pulse_report`.
+
+`bin/messages-find.sh` focuses Messages conversation search and is shared by
+`blur-field.sh`. It reveals search when needed and verifies focus before
+returning success; it does not type or send messages. Binding `⇪ m e` and live
+installation remain integration-owner work.
+
 **Installer gap:** `install.sh` currently copies `bin/ms` into `~/bin` along with other helpers, but the wrapper locates `tools/ms` relative to the repository. Use `./bin/ms` from the checkout, or a symlink to that wrapper, rather than the copied standalone file. Prebuild before connecting an MCP client. [Complete command reference, registration, privacy limits, and verification](tools/ms/README.md).
 
 ## Busy-pane shield (opt-in, default off)
