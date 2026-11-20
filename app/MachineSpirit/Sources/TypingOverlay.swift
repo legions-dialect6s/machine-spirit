@@ -71,13 +71,18 @@ final class TypingOverlay {
   }
 
   func show(path: String, screen: String?, preview: Bool = false, held: Bool = false) {
+    let node = path.isEmpty ? nil : state.route(atPath: path)?.last.flatMap { renderer.nodes[$0] }
+    if !held { placementPreview.prepareLaunch(for: node?.children.compactMap { LaunchCue(action: $0.action) } ?? []) }
     if held { placementPreview.leaveNavigation() }
-    else if preview { placementPreview.arm(.mouse, path: "space/space", fx: shown ? renderer.fx : OverlayFX()) }
-    else if !path.isEmpty, let id = state.route(atPath: path)?.last, let node = renderer.nodes[id],
+    else if preview, let child = node?.children.first(where: { $0.key == "space" }),
+            let intent = PlacementIntent(action: child.action) {
+      placementPreview.arm(intent, path: "space/space", fx: shown ? renderer.fx : OverlayFX())
+    }
+    else if let node,
             node.children.count == 1, let child = node.children.first, let key = child.key,
             let intent = PlacementIntent(action: child.action) {
       placementPreview.arm(intent, path: path + "/" + key, fx: shown ? renderer.fx : OverlayFX())
-    } else { placementPreview.hide() }
+    } else { placementPreview.leaveNavigation() }
     enqueue(Request(path: path, screen: screen, received: CACurrentMediaTime()))
   }
 

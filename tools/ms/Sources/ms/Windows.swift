@@ -140,19 +140,10 @@ private func leaveFullscreen(_ element: AXUIElement) throws {
     throw Failure("window did not leave fullscreen within 1.2 seconds")
 }
 
-private var placementStateURL: URL {
-    FileManager.default.temporaryDirectory.appendingPathComponent("ms-win-place.json")
-}
-
-private func readPlacementState() -> PlacementState? {
-    guard let data = try? Data(contentsOf: placementStateURL), data.count <= 4096 else { return nil }
-    return try? JSONDecoder().decode(PlacementState.self, from: data)
-}
-
 private func savePlacementState(_ state: PlacementState) throws {
     do {
-        try JSONEncoder().encode(state).write(to: placementStateURL, options: .atomic)
-        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: placementStateURL.path)
+        try JSONEncoder().encode(state).write(to: PlacementState.fileURL, options: .atomic)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: PlacementState.fileURL.path)
     } catch { throw Failure("placement applied but cannot save ladder state: \(error.localizedDescription)") }
 }
 
@@ -165,6 +156,23 @@ private func placeWindow(_ requested: Placement, appName: String?) throws -> Out
     let primaryTop = screens[0].frame.maxY
     let screenFrames = screens.map { flipScreenRect($0.frame, primaryTop: primaryTop) }
     let fallback = screens.firstIndex { screenID($0) == CGMainDisplayID() } ?? 0
+    // The board observes arrival. AX writes never wait for animation or acknowledgment.
+    func announce(_ frame: CGRect, mode: Placement, windowID: UInt32? = nil) {
+        var info: [String: Any] = ["pid": app.processIdentifier, "frame": NSStringFromRect(frame),
+                                  "mode": mode.rawValue]
+        if let windowID { info["windowID"] = windowID }
+        DistributedNotificationCenter.default().postNotificationName(
+            Notification.Name("com.machinespirit.leader.placement"), object: nil, userInfo: info, deliverImmediately: true)
+    }
+    if requested == .toggleFullscreen {
+        if !snapshot.fullscreen {
+            let display = screens[overlapScreen(currentFrame, screens: screenFrames)]
+            announce(flipScreenRect(display.frame, primaryTop: primaryTop), mode: .fullscreen)
+        }
+        try setAX(snapshot.element, fullscreenAttribute, snapshot.fullscreen ? kCFBooleanFalse : kCFBooleanTrue)
+        return Output(json: ["status": "requested", "fullscreen": !snapshot.fullscreen],
+                      text: snapshot.fullscreen ? "Leaving fullscreen" : "Entering fullscreen")
+    }
     if requested.isDisplayTransfer {
         let source = overlapScreen(currentFrame, screens: screenFrames, fallback: fallback)
         guard let index = destinationDisplay(for: requested, from: source, screens: screenFrames) else {
@@ -176,32 +184,41 @@ private func placeWindow(_ requested: Placement, appName: String?) throws -> Out
         let target = transferredFrame(currentFrame,
             from: flipScreenRect(screens[source].visibleFrame, primaryTop: primaryTop),
             to: flipScreenRect(screens[index].visibleFrame, primaryTop: primaryTop))
+        announce(target, mode: requested)
         try setFrame(snapshot.element, target)
         // Moving displays breaks the fullscreen ladder. No window ID enumeration
         // or arrival waits are needed for a directional transfer.
-        try? FileManager.default.removeItem(at: placementStateURL)
+        try? FileManager.default.removeItem(at: PlacementState.fileURL)
         return Output(json: ["status": "requested", "mode": requested.rawValue, "pid": app.processIdentifier,
                              "screen": screenID(screens[index]), "frame": frameJSON(target)],
                       text: "Moved toward display \(screenID(screens[index]))")
     }
     let point = NSEvent.mouseLocation
-    let index = requested == .smart
+    let index = requested == .smart || requested == .aim
         ? (screens.firstIndex { $0.frame.contains(point) } ?? screens.firstIndex { $0 == NSScreen.main } ?? fallback)
         : overlapScreen(currentFrame, screens: screenFrames, fallback: fallback)
     let screen = screens[index]
     let visible = flipScreenRect(screen.visibleFrame, primaryTop: primaryTop)
-    let key = snapshot.key(pid: app.processIdentifier, windows: (try? windowList(allSpaces: true)) ?? [])
+    let windows = (try? windowList(allSpaces: true)) ?? []
+    let key = snapshot.key(pid: app.processIdentifier, windows: windows)
+    let windowID = UInt32(key.split(separator: ":").last ?? "")
     let now = Date().timeIntervalSince1970
-    let previous = readPlacementState()
+    let previous = PlacementState.read()
     var mode = requested
-    if requested == .smart { mode = mouseZone(point, visibleFrame: screen.visibleFrame) }
+    let zone = mouseZone(point, visibleFrame: screen.visibleFrame)
+    if requested == .smart { mode = zone }
+    if requested == .aim {
+        mode = aimedPlacement(zone: zone, current: classifyPlacement(currentFrame, visibleFrame: visible),
+                              fullscreen: snapshot.fullscreen, previous: previous, key: key, screen: screenID(screen), now: now)
+    }
     if requested == .step {
         mode = nextPlacement(classifyPlacement(currentFrame, visibleFrame: visible), fullscreen: snapshot.fullscreen,
                              fromFullscreen: previous?.matches(key, now: now) == true && previous?.fromFullscreen == true)
     }
-    let fromFullscreen = requested == .step && snapshot.fullscreen
+    let fromFullscreen = (requested == .step || requested == .aim) && snapshot.fullscreen
     var frame: CGRect?
     if mode == .fullscreen {
+        if !snapshot.fullscreen { announce(flipScreenRect(screen.frame, primaryTop: primaryTop), mode: mode, windowID: windowID) }
         if !snapshot.fullscreen { try setAX(snapshot.element, fullscreenAttribute, kCFBooleanTrue) }
     } else {
         if snapshot.fullscreen { try leaveFullscreen(snapshot.element) }
@@ -210,10 +227,12 @@ private func placeWindow(_ requested: Placement, appName: String?) throws -> Out
         let destination = NSScreen.screens.first { screenID($0) == screenID(screen) } ?? screen
         let usable = flipScreenRect(destination.visibleFrame, primaryTop: primaryTop)
         let target = placementFrame(mode, visibleFrame: usable, current: currentFrame)
+        announce(target, mode: mode, windowID: windowID)
         try setFrame(snapshot.element, target)
         frame = target
     }
-    try savePlacementState(PlacementState(windowKey: key, last: mode.rawValue, fromFullscreen: fromFullscreen, t: now))
+    try savePlacementState(PlacementState(windowKey: key, last: mode.rawValue, fromFullscreen: fromFullscreen, t: now,
+                                          aimZone: requested == .aim ? zone : nil, aimScreen: screenID(screen)))
     return Output(json: ["windowKey": key, "pid": app.processIdentifier, "mode": mode.rawValue,
                          "screen": screenID(screen), "frame": frame.map(frameJSON) as Any? ?? NSNull(),
                          "fromFullscreen": fromFullscreen, "status": "requested"],
@@ -311,7 +330,7 @@ func tileAllWindows(onlyPIDs: Set<pid_t>? = nil, underMouse: Bool = false) throw
         }
     }
     // Tiling breaks any previous fullscreen -> max ladder transition.
-    try? FileManager.default.removeItem(at: placementStateURL)
+    try? FileManager.default.removeItem(at: PlacementState.fileURL)
     return Output(json: ["count": placed.count, "windows": placed, "failures": failures, "status": "requested"],
                   text: "Requested tiling for \(placed.count) windows\(failures.isEmpty ? "" : "; \(failures.count) failures (see --json)")")
 }

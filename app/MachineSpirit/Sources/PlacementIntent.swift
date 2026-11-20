@@ -3,7 +3,7 @@ import MachineSpiritKit
 
 /// Resolve only the next configured action. A group with competing actions gives no cue.
 enum PlacementIntent: Equatable {
-  case mouse, rectangle(Placement), arrow(Placement), cycle(next: Bool)
+  case mouse, aim, sized(Placement), rectangle(Placement), arrow(Placement), cycle(next: Bool)
 
   init?(action: ActionPayload?) {
     guard let action else { return nil }
@@ -25,6 +25,8 @@ enum PlacementIntent: Equatable {
           let mode = Placement(rawValue: String(words.last!)) else { return nil }
     switch mode {
     case .smart: self = .mouse
+    case .aim: self = .aim
+    case .amm, .max: self = .sized(mode)
     case .displayLeft, .displayRight, .displayUp, .displayDown: self = .arrow(mode)
     default: return nil
     }
@@ -36,7 +38,12 @@ enum PlacementIntent: Equatable {
     var source = overlapScreen(window, screens: frames)
     let prefs = UserDefaults(suiteName: "com.knollsoft.Rectangle")
     switch self {
-    case .mouse: return nil
+    case .mouse, .aim: return nil
+    case .sized(let mode):
+      let screen = screens[source]
+      let bounds = flipScreenRect(screen.visibleFrame, primaryTop: top)
+      let frame = placementFrame(mode, visibleFrame: bounds, current: window)
+      return (.init(frame: flipScreenRect(frame, primaryTop: top), label: mode.previewLabel), screen)
     case .arrow(let direction):
       guard let index = destinationDisplay(for: direction, from: source, screens: frames) else { return nil }
       let from = flipScreenRect(screens[source].visibleFrame, primaryTop: top)
@@ -84,6 +91,28 @@ enum PlacementIntent: Equatable {
       .bl: "bottom-left quarter", .br: "bottom-right quarter", .left: "left half",
       .right: "right half", .top: "top half", .bottom: "bottom half"]
     return (.init(frame: flipScreenRect(frame, primaryTop: top), label: labels[slot]!), screen)
+  }
+}
+
+enum LaunchCue: Equatable {
+  case freshTerminal, focus(String)
+  var bundleID: String {
+    switch self {
+    case .freshTerminal: "com.googlecode.iterm2"
+    case .focus(let id): id
+    }
+  }
+  init?(action: ActionPayload?) {
+    switch action {
+    case .application(let path) where path.hasSuffix("/Terminal.app"): self = .focus("com.apple.Terminal")
+    case .command(let cmd):
+      if cmd.hasSuffix("~/bin/tmux-launch.sh") || cmd.contains("tell application \"iTerm\" to create window with default profile") {
+        self = .freshTerminal
+      } else if cmd.hasSuffix("~/bin/messages-find.sh") { self = .focus("com.apple.MobileSMS") }
+      else if cmd.hasSuffix("~/bin/iterm-front.applescript") { self = .focus("com.googlecode.iterm2") }
+      else { return nil }
+    default: return nil
+    }
   }
 }
 

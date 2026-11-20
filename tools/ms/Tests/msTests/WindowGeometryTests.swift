@@ -166,3 +166,17 @@ import Testing
     let frame = CGRect(x: -1200, y: 300, width: 800, height: 500)
     #expect(transferredFrame(frame, from: source, to: dest) == CGRect(x: 300, y: -700, width: 600, height: 400))
 }
+
+@Test func centerChordsAlternateAndEdgeRepeatsStayWithTheirWindow() {
+    let last = PlacementState(windowKey: "7:8", last: "tl", fromFullscreen: false, t: 20, aimZone: .tl, aimScreen: 4)
+    func result(_ zone: Placement, _ current: Placement?, key: String = "7:8", screen: UInt32 = 4, now: Double = 21) -> Placement {
+        aimedPlacement(zone: zone, current: current, fullscreen: false, previous: last, key: key, screen: screen, now: now)
+    }
+    #expect(result(.amm, nil) == .amm)
+    #expect(result(.amm, .amm) == .max)
+    #expect(result(.amm, .max) == .amm)
+    #expect(result(.tl, .tl) == .left)
+    #expect(result(.tl, .tl, key: "7:9") == .tl)
+    #expect(result(.tl, .tl, screen: 8) == .tl)
+    #expect(result(.tl, .tl, now: 24) == .tl)
+}

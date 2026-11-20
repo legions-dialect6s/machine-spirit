@@ -40,6 +40,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     center.addObserver(self, selector: #selector(feedback(_:)),
       name: Notification.Name("\(prefix).feedback"), object: nil,
       suspensionBehavior: .deliverImmediately)
+    center.addObserver(self, selector: #selector(placement(_:)),
+      name: Notification.Name("\(prefix).placement"), object: nil, suspensionBehavior: .deliverImmediately)
     overlay = TypingOverlay(state: state, placementPreview: placementPreview)
   }
 
@@ -151,10 +153,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     overlay?.feedback(kind: kind, path: notification.userInfo?["path"] as? String)
   }
 
+  @objc private func placement(_ notification: Notification) {
+    guard let info = notification.userInfo, let pid = info["pid"] as? NSNumber,
+          let raw = info["frame"] as? String, let name = info["mode"] as? String,
+          let mode = Placement(rawValue: name),
+          UserDefaults(suiteName: "com.machinespirit.leader-key")?.object(forKey: "msGraphOverlayEnabled") as? Bool != false else { return }
+    overlay?.placementPreview.commandDestination(pid: pid.int32Value, id: (info["windowID"] as? NSNumber)?.uint32Value,
+                                                frame: NSRectFromString(raw), mode: mode)
+  }
+
   @objc private func fired(_ notification: Notification) {
     guard let path = notification.userInfo?["path"] as? String,
       let route = state.route(atPath: path), route.count > 1 else { return }
-    overlay?.placementPreview.fire(path: path)
+    if let id = route.last, let cue = LaunchCue(action: state.model?.node(withID: id)?.action),
+       UserDefaults(suiteName: "com.machinespirit.leader-key")?.object(forKey: "msGraphOverlayEnabled") as? Bool != false {
+      overlay?.placementPreview.launch(cue, path: path, fx: OverlayFX())
+    } else { overlay?.placementPreview.fire(path: path) }
     state.fireBind(atPath: path)
     let nodes = route.compactMap { state.model?.node(withID: $0) }
     let keyPath = nodes.compactMap(\.key).map { $0 == " " ? "space" : $0 }.joined(separator: "/")

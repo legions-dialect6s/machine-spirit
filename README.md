@@ -120,7 +120,7 @@ The tree follows four rules, by escalating "weight" of the action:
 |---|---|---|---|---|
 | `⇪ a c` | Activity Monitor | | `⇪ n o` | Notes ✕ |
 | `⇪ c l` | Claude | | `⇪ p h` | Photos ✕ |
-| `⇪ c o d` | Codex | | `⇪ p s` | Photoshop (hold `s`: next document) |
+| `⇪ c o` | Codex | | `⇪ p s` | Photoshop (hold `s`: next document) |
 | `⇪ f c 2` | Focusrite Control 2 | | `⇪ p b` | Photo Booth ✕ |
 | `⇪ t e l` / `⇪ t g` | Telegram | | `⇪ u r` | Unreal Editor (cycle; hold `r`) |
 | `⇪ c h r` | Chrome (jump/cycle) | | `⇪ s a` | Safari (jump/cycle) |
@@ -132,7 +132,7 @@ The tree follows four rules, by escalating "weight" of the action:
 | `⇪ i t` | iTerm | | `⇪ v l c` | VLC (jump/cycle) |
 | `⇪ m e` | Messages → straight into conversation search (type a name) | | `⇪ v m w` | VMware Fusion |
 | `⇪ w h` | WhatsApp | | `⇪ k` | Clipboard history |
-| `⇪ c a l` | Calendar ✕ | | `⇪ c o n` | Contacts ✕ |
+| `⇪ c a l` | Calendar ✕ | | `⇪ c x` | Contacts ✕ |
 | `⇪ m a i l` | Mail ✕ | | `⇪ t 3` | T3 Code |
 
 `⇪ s a` (Safari), `⇪ c h r` (Chrome), and `⇪ f i` (Finder) all run [`bin/app-jump.applescript`](bin/app-jump.applescript) with an app name — the whole-app analogue of `web-jump`, one ladder for every app: **not running → launch; backgrounded → restore its minimized windows and bring it forward (opening a window if none); already frontmost → cycle its windows in order, wrapping**. It rides macOS's native ⌘\` / ⌘N, so the implementation is shared rather than scripted per app; apps must still honor those native shortcuts and expose accessible windows. (Its predecessor, [`bin/browser-window-cycle.applescript`](bin/browser-window-cycle.applescript), cycled only the frontmost browser and stranded minimized windows; it stays in `bin/` unused.)
@@ -239,7 +239,7 @@ Rectangle does the window math; Leader Key drives it through Rectangle's URL sch
 ⇪ 1 1 1   first third     ⇪ 2 2 2   center third    ⇪ 3 3 3   last third
 ⇪ c s s   center          ⇪ m m m   maximize        ⇪ f f f   next display
 ⇪ c e n   center (screen) ⇪ a m m m almost-maximize ⇪ g g g   previous display
-⇪ ␣ ␣     place by mouse: corner → quarter, edge → half, else almost-maximize
+⇪ ␣ ␣     place by mouse: corner → quarter, edge → half, center → toggle almost-maximize / maximize
 ⇪ ← ←     display left    ⇪ → →     display right   ⇪ ↑ ↑ / ⇪ ↓ ↓   display above / below
 ⇪ = =     grow            ⇪ - -     shrink          ⇪ q u i t  ⌘Q frontmost app
 ```
@@ -249,7 +249,9 @@ Rectangle does the window math; Leader Key drives it through Rectangle's URL sch
 - **Thirds two ways**: the spatial letters `v`/`b`/`n` (left/center/right) and the numeric row `1`/`2`/`3` (first/center/last) both drive Rectangle's thirds — pick whichever your hand reaches for.
 - **Two centers**: `⇪ c s s` is Rectangle's own center action; `⇪ c e n` runs [`bin/center-window.applescript`](bin/center-window.applescript), which centers the frontmost window on *whichever display it currently sits on* (multi-monitor aware) without resizing it.
 - **`⇪ a m m m` / `⇪ m m m`** use [`ms win place`](tools/ms/README.md) (90% inset / exact visible frame — **maximize stops above the Dock**), so they share geometry with the `⇪ ␣ ␣` ladder.
-- **`⇪ ␣ ␣`** moves the focused window to the display under the mouse and sizes it by where the pointer sits on it. Hold `⇪` and keep pressing `␣` (or re-tap `⇪ ␣ ␣` within 1.5 s) to walk the grow ladder: quarter → its side half → almost-maximize → maximize → full screen → maximize → almost-maximize → … (maximize drops back to almost-maximize only when it came out of full screen).
+- **`⇪ ␣ ␣`** places the window on the pointer’s display. In the center, repeat the chord to alternate between a 90% inset and the whole usable frame. At an edge or corner, repeat within 1.5 seconds to grow from the selected half or quarter. Keeping Caps down and tapping Space walks the existing ladder through native fullscreen.
+- **`⇪ ␣ M`** toggles native fullscreen. With the Machine Spirit Karabiner profile, hold Command and roll Space into M within 180 ms for the same action. A plain tap of Command–Space passes through to macOS.
+- The green outline previews almost-maximize, maximize and directional moves. On arrival the stroke expands a few points and fades. The new iTerm window from `⇪ T T` and the Messages window from `⇪ M E` show their outline when their actual bounds are available. Reduce Motion uses a fade.
 - **Grow/shrink bypass Rectangle**: [`bin/win-lerp.applescript`](bin/win-lerp.applescript) animates the frontmost window ±120 px over 22 smoothstep-eased frames — centered as it scales, with a primary-origin left/top clamp and a 300×200 floor so shrink-spam can't crush a window. This helper interpolates the resize; its clamp is not fully multi-monitor-aware (negative-origin displays are a limitation).
 - **`⇪ f f f` / `⇪ g g g`** send the window to the next / previous display; hold `⇪` and spam `f` or `g` to keep going in the **first** direction.
 - Rectangle's *native* larger/smaller step is bumped to 100 px by [`scripts/macos-defaults.sh`](scripts/macos-defaults.sh) for when it's triggered outside Leader Key.

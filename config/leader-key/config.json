@@ -205,22 +205,16 @@
           "type" : "group"
         },
         {
-          "actions" : [
-            {
-              "key" : "d",
-              "label" : "Codex",
-              "type" : "application",
-              "value" : "/Applications/Codex.app"
-            },
-            {
-              "key" : "n",
-              "label" : "Contacts",
-              "type" : "command",
-              "value" : "~/bin/run-quiet.sh ~/bin/app-toggle.sh \"Contacts\""
-            }
-          ],
           "key" : "o",
-          "type" : "group"
+          "label" : "Codex",
+          "type" : "application",
+          "value" : "/Applications/Codex.app"
+        },
+        {
+          "key" : "x",
+          "label" : "Contacts",
+          "type" : "command",
+          "value" : "~/bin/run-quiet.sh ~/bin/app-toggle.sh \"Contacts\""
         },
         {
           "actions" : [
@@ -1200,9 +1194,14 @@
           "holdKeys" : "space",
           "key" : "space",
           "label" : "Place window by mouse",
-          "quickRepeat" : true,
           "type" : "command",
-          "value" : "~/bin/run-quiet.sh ~/bin/ms win place smart"
+          "value" : "~/bin/run-quiet.sh ~/bin/ms win place aim"
+        },
+        {
+          "key" : "m",
+          "label" : "Toggle native fullscreen",
+          "type" : "command",
+          "value" : "~/bin/run-quiet.sh ~/bin/ms win place toggle-fullscreen"
         }
       ],
       "key" : "space",

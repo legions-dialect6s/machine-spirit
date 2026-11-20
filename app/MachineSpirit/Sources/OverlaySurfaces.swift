@@ -1,30 +1,39 @@
 import AppKit
 import QuartzCore
 
-/// Coordinates stay in AppKit here. This is mouseZone + placementFrame from
-/// tools/ms/Sources/ms/WindowGeometry.swift with the AX y reflection applied.
+extension Placement {
+  var previewLabel: String {
+    switch self {
+    case .tl: "top-left quarter"
+    case .tr: "top-right quarter"
+    case .bl: "bottom-left quarter"
+    case .br: "bottom-right quarter"
+    case .left, .right, .top, .bottom: rawValue + " half"
+    case .amm: "almost maximize"
+    case .max: "maximize"
+    case .fullscreen: "fullscreen"
+    default: rawValue
+    }
+  }
+}
+
 struct SmartPlacement: Equatable {
   let frame: CGRect
   let label: String
-  static func target(mouse: CGPoint, visibleFrame s: CGRect) -> Self {
-    guard s.width > 0, s.height > 0 else { return Self(frame: s, label: "almost maximize") }
-    let u = min(1, max(0, (mouse.x - s.minX) / s.width))
-    let v = min(1, max(0, (s.maxY - mouse.y) / s.height))
-    let left = u < 0.10, right = u > 0.90, top = v < 0.10, bottom = v > 0.90
-    if (left || right) && (top || bottom) {
-      return Self(frame: CGRect(x: right ? s.midX : s.minX, y: top ? s.midY : s.minY,
-        width: s.width / 2, height: s.height / 2),
-        label: "\(top ? "top" : "bottom")-\(left ? "left" : "right") quarter")
+  static func target(mouse: CGPoint, visibleFrame s: CGRect, window: ObservedWindow? = nil,
+                     owner: pid_t? = nil, screenID: UInt32 = 0, previous: PlacementState? = nil,
+                     primaryTop: CGFloat = 0, fullscreen: Bool = false, screenFrame: CGRect? = nil) -> Self {
+    let zone = mouseZone(mouse, visibleFrame: s)
+    let bounds = flipScreenRect(s, primaryTop: primaryTop)
+    var mode = zone
+    if let window, let owner {
+      mode = aimedPlacement(zone: zone, current: classifyPlacement(window.frame, visibleFrame: bounds),
+                            fullscreen: fullscreen, previous: previous, key: "\(owner):\(window.id)",
+                            screen: screenID, now: Date().timeIntervalSince1970)
     }
-    if left || right {
-      return Self(frame: CGRect(x: right ? s.midX : s.minX, y: s.minY, width: s.width / 2, height: s.height),
-                  label: left ? "left half" : "right half")
-    }
-    if top || bottom {
-      return Self(frame: CGRect(x: s.minX, y: top ? s.midY : s.minY, width: s.width, height: s.height / 2),
-                  label: top ? "top half" : "bottom half")
-    }
-    return Self(frame: s.insetBy(dx: s.width * 0.05, dy: s.height * 0.05), label: "almost maximize")
+    if mode == .fullscreen, let screenFrame { return Self(frame: screenFrame, label: mode.previewLabel) }
+    let frame = placementFrame(mode, visibleFrame: bounds, current: window?.frame ?? .zero)
+    return Self(frame: flipScreenRect(frame, primaryTop: primaryTop), label: mode.previewLabel)
   }
 }
 
@@ -58,12 +67,19 @@ final class PlacementPreview {
   private var window: ObservedWindow?
   private var owner: pid_t?
   private var observation: Task<Void, Never>?
+  private var terminalBaseline: Task<ObservedWindow?, Never>?
+  private var previousPlacement: PlacementState?
+  private var lastNavigation = CACurrentMediaTime()
+  private var keyInterval: CFTimeInterval = 0
   private var activationObserver: NSObjectProtocol?
   private let currentOwner: () -> pid_t?
+  private let runningPID: (String) -> pid_t?
   private let query: @Sendable (pid_t, CGWindowID?) async -> ObservedWindow?
 
   init(currentOwner: @escaping () -> pid_t? = { NSWorkspace.shared.frontmostApplication?.processIdentifier },
+       runningPID: @escaping (String) -> pid_t? = { NSRunningApplication.runningApplications(withBundleIdentifier: $0).first?.processIdentifier },
        query: @escaping @Sendable (pid_t, CGWindowID?) async -> ObservedWindow? = ObservedWindow.read) {
+    self.runningPID = runningPID
     self.currentOwner = currentOwner
     self.query = query
   }
@@ -76,8 +92,9 @@ final class PlacementPreview {
     intent = next
     armedPath = path
     self.fx = fx
+    keyInterval = 0
+    previousPlacement = next == .aim ? PlacementState.read() : nil
     active = true
-    if next == .mouse { showMouse() }
     guard let pid = currentOwner() else { return }
     owner = pid
     activationObserver = NSWorkspace.shared.notificationCenter.addObserver(
@@ -91,6 +108,7 @@ final class PlacementPreview {
       let source = await query(pid, nil)
       guard let self, !Task.isCancelled, armedPath == path, !committed, currentOwner() == pid else { return }
       window = source
+      if next == .mouse || next == .aim { showMouse(); return }
       guard let source, let (placement, screen) = next.destination(window: source.frame, screens: NSScreen.screens) else { return }
       render(placement, on: screen)
     }
@@ -99,17 +117,24 @@ final class PlacementPreview {
   /// A fired bind is posted before the launcher runs the command. The board alone
   /// watches for its landing. No monitor or animation lies on the launcher's key path.
   func fire(path: String) {
-    guard armedPath == path, active, !committed, let owner, currentOwner() == owner,
+    keyInterval = CACurrentMediaTime() - lastNavigation
+    guard armedPath == path else { leaveNavigation(); return }
+    guard active, !committed, let owner, currentOwner() == owner,
           let window, let intent, let primary = NSScreen.screens.first else { hide(); return }
-    if intent == .mouse { update(mouse: NSEvent.mouseLocation) }
+    if intent == .mouse || intent == .aim { update(mouse: NSEvent.mouseLocation) }
     guard let target, let display = panel?.screen else { hide(); return }
     committed = true
     active = false
     stopTrackingMouse()
     let expected = flipScreenRect(target.frame, primaryTop: primary.frame.maxY)
+    let cycleDisplay: NSScreen?
+    if case .cycle = intent { cycleDisplay = display } else { cycleDisplay = nil }
+    observeArrival(owner: owner, id: window.id, expected: expected, cycleScreen: cycleDisplay)
+  }
+
+  private func observeArrival(owner: pid_t, id: CGWindowID?, expected: CGRect, cycleScreen: NSScreen?) {
     let screens = NSScreen.screens
-    let frames = screens.map { flipScreenRect($0.frame, primaryTop: primary.frame.maxY) }
-    let displayIndex = screens.firstIndex(of: display)
+    let frames = screens.map { flipScreenRect($0.frame, primaryTop: screens[0].frame.maxY) }
     observation?.cancel()
     observation = Task { [weak self, query] in
       let deadline = ContinuousClock.now + .milliseconds(700)
@@ -117,28 +142,107 @@ final class PlacementPreview {
         // The first sample follows command dispatch. This task suspends off the launcher queue.
         try? await Task.sleep(for: .milliseconds(25))
         guard !Task.isCancelled else { return }
-        let current = await query(owner, window.id)
+        let current = await query(owner, id)
         guard let self, !Task.isCancelled else { return }
-        guard let current, currentOwner() == owner else { hide(); return }
+        guard currentOwner() == owner else { hide(); return }
+        guard let current else { continue }
         let landed: Bool
-        if case .cycle = intent { landed = overlapScreen(current.frame, screens: frames) == displayIndex }
+        if let cycleScreen { landed = screens[overlapScreen(current.frame, screens: frames)] == cycleScreen }
         else { landed = ObservedWindow.matches(current.frame, expected) }
         if landed {
-          let duration = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0 : 0.13
-          if duration > 0 {
-            let fade = CABasicAnimation(keyPath: "opacity")
-            fade.fromValue = Float(1); fade.toValue = Float(0); fade.duration = duration
-            CATransaction.begin(); CATransaction.setDisableActions(true)
-            outline.opacity = 0; outline.add(fade, forKey: "landing")
-            CATransaction.commit()
-            try? await Task.sleep(for: .seconds(duration))
-          }
-          if !Task.isCancelled { hide() }
+          await finish(landed: true)
           return
         }
       } while ContinuousClock.now < deadline
+      if !Task.isCancelled { await self?.finish(landed: false) }
+    }
+  }
+
+  /// One compositor animation on arrival. At large sizes the stroke travels only
+  /// a few points, with a slightly longer tail. A missed landing only dissolves.
+  private func finish(landed: Bool) async {
+    guard let target, let screen = panel?.screen else { hide(); return }
+    let reduced = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+    let share = min(1, target.frame.width * target.frame.height / max(1, screen.frame.width * screen.frame.height))
+    let cadence = min(1, max(0, keyInterval / 0.45))
+    let duration = reduced ? 0.16 : (landed ? 0.27 + 0.10 * share + 0.04 * cadence : 0.17)
+    CATransaction.begin(); CATransaction.setDisableActions(true)
+    let fade = CABasicAnimation(keyPath: "opacity")
+    fade.fromValue = landed ? Float(1) : (outline.presentation()?.opacity ?? outline.opacity)
+    fade.toValue = 0; fade.duration = duration
+    fade.timingFunction = CAMediaTimingFunction(name: .easeOut)
+    outline.opacity = 0; outline.add(fade, forKey: "landing")
+    if landed && !reduced {
+      let settle = CAKeyframeAnimation(keyPath: "transform.scale")
+      let delta = min(0.012, 6 / max(target.frame.width, target.frame.height, 1))
+      settle.values = [1 - delta, 1 + delta * 0.55, 1]; settle.keyTimes = [0, 0.45, 1]
+      settle.duration = duration
+      settle.timingFunctions = [CAMediaTimingFunction(name: .easeOut), CAMediaTimingFunction(name: .easeInEaseOut)]
+      outline.add(settle, forKey: "settle")
+    }
+    CATransaction.commit()
+    try? await Task.sleep(for: .seconds(duration))
+    if !Task.isCancelled { hide() }
+  }
+
+  /// Warm the previous front window while T is still a branch. The new iTerm
+  /// window keeps its profile geometry, which is only known when it appears.
+  func prepareLaunch(for children: [LaunchCue]) {
+    lastNavigation = CACurrentMediaTime()
+    terminalBaseline?.cancel()
+    terminalBaseline = nil
+    guard children.contains(.freshTerminal),
+          let pid = runningPID(LaunchCue.freshTerminal.bundleID)
+    else { return }
+    terminalBaseline = Task { [query] in await query(pid, nil) }
+  }
+
+  func launch(_ cue: LaunchCue, path: String, fx: OverlayFX) {
+    guard fx.placementPreview else { return }
+    let baseline = terminalBaseline
+    hide()
+    self.fx = fx
+    armedPath = path; committed = true; keyInterval = CACurrentMediaTime() - lastNavigation
+    observation = Task { [weak self, query] in
+      let initial = await baseline?.value
+      let deadline = ContinuousClock.now + .seconds(3)
+      while !Task.isCancelled && ContinuousClock.now < deadline {
+        if let self, let pid = currentOwner(), runningPID(cue.bundleID) == pid,
+           let incoming = await query(pid, nil), !Task.isCancelled,
+           (cue != .freshTerminal || incoming.id != initial?.id),
+           currentOwner() == pid, let primary = NSScreen.screens.first {
+          let frame = flipScreenRect(incoming.frame, primaryTop: primary.frame.maxY)
+          let screens = NSScreen.screens
+          let screen = screens[overlapScreen(frame, screens: screens.map(\.frame))]
+          render(.init(frame: frame, label: NSRunningApplication(processIdentifier: pid)?.localizedName ?? ""), on: screen)
+          await finish(landed: true)
+          return
+        }
+        try? await Task.sleep(for: .milliseconds(45))
+      }
       if !Task.isCancelled { self?.hide() }
     }
+  }
+
+  func commandDestination(pid: pid_t, id: CGWindowID?, frame: CGRect, mode: Placement) {
+    guard currentOwner() == pid, let primary = NSScreen.screens.first,
+          frame.width > 0, frame.height > 0, OverlayFX().placementPreview else { return }
+    let screens = NSScreen.screens
+    let appFrame = flipScreenRect(frame, primaryTop: primary.frame.maxY)
+    let index = overlapScreen(appFrame, screens: screens.map(\.frame))
+    guard screens[index].frame.intersects(appFrame) else { return }
+    let identity = id ?? (owner == pid ? window?.id : nil)
+    let reuse = owner == pid && armedPath != nil
+    observation?.cancel()
+    stopTrackingMouse()
+    armedPath = "placement"
+    owner = pid
+    committed = true
+    active = false
+    if !reuse { keyInterval = 0; fx = OverlayFX(); window = nil }
+    let label = mode.isDisplayTransfer ? screens[index].localizedName : mode.previewLabel
+    render(.init(frame: appFrame, label: label), on: screens[index])
+    observeArrival(owner: pid, id: identity, expected: frame, cycleScreen: nil)
   }
 
   func leaveNavigation() {
@@ -178,14 +282,22 @@ final class PlacementPreview {
   }
 
   func update(mouse: CGPoint) {
-    guard active, intent == .mouse, let screen = NSScreen.screens.first(where: { $0.frame.contains(mouse) }) else { return }
-    render(SmartPlacement.target(mouse: mouse, visibleFrame: screen.visibleFrame), on: screen)
+    guard active, intent == .mouse || intent == .aim, let screen = NSScreen.screens.first(where: { $0.frame.contains(mouse) }) else { return }
+    let primaryTop = NSScreen.screens.first?.frame.maxY ?? screen.frame.maxY
+    let screenID = (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value ?? 0
+    let fullFrame = flipScreenRect(screen.frame, primaryTop: primaryTop)
+    let next = SmartPlacement.target(mouse: mouse, visibleFrame: screen.visibleFrame, window: intent == .aim ? window : nil,
+      owner: owner, screenID: screenID, previous: previousPlacement, primaryTop: primaryTop,
+      fullscreen: window.map { ObservedWindow.matches($0.frame, fullFrame) && (screen.visibleFrame != screen.frame || previousPlacement?.last == "fullscreen") } ?? false,
+      screenFrame: screen.frame)
+    render(next, on: screen)
   }
 
   private func render(_ next: SmartPlacement, on screen: NSScreen) {
     let panel = preparePanel()
     let movedScreen = panel.frame != screen.frame
-    guard next != target || movedScreen else { return }
+    guard next != target || movedScreen || outline.opacity == 0 else { return }
+    outline.removeAnimation(forKey: "landing"); outline.removeAnimation(forKey: "settle")
     let previous = outline.presentation()?.frame ?? outline.frame
     let hadTarget = target != nil
     target = next

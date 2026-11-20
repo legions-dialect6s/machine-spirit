@@ -7,9 +7,11 @@ func flipScreenRect(_ rect: CGRect, primaryTop: CGFloat) -> CGRect {
 }
 
 enum Placement: String, CaseIterable, Codable {
-    case smart, step, amm, max, left, right, top, bottom, tl, tr, bl, br, center, fullscreen
+    case smart, aim, step, amm, max, left, right, top, bottom, tl, tr, bl, br, center, fullscreen
     case displayLeft = "display-left", displayRight = "display-right"
     case displayUp = "display-up", displayDown = "display-down"
+
+    case toggleFullscreen = "toggle-fullscreen"
 
     var isDisplayTransfer: Bool {
         switch self {
@@ -115,6 +117,18 @@ func nextPlacement(_ current: Placement?, fullscreen: Bool, fromFullscreen: Bool
     }
 }
 
+/// A fresh center chord alternates the inset and usable bounds. Repeating an
+/// edge chord quickly keeps the existing grow ladder on that window and display.
+func aimedPlacement(zone: Placement, current: Placement?, fullscreen: Bool,
+                    previous: PlacementState?, key: String, screen: UInt32, now: TimeInterval) -> Placement {
+    if zone == .amm { return current == .amm && !fullscreen ? .max : .amm }
+    if let previous, previous.matches(key, now: now), now - previous.t < 1.5,
+       previous.aimZone == zone, previous.aimScreen == screen {
+        return nextPlacement(current, fullscreen: fullscreen, fromFullscreen: previous.fromFullscreen)
+    }
+    return zone
+}
+
 func overlapScreen(_ window: CGRect, screens: [CGRect], fallback: Int = 0) -> Int {
     var best = fallback, largest: CGFloat = 0
     for (i, screen) in screens.enumerated() {
@@ -181,6 +195,16 @@ struct PlacementState: Codable {
     let last: String
     let fromFullscreen: Bool
     let t: TimeInterval
+
+    var aimZone: Placement? = nil
+    var aimScreen: UInt32? = nil
+
+    static var fileURL: URL { FileManager.default.temporaryDirectory.appendingPathComponent("ms-win-place.json") }
+
+    static func read() -> Self? {
+        guard let data = try? Data(contentsOf: fileURL), data.count <= 4096 else { return nil }
+        return try? JSONDecoder().decode(Self.self, from: data)
+    }
 
     func matches(_ key: String, now: TimeInterval) -> Bool {
         windowKey == key && t <= now && now - t <= 600

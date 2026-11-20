@@ -36,7 +36,7 @@ import MachineSpiritKit
     fixture.collectionBehavior = [.stationary, .ignoresCycle]
     fixture.orderFrontRegardless()
     defer { fixture.orderOut(nil) }
-    let preview = PlacementPreview(currentOwner: { getpid() })
+    let preview = PlacementPreview(currentOwner: { getpid() }, runningPID: { _ in getpid() })
     let panel = preview.preparePanel()
     panel.alphaValue = 0
     let outline = panel.contentView!.layer!.sublayers!.first!
@@ -60,6 +60,15 @@ import MachineSpiritKit
     }
     let fx = OverlayFX(defaults: UserDefaults(suiteName: UUID().uuidString)!)
     let action = PlacementIntent(action: .command("open -g \"rectangle://execute-action?name=top-left\""))!
+    for (mode, expected) in [("amm", screen.visibleFrame.insetBy(dx: screen.visibleFrame.width * 0.05,
+                                                                 dy: screen.visibleFrame.height * 0.05)),
+                             ("max", screen.visibleFrame)] {
+      let intent = PlacementIntent(action: .command("~/bin/run-quiet.sh ~/bin/ms win place \(mode)"))!
+      let actual = intent.destination(window: start!.frame, screens: NSScreen.screens)!.0.frame
+      precondition(ObservedWindow.matches(actual, expected), "Expected \(expected), got \(actual)")
+    }
+    precondition(LaunchCue(action: .command("~/bin/run-quiet.sh ~/bin/tmux-launch.sh")) == .freshTerminal)
+    precondition(LaunchCue(action: .command("~/bin/run-quiet.sh ~/bin/messages-find.sh")) == .focus("com.apple.MobileSMS"))
     let state = AppState()
     let leaf = Node(id: "root/q/q/q", key: "q", action: .command("open -g \"rectangle://execute-action?name=top-left\""))
     state.model = Node(id: "root", children: [Node(id: "root/q", key: "q", children: [
@@ -69,7 +78,7 @@ import MachineSpiritKit
     delegate.installOverlayObservers(prefix: prefix, placementPreview: preview)
     let graph = NSApp.windows.first { $0.contentView is OverlayLayerView }!
     graph.contentView!.layer!.opacity = 0
-    func send(_ suffix: String, _ payload: [String: String]) {
+    func send(_ suffix: String, _ payload: [String: Any]) {
       DistributedNotificationCenter.default().postNotificationName(Notification.Name(prefix + "." + suffix),
         object: nil, userInfo: payload, deliverImmediately: true)
     }
@@ -92,6 +101,16 @@ import MachineSpiritKit
     precondition(panel.isVisible && outline.opacity == 1, "Early acknowledgment without an actual move")
     await moveFixture(to: placement.frame)
     if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion { await wait { outline.animation(forKey: "landing") != nil } }
+    await wait { !panel.isVisible }
+    // A command-side receipt also works when the next key beat the prefix read.
+    let axSource = flipScreenRect(source, primaryTop: screen.frame.maxY)
+    send("placement", ["pid": getpid(), "windowID": id, "frame": NSStringFromRect(axSource), "mode": "amm"])
+    await wait { panel.isVisible }
+    await moveFixture(to: source)
+    await wait { outline.animation(forKey: "landing") != nil }
+    if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+      precondition(outline.animation(forKey: "settle") != nil && outline.animation(forKey: "landing")!.duration >= 0.27)
+    }
     await wait { !panel.isVisible }
     // Older tasks must not dismiss a newly armed command, even after their timeout.
     await moveFixture(to: source)
@@ -116,6 +135,21 @@ import MachineSpiritKit
       if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion { await wait { outline.animation(forKey: "landing") != nil } }
       await wait { !panel.isVisible }
     }
+    preview.prepareLaunch(for: [.freshTerminal])
+    try? await Task.sleep(for: .milliseconds(50))
+    preview.launch(.freshTerminal, path: "t/t", fx: fx)
+    try? await Task.sleep(for: .milliseconds(100))
+    precondition(!panel.isVisible, "The existing terminal must not acknowledge the new window")
+    let second = NSPanel(contentRect: source, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+    second.level = .normal; second.backgroundColor = .clear; second.isOpaque = false
+    second.hasShadow = false; second.ignoresMouseEvents = true; second.orderFrontRegardless()
+    defer { second.orderOut(nil) }
+    await wait { panel.isVisible && outline.animation(forKey: "landing") != nil }
+    precondition(ObservedWindow.matches(preview.target!.frame, second.frame))
+    await wait { !panel.isVisible }
+    preview.launch(.focus("com.apple.MobileSMS"), path: "m/e", fx: fx)
+    await wait { panel.isVisible && outline.animation(forKey: "landing") != nil }
+    await wait { !panel.isVisible }
     print("PASS \(cases) placement cases; private navigation/fired IPC, real WindowServer fixture, pre-key outline, arrival, cancellation, replacement, refusal timeout and available display transfer")
   }
 }

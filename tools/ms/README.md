@@ -100,6 +100,8 @@ intersection with the current window:
 | `tl`, `tr`, `bl`, `br` | Corresponding quarter |
 | `center` | Keep size, clamp to usable area, center |
 | `fullscreen` | Request native fullscreen |
+| `toggle-fullscreen` | Toggle the focused window’s native fullscreen state |
+| `aim` | Follow the pointer. In the center, alternate between `amm` and `max`. A quick repeat in the same edge zone grows the same window. |
 | `display-left`, `display-right`, `display-up`, `display-down` | Move to a physical neighbor, keeping the relative window bounds. Prefer an aligned monitor and stop at the desktop edge. |
 
 `step` classifies all four current edges with tolerance `max(12pt, 2% of the

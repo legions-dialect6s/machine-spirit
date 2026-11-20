@@ -37,7 +37,8 @@ final class IPCDefaults: UserDefaults, @unchecked Sendable {
         Node(id: "root/a/s", key: "s", label: "shell", action: .command("true"))]),
       Node(id: "root/w", key: "w", label: "windows", children: [
         Node(id: "root/w/space", key: "space", label: "smart placement", action: .command("~/bin/ms win place smart"))]),
-      Node(id: "root/space", key: "space", label: "place window"),
+      Node(id: "root/space", key: "space", label: "place window", children: [
+        Node(id: "root/space/space", key: "space", action: .command("~/bin/ms win place smart"))]),
       Node(id: "root/t", key: "t", label: "terminal")])
     let delegate = AppDelegate(state: state, capsFollower: CapsFollower(readFlags: { [] }))
     let prefix = "com.machinespirit.overlay-test.\(UUID().uuidString)"
@@ -177,7 +178,7 @@ final class IPCDefaults: UserDefaults, @unchecked Sendable {
       (CGPoint(x: f.midX, y: f.midY), f.insetBy(dx: f.width * 0.05, dy: f.height * 0.05), "center")]
     for (point, expected, name) in positions {
       preview.update(mouse: point); pump(0.2)
-      precondition(preview.target?.frame == expected)
+      precondition(ObservedWindow.matches(preview.target!.frame, expected))
       precondition(preview.panel!.ignoresMouseEvents && !preview.panel!.canBecomeKey && !preview.panel!.canBecomeMain)
       try capture("preview-" + name, window: preview.panel)
       if CommandLine.arguments.count > 1, let image = NSBitmapImageRep(data: try Data(contentsOf:
