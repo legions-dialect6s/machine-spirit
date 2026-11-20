@@ -30,4 +30,5 @@ for state in HOVER RESTORED VISIBLE HIDDEN; do
   top -pid "$harness_pid" -l 5 -s 1 -stats pid,command,cpu,time > "$scratch/cpu-$state.log"
 done
 wait "$harness_pid"
+bash Tests/run-caps-follower-smoke.sh "$scratch"
 printf 'PASS all FX smoke harnesses; logs and captures in %s\n' "$scratch"

@@ -43,7 +43,7 @@ A root placed closer than its radius to the physical screen edge is clipped by t
 
 ## Overlay controls and local stats
 
-`OverlayFX` reads `msFX.<property>` from UserDefaults on each new overlay session. The board’s compact **Graphics** disclosure exposes an accent color well, Curvature/Randomness/Shake/Glitch sliders, effect toggles, and Reset to defaults. Values persist under `msFX.*` and apply on the next summon. `accentHex` defaults to `#36DE6A`; `curvature`, `randomness`, `shake`, and `glitch` default to 0.4, 0.35, 0.4, and 0.5, bounded to 0…1. All booleans default true except `curvedTraces` (false): `skull`, `skullGlow`, `letterPop`, `shockwave`, `miss`, `back`, `done`, `hold`, `close`, `hover`, `placementPreview`, `hud`. Duration keys are `openingDuration` (0.14), `popDuration` (0.22), `shockwaveDuration` (0.38), `missDuration` (0.35), `backDuration` (0.09), `doneDuration` (0.45), `holdDuration` (0.16), `closeDuration` (half opening), and `hoverDuration` (0.14; return uses 10/7 of this), in seconds. Zero disables that motion; invalid/out-of-range values are bounded. Curved traces use one quadratic path per existing trace layer. The graph’s effect layers are pooled before navigation, and closing cancels all remaining animations. Successful forward navigation and repeated hold keys drive an interval EMA: 450ms or slower is calm, 90ms or faster is full intensity. It controls 120ms discrete scene shake, larger/brighter shockwaves with a second thin ring at high speed, and masked letter slices. Arrival jitter is bounded by Randomness. There is no animation clock or idle decay loop; the next key incorporates the elapsed idle time.
+`OverlayFX` reads `msFX.<property>` from UserDefaults on each new overlay session. The board’s compact **Graphics** disclosure exposes an accent color well, Curvature/Randomness/Shake/Glitch sliders, effect toggles, and Reset to defaults. Values persist under `msFX.*` and apply on the next summon. `accentHex` defaults to `#36DE6A`; `curvature`, `randomness`, `shake`, and `glitch` default to 0.4, 0.35, 0.4, and 0.5, bounded to 0…1. All booleans default true except `curvedTraces` (false): `skull`, `skullGlow`, `letterPop`, `shockwave`, `miss`, `back`, `done`, `hold`, `close`, `hover`, `placementPreview`, `hud`, `capsFollower`. Duration keys are `openingDuration` (0.14), `popDuration` (0.22), `shockwaveDuration` (0.38), `missDuration` (0.35), `backDuration` (0.09), `doneDuration` (0.45), `holdDuration` (0.16), `closeDuration` (half opening), and `hoverDuration` (0.14; return uses 10/7 of this), in seconds. Zero disables that motion; invalid/out-of-range values are bounded. Curved traces use one quadratic path per existing trace layer. The graph’s effect layers are pooled before navigation, and closing cancels all remaining animations. Successful forward navigation and repeated hold keys drive an interval EMA: 450ms or slower is calm, 90ms or faster is full intensity. It controls 120ms discrete scene shake, larger/brighter shockwaves with a second thin ring at high speed, and masked letter slices. Arrival jitter is bounded by Randomness. There is no animation clock or idle decay loop; the next key incorporates the elapsed idle time.
 
 While shown, local/global mouse-moved monitors enable input only over visible node or label rectangles. Hover scales the node and its route to 1.08× with a slight 140ms spring, brightens their traces/glow, and dims neighboring nodes. Non-route nodes drift radially outward 6–14pt with distance falloff and event-time Randomness; travel is reduced at screen edges to keep labels visible. Their traces follow the displaced endpoints. Hover-out returns over 200ms. Hit regions stay at layout positions (including preview scale and label bounds), so motion cannot change the target under a resting pointer. Targets are computed once per hover change; there is no animation loop. Clicking opens `msleaderkey://navigate?keys=…` with textual keys (`space`) and `activates = false`; the overlay panel can never become key or main. Monitors are removed as hiding begins. Late feedback cannot reopen a hidden overlay.
 
@@ -84,6 +84,22 @@ Both URL styles bypass the board and never activate or become key. Only the
 text card receives clicks. `hud` disables HUDs; `close`/`closeDuration=0` disables
 the fade; `openingDuration=0` disables entrance motion. One strict one-shot deadline handles HUD expiry; Core Animation owns
 the fade, with no per-frame Swift timer.
+
+While Caps Lock is ON, a 28×18pt glass ⇪ badge follows the mouse, 14pt right
+and 18pt below it (flipping at screen edges). Its red-amber `#FF5A3C` stroke
+and glyph match the caps pill. One click-through, never-key window sits above
+normal windows and below the leader overlay, including fullscreen spaces.
+`msFX.capsFollower` defaults true; **Graphics → Caps pointer badge** applies
+immediately and works independently of the transient `hud` toggle.
+
+Launch, every HUD URL, and global/local `flagsChanged` events sample the current
+HID Caps Lock state; current hardware wins over stale URL state. Mouse-moved
+and left-drag monitors exist only while the badge is enabled and Caps is ON.
+Each event directly sets the window origin, with no animation or polling timer.
+OFF removes those mouse monitors immediately, fades for 150ms in Core Animation,
+then closes and releases the window. Only dormant flags/preference listeners
+remain. Global keyboard event delivery relies on macOS Accessibility access;
+launch and HUD URL reconciliation work independently of that event delivery.
 
 See [wave 2 verification](Tests/OverlayWave2Verification.md) for private IPC,
 geometry parity, captures, CPU measurements, and remaining human checks.

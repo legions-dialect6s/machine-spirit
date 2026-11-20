@@ -28,7 +28,7 @@ private struct GraphicsControls: View {
   @AppStorage("msFX.randomness") private var randomness = 0.35
   @AppStorage("msFX.shake") private var shake = 0.4
   @AppStorage("msFX.glitch") private var glitch = 0.5
-  private let flags = ["skull", "skullGlow", "letterPop", "shockwave", "miss", "back", "done", "hold", "close", "hover", "curvedTraces", "placementPreview", "hud"]
+  private let flags = ["skull", "skullGlow", "letterPop", "shockwave", "miss", "back", "done", "hold", "close", "hover", "curvedTraces", "placementPreview", "hud", "capsFollower"]
   var body: some View {
     VStack(spacing: 7) {
       ColorPicker("Accent", selection: Binding(get: {
@@ -65,7 +65,7 @@ private struct GraphicsFlag: View {
   }
   private var label: String {
     ["skullGlow": "Skull glow", "letterPop": "Letter pop", "curvedTraces": "Curved traces",
-     "placementPreview": "Placement preview", "hud": "HUD"][name] ?? name.capitalized
+     "placementPreview": "Placement preview", "hud": "HUD", "capsFollower": "Caps pointer badge"][name] ?? name.capitalized
   }
   var body: some View { Toggle(label, isOn: $enabled).toggleStyle(.checkbox) }
 }

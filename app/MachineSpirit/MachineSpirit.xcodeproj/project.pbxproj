@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		CA95F0110000000000000001 /* CapsFollower.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA95F0110000000000000002 /* CapsFollower.swift */; };
 		019F7D79E1E876626E11B9A2 /* GraphView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98EAE5FFEBA7D1FAEEF81FAE /* GraphView.swift */; };
 		03CC4C60DC362CD4DC476CD7 /* NodePresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3459338B1304703BA890A8E0 /* NodePresentation.swift */; };
 		2783C8C8E6335417108C3E82 /* TypingOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB996D2207146A3239C199E7 /* TypingOverlay.swift */; };
@@ -33,6 +34,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		CA95F0110000000000000002 /* CapsFollower.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CapsFollower.swift; sourceTree = "<group>"; };
 		03C338F8057743822B0E18EA /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		0C61D57EF5E1027553CA1962 /* SheolService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SheolService.swift; sourceTree = "<group>"; };
 		271503FD6BBFFFE7B766D1E8 /* IconStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IconStore.swift; sourceTree = "<group>"; };
@@ -83,6 +85,7 @@
 			isa = PBXGroup;
 			children = (
 				03C338F8057743822B0E18EA /* AppDelegate.swift */,
+				CA95F0110000000000000002 /* CapsFollower.swift */,
 				5D03F1A0DE367DED4735C5E1 /* AppState.swift */,
 				C8FE015A691BDC6F292D49AE /* ConfigWatcher.swift */,
 				41BA055CA9A05CA859DBB7D0 /* ContentView.swift */,
@@ -202,6 +205,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				CA95F0110000000000000001 /* CapsFollower.swift in Sources */,
 				EE9DC96225DDD378E7F5B9E5 /* AppDelegate.swift in Sources */,
 				EFBAA750BEEE2D52CB8BC739 /* AppState.swift in Sources */,
 				DE1E4416918E309ED3644824 /* ConfigWatcher.swift in Sources */,

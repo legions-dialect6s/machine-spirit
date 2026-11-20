@@ -67,7 +67,7 @@ final class MemoryDefaults: UserDefaults, @unchecked Sendable {
     precondition(StatsStore.isWindowPlacement(Node(id: "x", action: .command("\"$HOME/bin/ms\" win place left"))))
     precondition(!StatsStore.isWindowPlacement(Node(id: "x", action: .command("~/bin/ms win cycle"))))
     let knobs = OverlayFX(defaults: defaults)
-    precondition(knobs.shockwave && !knobs.curvedTraces && knobs.closeDuration == knobs.openingDuration / 2)
+    precondition(knobs.shockwave && knobs.capsFollower && !knobs.curvedTraces && knobs.closeDuration == knobs.openingDuration / 2)
     defaults.set(false, forKey: "msFX.letterPop")
     defaults.set(-3.0, forKey: "msFX.popDuration")
     precondition(!OverlayFX(defaults: defaults).letterPop && OverlayFX(defaults: defaults).popDuration == 0)
