@@ -29,6 +29,7 @@ struct ContentView: View {
       Divider().overlay(Theme.phosphorDim.opacity(0.4))
       main
       Divider().overlay(Theme.phosphorDim.opacity(0.4))
+      GraphicsSettings()
       statsSection
       footer
     }

@@ -10,7 +10,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   // default argument does not provide one (crashed at launch).
   override convenience init() { self.init(state: AppState()) }
   var openBoardAction: (() -> Void)?
-  private var overlay: TypingOverlay?
+  private(set) var overlay: TypingOverlay?
+  let hud = OverlayHUD()
   private var closeObserver: NSObjectProtocol?
   private var launched = false
   private(set) var transientBoard = false
@@ -75,6 +76,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let transient = URLComponents(url: url, resolvingAgainstBaseURL: false)?
           .queryItems?.first(where: { $0.name == "transient" })?.value == "1"
         openBoard(transient: transient)
+      case "hud":
+        hud.show(url: url)
       case "fired":
         if let path = URLComponents(url: url, resolvingAgainstBaseURL: false)?
           .queryItems?.first(where: { $0.name == "path" })?.value {
@@ -135,7 +138,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       let navigationState = info["state"] as? String else { return }
     if navigationState == "hidden" { overlay?.hide(); return }
     guard navigationState == "shown" || navigationState == "hold", let path = info["path"] as? String else { return }
-    overlay?.show(path: path, screen: info["screen"] as? String)
+    overlay?.show(path: path, screen: info["screen"] as? String, preview: navigationState == "shown" && path == "space")
   }
 
   @objc private func feedback(_ notification: Notification) {
