@@ -39,7 +39,7 @@ final class IPCDefaults: UserDefaults, @unchecked Sendable {
         Node(id: "root/w/space", key: "space", label: "smart placement", action: .command("~/bin/ms win place smart"))]),
       Node(id: "root/space", key: "space", label: "place window"),
       Node(id: "root/t", key: "t", label: "terminal")])
-    let delegate = AppDelegate(state: state)
+    let delegate = AppDelegate(state: state, capsFollower: CapsFollower(readFlags: { [] }))
     let prefix = "com.machinespirit.overlay-test.\(UUID().uuidString)"
     delegate.installOverlayObservers(prefix: prefix)
     let panel = NSApp.windows.first { $0 is NSPanel }!

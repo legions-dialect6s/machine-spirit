@@ -5,13 +5,16 @@ import SwiftUI
 final class AppDelegate: NSObject, NSApplicationDelegate {
   let state: AppState
 
-  init(state: AppState) { self.state = state; super.init() }
+  init(state: AppState, capsFollower: CapsFollower = CapsFollower()) {
+    self.state = state; self.capsFollower = capsFollower; super.init()
+  }
   // NSApplicationDelegateAdaptor instantiates via the ObjC init(); a Swift
   // default argument does not provide one (crashed at launch).
   override convenience init() { self.init(state: AppState()) }
   var openBoardAction: (() -> Void)?
   private(set) var overlay: TypingOverlay?
   let hud = OverlayHUD()
+  let capsFollower: CapsFollower
   private var closeObserver: NSObjectProtocol?
   private var launched = false
   private(set) var transientBoard = false
@@ -21,6 +24,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     installURLHandler()
     state.start()
     installOverlayObservers()
+    capsFollower.start()
   }
 
   // A namespaced center allows the smoke harness to exercise real IPC without
@@ -77,6 +81,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
           .queryItems?.first(where: { $0.name == "transient" })?.value == "1"
         openBoard(transient: transient)
       case "hud":
+        capsFollower.receiveHUD(url: url)
         hud.show(url: url)
       case "fired":
         if let path = URLComponents(url: url, resolvingAgainstBaseURL: false)?
@@ -156,6 +161,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   }
 
   func applicationWillTerminate(_ notification: Notification) {
+    capsFollower.stop()
     NSAppleEventManager.shared().removeEventHandler(
       forEventClass: AEEventClass(kInternetEventClass), andEventID: AEEventID(kAEGetURL))
     DistributedNotificationCenter.default().removeObserver(self)

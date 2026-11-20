@@ -11,6 +11,7 @@ struct OverlayFX {
   var glitch: Double
   var placementPreview: Bool
   var hud: Bool
+  var capsFollower: Bool
   var skull: Bool
   var skullGlow: Bool
   var letterPop: Bool
@@ -51,6 +52,7 @@ struct OverlayFX {
     shake = unit("shake", 0.4)
     glitch = unit("glitch", 0.5)
     placementPreview = flag("placementPreview"); hud = flag("hud")
+    capsFollower = flag("capsFollower")
     skull = flag("skull"); skullGlow = flag("skullGlow")
     letterPop = flag("letterPop"); shockwave = flag("shockwave")
     miss = flag("miss"); back = flag("back"); done = flag("done")
