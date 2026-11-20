@@ -476,6 +476,14 @@
           "type" : "group"
         },
         {
+          "hold" : "~/bin/web-collect.sh mail.google.com/",
+          "holdKeys" : "m",
+          "key" : "m",
+          "label" : "Gmail",
+          "type" : "command",
+          "value" : "osascript ~/bin/web-jump.applescript mail.google.com/ https://mail.google.com/mail/"
+        },
+        {
           "hold" : "~/bin/web-collect.sh google.com",
           "holdKeys" : "o",
           "key" : "o",
@@ -1042,18 +1050,30 @@
           "value" : "/Applications/Telegram.app"
         },
         {
-          "hold" : "~/bin/web-collect.sh tripo3d.ai",
-          "holdKeys" : "r",
-          "key" : "r",
-          "label" : "Tripo",
-          "type" : "command",
-          "value" : "osascript ~/bin/web-jump.applescript tripo3d.ai"
-        },
-        {
           "key" : "3",
           "label" : "T3 Code",
           "type" : "application",
           "value" : "/Applications/T3 Code (Beta).app"
+        },
+        {
+          "actions" : [
+            {
+              "hold" : "~/bin/web-collect.sh tripo3d.ai",
+              "holdKeys" : "i",
+              "key" : "i",
+              "label" : "Tripo",
+              "type" : "command",
+              "value" : "osascript ~/bin/web-jump.applescript tripo3d.ai"
+            },
+            {
+              "key" : "a",
+              "label" : "Translate selection / area",
+              "type" : "command",
+              "value" : "~/bin/run-quiet.sh ~/bin/ms translate-area"
+            }
+          ],
+          "key" : "r",
+          "type" : "group"
         }
       ],
       "key" : "t",

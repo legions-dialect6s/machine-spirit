@@ -150,6 +150,7 @@ Every site key runs the same script, [`bin/web-jump.applescript`](bin/web-jump.a
 | Keys | Site | Notes |
 |---|---|---|
 | `⇪ g i t` | GitHub | spells "git" |
+| `⇪ g m` | Gmail in Safari | Open, focus or cycle Gmail tabs. Keep Caps down and tap M again to collect one matching tab per press. |
 | `⇪ g o` | Google | |
 | `⇪ g w` | ChatGPT web | matches chatgpt.com + chat.openai.com |
 | `⇪ g r o k` | Grok | spells "grok"; matches grok.com + x.com/i/grok |
@@ -158,7 +159,7 @@ Every site key runs the same script, [`bin/web-jump.applescript`](bin/web-jump.a
 | `⇪ y` | YouTube | |
 | `⇪ d r` | Google Drive | |
 | `⇪ s h o p` | Shopify admin | |
-| `⇪ t r` | Tripo | |
+| `⇪ t r i` | Tripo | |
 | `⇪ r r` | — | strips the current tab's URL to the site's home page ([`bin/site-home.applescript`](bin/site-home.applescript)) |
 
 ### Folders & terminal

@@ -28,6 +28,12 @@ owner confirmation only**.
 
 ## Ledger
 
+### v0.5-classic-driver — definitive daily driver, 2026-11-19
+
+Alexander confirmed the classic node motion and window placement felt right. This annotated local tag includes anchored hover, the original randomness effects, pre-commit window previews, directional double arrows, and the new Safari Gmail route on `⇪ G M`. Finder tab collection is available on `⇪ F I` followed by additional I presses while Caps stays down. The portable shortcut tree matches the full live tree, including the existing Tripo and Translate shortcuts.
+
+**Recovery copy on this Mac.** Under `~/Library/Application Support/MachineSpirit/Checkpoints/v0.5-classic-driver/`, the private package includes both signed application archives, the release CLI, the live shortcut JSON, the graph layout, app preferences, relevant helpers, a source Git bundle, checksums, and recovery notes. Both apps were extracted, signature-checked and compared with the installed copies. Verify package files with `shasum -a 256 -c SHA256SUMS` from that directory. For a separate source checkout use `git worktree add --detach ../machine-spirit-v0.5 v0.5-classic-driver`.
+
 ### v0.1-stable-config — the pre-app loved state `[P1.1]`
 
 The pre-app loved state, everything working: launcher, window grid, splash,
