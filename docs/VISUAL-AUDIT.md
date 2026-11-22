@@ -10,7 +10,7 @@ No full-desktop screenshot was taken. Overlay captures used only graph rectangle
 |---|---:|---|---|
 | [hero.png](img/hero.png) | 1320 × 1060 | Center-anchored `s` navigation branch on a plain dark background. | Tight region capture; no personal text present. |
 | [overlay-corner.png](img/overlay-corner.png) | 1000 × 1240 | The same branch fanning inward from the top-left corner. | Crop starts below the menu bar; the focus circle is intentionally cut at the top. |
-| [menubar.png](img/menubar.png) | 498 × 48 | The installed status item on the M28U. | Native 2× crop of the 249 × 24-point Accessibility frame. |
+| [menubar.png](img/menubar.png) | 494 × 66 | The installed status item on the laptop display. | Native 2× crop of the 247 × 33-point WindowServer frame. |
 | [menu.png](img/menu.png) | 519 × 472 | Compact system menu, including terminal controls and brightness. | Session names, commands, and ages blurred before copying into the repo. |
 | [clipboard.png](img/clipboard.png) | 1040 × 880 | Production clipboard panel with two synthetic entries. | Copied from `forks/LeaderKey/docs/clipboard-panel.png`; no live clipboard access. |
 | [board.png](img/board.png) | 1000 × 700 | Close-up of the board's root and branches at the existing zoom. | Window-only capture; the optional ledger is closed. No paths or session titles are visible. |
@@ -43,7 +43,7 @@ Lists below transcribe distinct visible strings. Repeated labels and glyphs are 
 
 ### menubar.png
 
-- The capture shows the shared skull, one working T3 task out of six open, CPU at 52%, GPU at 45%, RAM used at 80%, warning memory pressure, temperature at 79° and the two-tone keep-awake capsule. The values are instantaneous readings.
+- The capture shows the skull, T3 2/5, CPU 37%, GPU 50%, RAM 77%, kernel availability 44% in amber, temperature 69°, and the horizontal keep-awake molecule. All readings are instantaneous.
 - The crop contains one status item. Neighboring menu items and windows are outside the capture. The saved PNG omits capture text and date metadata.
 
 ### menu.png

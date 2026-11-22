@@ -215,14 +215,14 @@ final class KeepAwakeAndBarTests: XCTestCase {
     CompactBarState(
       skull: true, t3: .counts(working: 1, open: 4),
       cpu: .value(49), gpu: .value(23), memory: .value(55),
-      pressureLevel: .normal, temperature: .value(64),
+      availablePercent: 44, pressureLevel: .normal, temperature: .value(64),
       awake: true, dark: true, scale: 2, height: 24)
   }
 
   func testMenuBarWidthIsStableAcrossValuesAvailabilityAndAwakeState() {
     let baseline = barState
     XCTAssertEqual(StatusItem.barSegments, ["Skull", "T3", "CPU", "GPU", "Memory", "Temperature", "Awake"])
-    XCTAssertEqual(CompactBar.cells(for: baseline).map(\.label), ["T3", "CPU%", "GPU%", "RAM%", "MPRS", "TEMP"])
+    XCTAssertEqual(CompactBar.cells(for: baseline).map(\.label), ["T3", "CPU%", "GPU%", "RAM%", "AVL%", "TEMP"])
     let width = CompactBar.image(baseline).size.width
 
     var expanded = baseline
@@ -233,7 +233,7 @@ final class KeepAwakeAndBarTests: XCTestCase {
     expanded.pressureLevel = .critical
     expanded.temperature = .value(100)
     expanded.awake = false
-    XCTAssertEqual(CompactBar.cells(for: expanded).map(\.value), ["99+/99+", "100", "100", "100", "CRIT", "100°"])
+    XCTAssertEqual(CompactBar.cells(for: expanded).map(\.value), ["99+/99+", "100", "100", "100", "44", "100°"])
     XCTAssertEqual(CompactBar.image(expanded).size.width, width)
     XCTAssertEqual(CompactBar.countsValue(462), "99+")
     XCTAssertEqual(CompactBar.countsValue(99), "99")
@@ -243,6 +243,7 @@ final class KeepAwakeAndBarTests: XCTestCase {
     unavailable.cpu = .unavailable
     unavailable.gpu = .unavailable
     unavailable.memory = .unavailable
+    unavailable.availablePercent = nil
     unavailable.pressureLevel = nil
     unavailable.temperature = .unavailable
     XCTAssertEqual(CompactBar.cells(for: unavailable).map(\.value), Array(repeating: "—", count: 6))
@@ -294,17 +295,17 @@ final class KeepAwakeAndBarTests: XCTestCase {
   func testPressureHasItsOwnLevelAndAccessibleDescription() {
     var state = barState
     state.memory = .value(100)
-    XCTAssertEqual(CompactBar.cells(for: state).first { $0.label == "MPRS" }?.value, "OK")
+    XCTAssertEqual(CompactBar.cells(for: state).first { $0.label == "AVL%" }?.value, "44")
     XCTAssertTrue(state.descriptions(awakeStatus: "indefinitely").contains("RAM used 100%"))
     XCTAssertTrue(state.descriptions(awakeStatus: "indefinitely").contains("Memory pressure normal"))
 
     state.memory = .value(35)
     state.pressureLevel = .warning
-    XCTAssertEqual(CompactBar.cells(for: state).first { $0.label == "MPRS" }?.value, "WARN")
+    XCTAssertEqual(CompactBar.cells(for: state).first { $0.label == "AVL%" }?.value, "44")
     XCTAssertTrue(state.descriptions(awakeStatus: "off").contains("Memory pressure warning"))
 
     state.pressureLevel = .critical
-    XCTAssertEqual(CompactBar.cells(for: state).first { $0.label == "MPRS" }?.value, "CRIT")
+    XCTAssertEqual(CompactBar.cells(for: state).first { $0.label == "AVL%" }?.value, "44")
     XCTAssertTrue(state.descriptions(awakeStatus: "off").contains("Memory pressure critical"))
   }
 

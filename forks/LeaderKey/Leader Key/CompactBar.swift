@@ -41,6 +41,7 @@ struct CompactBarState: Equatable {
   var cpu: Sample
   var gpu: Sample
   var memory: Sample
+  var availablePercent: Int? = nil
   var pressureLevel: Pressure?
   var temperature: Sample
   var awake: Bool?
@@ -63,6 +64,7 @@ struct CompactBarState: Equatable {
     describe("GPU", gpu, unit: "%")
     describe("RAM used", memory, unit: "%")
     if memory.isVisible {
+      if let availablePercent { descriptions.append("Kernel memory available \(availablePercent)%") }
       descriptions.append("Memory pressure \(pressureLevel?.name ?? "unavailable")")
     }
     describe("Temperature", temperature, unit: " degrees Celsius")
@@ -74,7 +76,7 @@ struct CompactBarState: Equatable {
 enum CompactBar {
   private static let spacing: CGFloat = 2
   static let skullWidth: CGFloat = 20
-  private static let awakeWidth: CGFloat = 17
+  private static let awakeWidth: CGFloat = 25
 
   struct Cell: Equatable {
     let label: String
@@ -103,7 +105,13 @@ enum CompactBar {
       : NSColor(srgbRed: 0.65, green: 0.10, blue: 0.15, alpha: 1)
     func heat(_ value: Int?, warm lowerLimit: Int, hot upperLimit: Int) -> NSColor {
       guard let value else { return foreground }
-      return value >= upperLimit ? hot : value >= lowerLimit ? warm : foreground
+      let start = lowerLimit - 25
+      if value <= start { return foreground }
+      if value < lowerLimit {
+        return foreground.blended(withFraction: CGFloat(value - start) / 25, of: warm) ?? foreground
+      }
+      let fraction = min(1, CGFloat(value - lowerLimit) / CGFloat(upperLimit - lowerLimit))
+      return warm.blended(withFraction: fraction, of: hot) ?? warm
     }
     func percent(_ value: Int?) -> String {
       value.map { String(max(0, min(100, $0))) } ?? "—"
@@ -126,15 +134,16 @@ enum CompactBar {
                         tint: heat(state.gpu.value, warm: 70, hot: 90)))
     }
     if state.memory.isVisible {
-      cells.append(Cell(label: "RAM%", value: percent(state.memory.value), width: 26, tint: foreground))
-      let pressure: (String, NSColor)
+      cells.append(Cell(label: "RAM%", value: percent(state.memory.value), width: 26,
+                        tint: heat(state.memory.value, warm: 85, hot: 98)))
+      let tint: NSColor
       switch state.pressureLevel {
-      case .normal: pressure = ("OK", foreground)
-      case .warning: pressure = ("WARN", warm)
-      case .critical: pressure = ("CRIT", hot)
-      case nil: pressure = ("—", foreground)
+      case .normal: tint = state.dark ? .systemMint : NSColor(srgbRed: 0, green: 0.36, blue: 0.23, alpha: 1)
+      case .warning: tint = warm
+      case .critical: tint = hot
+      case nil: tint = foreground
       }
-      cells.append(Cell(label: "MPRS", value: pressure.0, width: 34, tint: pressure.1))
+      cells.append(Cell(label: "AVL%", value: percent(state.availablePercent), width: 26, tint: tint))
     }
     if state.temperature.isVisible {
       let value = state.temperature.value.map { value in
@@ -183,20 +192,25 @@ enum CompactBar {
       x += cell.width + spacing
     }
     if let awake = state.awake {
-      let rect = NSRect(x: x + 1, y: (size.height - 7) / 2, width: 15, height: 7)
-      let capsule = NSBezierPath(roundedRect: rect, xRadius: 3.5, yRadius: 3.5)
-      NSGraphicsContext.saveGraphicsState()
-      capsule.addClip()
-      if awake {
-        foreground.withAlphaComponent(0.35).setFill()
-        rect.fill()
-        foreground.setFill()
-        NSRect(x: rect.midX, y: rect.minY, width: rect.width / 2, height: rect.height).fill()
+      // Phenyl ring at left, then the two-carbon side chain with methyl and amine ends.
+      let middle = size.height / 2
+      let bonds = NSBezierPath()
+      func line(_ points: [(CGFloat, CGFloat)]) {
+        for (i, p) in points.enumerated() {
+          let point = NSPoint(x: x + p.0, y: middle + p.1)
+          if i == 0 { bonds.move(to: point) } else { bonds.line(to: point) }
+        }
       }
-      NSGraphicsContext.restoreGraphicsState()
-      foreground.withAlphaComponent(awake ? 0.95 : 0.5).setStroke()
-      capsule.lineWidth = 1
-      capsule.stroke()
+      line([(1,0),(3.5,4.4),(8.5,4.4),(11,0),(8.5,-4.4),(3.5,-4.4),(1,0)])
+      line([(11,0),(15,2.5),(19,0),(23,2.5)])
+      line([(19,0),(19,-4.5)])
+      bonds.appendOval(in: NSRect(x: x + 3.7, y: middle - 2.3, width: 4.6, height: 4.6))
+      foreground.withAlphaComponent(awake ? 1 : 0.5).setStroke()
+      bonds.lineWidth = 1.15
+      bonds.lineJoinStyle = .round
+      bonds.stroke()
+      let amine = NSBezierPath(ovalIn: NSRect(x: x + 21.6, y: middle + 1.1, width: 2.8, height: 2.8))
+      if awake { foreground.setFill(); amine.fill() } else { amine.stroke() }
     } else if !state.skull && cells.isEmpty {
       foreground.setFill()
       NSBezierPath(ovalIn: NSRect(x: 0, y: (size.height - 4) / 2, width: 4, height: 4)).fill()

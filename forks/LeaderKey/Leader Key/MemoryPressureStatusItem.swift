@@ -35,7 +35,7 @@ enum MemoryPressure {
 
   static func read(barOnly: Bool = false) -> Reading {
     var r = Reading()
-    if !barOnly, let available = sysctlI32("kern.memorystatus_level") {
+    if let available = sysctlI32("kern.memorystatus_level") {
       r.availablePercent = Int(available)
       r.hasAvailablePercent = true
     }

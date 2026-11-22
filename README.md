@@ -293,7 +293,7 @@ What the fork adds over stock:
 
 The skull follows the graph’s summon, typing, error and dismissal events. **T3** shows working tasks over open tasks in the local T3 environment. The denominator includes top-level, unsettled, unsnoozed tasks. The numerator counts their latest preparing, starting or running runs, excluding pending input and approvals. Select a named task in **T3 tasks** to open that thread in the desktop app. If the local server or its v2 task projections are unavailable, the bar shows a dash. Plain terminals, attached tmux sessions and detached sessions remain available in the terminal menu.
 
-**CPU%**, **GPU%** and **RAM%** show utilization. **MPRS** reports the kernel memory pressure level as **OK**, **WARN** or **CRIT**. A missing reading shows a dash. The small horizontal capsule fills in two tones while keep-awake is active. Each metric has a fixed slot. Choose fields under **Leader Key → Menu bar**.
+**CPU%**, **GPU%** and **RAM%** show utilization. **AVL%** shows the kernel’s available-memory percentage. Its color follows the kernel pressure state (green, amber, red), with the state spelled out in the tooltip. CPU, GPU, RAM utilization and temperature tint gradually as readings rise. A missing reading shows a dash. The horizontal amphetamine molecule brightens while keep-awake is active. Each metric has a fixed slot. Choose fields under **Leader Key → Menu bar**.
 
 ![Machine Spirit’s compact menu bar on a three-display Mac](docs/img/menubar.png)
 
@@ -303,7 +303,7 @@ Open **Stats** for network throughput and available storage. **Disk** includes t
 
 *Earlier menu capture. Session names, commands and ages are blurred.*
 
-Open **Now Playing** to start audio discovery and meters. Closing its submenu releases the capture session. Click an audible app to bring it forward. For a registered web handler, Machine Spirit checks the native tab strip for a single audible tab. A browser that exposes the “Mute tab” control can also select that tab and raise its window. Hidden tab strips, multiple matches, other indicator languages and missing Accessibility permission can leave the browser on the current tab.
+Open **Now Playing**, directly beneath Stats, to start audio discovery and meters. Closing its submenu releases the capture session. Click an audible app to bring it forward. For a registered web handler, Machine Spirit checks the native tab strip for a single audible tab. A browser that exposes the “Mute tab” control can also select that tab and raise its window. Hidden tab strips, multiple matches, other indicator languages and missing Accessibility permission can leave the browser on the current tab.
 
 The top-level menu includes Stats, T3 tasks, terminals and tmux, brightness, keep-awake, clipboard history and Now Playing. The stats summary uses monospaced digits for CPU,
 GPU, RAM used %, hottest sensor, download/upload MB/s and battery charge.

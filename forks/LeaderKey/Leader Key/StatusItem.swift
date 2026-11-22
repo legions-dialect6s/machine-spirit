@@ -177,6 +177,14 @@ class StatusItem: NSObject, NSMenuDelegate {
     statsMenu = statistics
     statsSummaryItem = summary
     menu.addItem(summary)
+    let audio = NSMenuItem(title: "Now Playing", action: nil, keyEquivalent: "")
+    let sub = NSMenu()
+    sub.autoenablesItems = false
+    sub.delegate = self
+    audio.submenu = sub
+    audioMenu = sub
+    menu.addItem(audio)
+    nowPlaying.append(to: sub)
     statsRows.removeAll()
     for name in SystemStats.names {
       let row = NSMenuItem(title: name + ": Measuring…", action: nil, keyEquivalent: "")
@@ -209,14 +217,6 @@ class StatusItem: NSObject, NSMenuDelegate {
       NSMenuItem(
         title: "Quit MachineSpirit Leader Key", action: #selector(NSApplication.terminate(_:)),
         keyEquivalent: "q"))
-    let audio = NSMenuItem(title: "Now Playing", action: nil, keyEquivalent: "")
-    let sub = NSMenu()
-    sub.autoenablesItems = false
-    sub.delegate = self
-    audio.submenu = sub
-    audioMenu = sub
-    menu.addItem(audio)
-    nowPlaying.append(to: sub)
   }
 
   private func appendLeaderOptions(to menu: NSMenu) {
@@ -528,6 +528,7 @@ class StatusItem: NSObject, NSMenuDelegate {
       cpu: .init(enabled: enabled("CPU"), value: stats.cpuPercent),
       gpu: .init(enabled: enabled("GPU"), value: stats.bar.gpu),
       memory: .init(enabled: enabled("Memory"), value: usedPercent),
+      availablePercent: pressure.hasAvailablePercent ? pressure.availablePercent : nil,
       pressureLevel: enabled("Memory") && pressure.hasPressureLevel
         ? .init(rawValue: pressure.vmPressureLevel) : nil,
       temperature: .init(enabled: enabled("Temperature"), value: stats.bar.temperature),
