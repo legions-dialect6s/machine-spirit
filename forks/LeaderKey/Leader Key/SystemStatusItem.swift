@@ -79,8 +79,7 @@ final class SystemMenuSection: NSObject {
     return item
   }
 
-  func append(to menu: NSMenu) {
-    sessionItems.removeAll()
+  func appendBrightness(to menu: NSMenu) {
     let displays = NSMenu()
     displays.autoenablesItems = false
     displayMenu = displays
@@ -98,7 +97,10 @@ final class SystemMenuSection: NSObject {
     item.view = row
     menu.addItem(item)
     buildDisplays()
+  }
 
+  func appendControls(to menu: NSMenu) {
+    sessionItems.removeAll()
     let awakeRow = NSMenuItem(title: "Keep awake", action: nil, keyEquivalent: "")
     let awakeMenu = NSMenu()
     awakeMenu.autoenablesItems = false

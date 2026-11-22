@@ -60,6 +60,94 @@ final class CPUUsageReader {
   }
 }
 
+/// Finder-style user mounts plus the writable startup volume. All sizes are decimal bytes.
+struct UserDiskVolume: Equatable {
+  static let dataPath = "/System/Volumes/Data"
+  let path: String
+  let freeBytes: UInt64?
+  let totalBytes: UInt64?
+  var name: String { path == Self.dataPath || path == "/" ? "Data" : String(path.dropFirst(9)) }
+
+  static func isUserMount(_ path: String) -> Bool {
+    if path == dataPath || path == "/" { return true }
+    guard path.hasPrefix("/Volumes/") else { return false }
+    let name = path.dropFirst(9)
+    return !name.isEmpty && !name.hasPrefix(".") && !name.contains("/")
+  }
+
+  static func mounted() -> [Self] {
+    // MNT_NOWAIT uses the kernel's cached statistics, including for sleeping and network disks.
+    var mounts: UnsafeMutablePointer<statfs>?
+    let count = getmntinfo_r_np(&mounts, MNT_NOWAIT)
+    defer { free(mounts) }
+    guard count > 0, let mounts else {
+      return [Self(path: dataPath, freeBytes: nil, totalBytes: nil)]
+    }
+    var volumes: [Self] = []
+    for var fs in UnsafeBufferPointer(start: mounts, count: Int(count)) {
+      let path = withUnsafeBytes(of: &fs.f_mntonname) {
+        String(decoding: $0.prefix { $0 != 0 }, as: UTF8.self)
+      }
+      guard isUserMount(path) else { continue }
+      func bytes(_ blocks: UInt64) -> UInt64? {
+        guard fs.f_blocks > 0, fs.f_bsize > 0 else { return nil }
+        let size = blocks.multipliedReportingOverflow(by: UInt64(fs.f_bsize))
+        return size.overflow ? nil : size.partialValue
+      }
+      volumes.append(Self(path: path, freeBytes: bytes(fs.f_bavail), totalBytes: bytes(fs.f_blocks)))
+    }
+    if volumes.contains(where: { $0.path == dataPath }) { volumes.removeAll { $0.path == "/" } }
+    return volumes.sorted { $0.path < $1.path }
+  }
+
+  let summary: String
+  let detail: String
+
+  init(path: String, freeBytes: UInt64?, totalBytes: UInt64?) {
+    self.path = path
+    self.freeBytes = freeBytes
+    self.totalBytes = totalBytes
+    func format(_ bytes: UInt64) -> String {
+      ByteCountFormatter.string(fromByteCount: Int64(clamping: bytes), countStyle: .decimal)
+    }
+    summary = freeBytes.map { format($0) + " free" } ?? "Free space unavailable"
+    detail = "\(path) · \(summary)" + (totalBytes.map { " / " + format($0) } ?? "")
+  }
+
+  var compactFree: String {
+    guard let freeBytes else { return "—" }
+    let units = ["B", "K", "M", "G", "T", "P", "E"]
+    var value = Double(freeBytes)
+    var unit = 0
+    while value >= 1000 {
+      value /= 1000
+      unit += 1
+    }
+    // Round down so the displayed free space never crosses an unearned unit boundary.
+    if value < 10 && unit > 0 {
+      let tenths = Int(value * 10)
+      return "\(tenths / 10).\(tenths % 10)\(units[unit])"
+    }
+    return "\(Int(value))\(units[unit])"
+  }
+
+  static func labels(_ volumes: [Self]) -> [String] {
+    var used = Set<String>()
+    return volumes.map { volume in
+      let name = volume.name.filter { !$0.isWhitespace }.uppercased()
+      let prefix = name.isEmpty ? "DISK" : String(name.prefix(4))
+      var label = prefix
+      var ordinal = 1
+      while !used.insert(label).inserted {
+        ordinal += 1
+        let suffix = String(ordinal)
+        label = String(prefix.prefix(max(0, 4 - suffix.count))) + suffix
+      }
+      return label
+    }
+  }
+}
+
 /// Native API selection and HID protocol adapted from exelban/Stats (MIT).
 /// See Stats-LICENSE.txt; no Stats binary, helper, or framework is required.
 final class SystemStats {
@@ -99,6 +187,40 @@ final class SystemStats {
   private var barHasReaders = false
   private var barGeneration = 0
   private var barSensors: HIDTemperatures?
+
+  private(set) var barDisks: [UserDiskVolume] = []
+  private var nextDiskSample: TimeInterval = 0
+  private var diskSampleInFlight = false
+  // Accessed only on the serial stats queue. The open detail menu shares the same sample.
+  private var diskCache: [UserDiskVolume] = []
+  private var diskCacheExpires: TimeInterval = 0
+  private static let diskInterval: TimeInterval = 30
+
+  private func mountedVolumes() -> [UserDiskVolume] {
+    let now = ProcessInfo.processInfo.systemUptime
+    if now >= diskCacheExpires {
+      diskCache = UserDiskVolume.mounted()
+      diskCacheExpires = now + Self.diskInterval
+    }
+    return diskCache
+  }
+
+  func sampleBarDisks() {
+    let now = ProcessInfo.processInfo.systemUptime
+    guard !diskSampleInFlight, now >= nextDiskSample else { return }
+    diskSampleInFlight = true
+    queue.async {
+      let volumes = self.mountedVolumes()
+      let expires = self.diskCacheExpires
+      DispatchQueue.main.async {
+        self.nextDiskSample = expires
+        self.diskSampleInFlight = false
+        guard self.barDisks != volumes else { return }
+        self.barDisks = volumes
+        self.onBarUpdate?()
+      }
+    }
+  }
 
   /// Called only by the existing 2s heartbeat. Sensor I/O never blocks AppKit.
   func sampleBar(gpu: Bool, temperature: Bool) {
@@ -183,7 +305,7 @@ final class SystemStats {
     inFlight = true
     let includeDetails = detailsVisible
     queue.async {
-      let rows = self.details?.sample(includeDetails: includeDetails) ?? []
+      let rows = self.details?.sample(includeDetails: includeDetails, volumes: self.mountedVolumes()) ?? []
       DispatchQueue.main.async {
         self.inFlight = false
         guard self.isOpen, self.generation == current else { return }
@@ -221,7 +343,7 @@ final class SystemStats {
         bytes(UInt64(Double(current.up - previous.up) / elapsed)) + "/s"
       )
     }
-    func sample(includeDetails: Bool) -> [Row] {
+    func sample(includeDetails: Bool, volumes: [UserDiskVolume]) -> [Row] {
       cpu.sample(includeCores: includeDetails)
       let top = includeDetails ? processes.sample() : []
       let cpuDetails =
@@ -249,7 +371,7 @@ final class SystemStats {
           details: memoryDetails,
           compact: memory.hasUsage
             ? "MEM \(Int((Double(memory.used) * 100 / Double(memory.total)).rounded()))%" : "MEM —"),
-        network(), disk(includeDetails: includeDetails), battery(), sensors.sample(),
+        network(), disk(includeDetails: includeDetails, volumes: volumes), battery(), sensors.sample(),
       ]
     }
 
@@ -331,33 +453,8 @@ final class SystemStats {
         name: "Network ↓/↑", summary: "Unavailable", details: ["No byte counters for \(primary)"])
     }
 
-    // MNT_NOWAIT reads the kernel mount table without waking sleeping disks or contacting file servers.
-    private func volumeDetails() -> [String] {
-      let count = getfsstat(nil, 0, MNT_NOWAIT)
-      guard count > 0 else { return [] }
-      var mounts = Array(repeating: statfs(), count: Int(count) + 4)
-      let bytes = Int32(mounts.count * MemoryLayout<statfs>.stride)
-      let used = getfsstat(&mounts, bytes, MNT_NOWAIT)
-      guard used > 0 else { return [] }
-      return mounts.prefix(Int(used)).compactMap { value -> String? in
-        var fs = value
-        let path = withUnsafeBytes(of: &fs.f_mntonname) { raw in
-          String(decoding: raw.prefix(while: { $0 != 0 }), as: UTF8.self)
-        }
-        guard path.hasPrefix("/Volumes/"), !path.dropFirst(9).contains("/"),
-              fs.f_flags & UInt32(MNT_RDONLY) == 0, fs.f_blocks > 0 else { return nil }
-        let free = UInt64(fs.f_bavail) * UInt64(fs.f_bsize)
-        let total = UInt64(fs.f_blocks) * UInt64(fs.f_bsize)
-        return "\(path.dropFirst(9)): \(Self.bytes(free)) free / \(Self.bytes(total))"
-      }.sorted()
-    }
-
-    private func disk(includeDetails: Bool) -> Row {
-      var filesystem = statfs()
-      let spaceOK =
-        statfs("/System/Volumes/Data", &filesystem) == 0 || statfs("/", &filesystem) == 0
-      let free = UInt64(filesystem.f_bavail) * UInt64(filesystem.f_bsize)
-      let total = UInt64(filesystem.f_blocks) * UInt64(filesystem.f_bsize)
+    private func disk(includeDetails: Bool, volumes: [UserDiskVolume]) -> Row {
+      let startup = volumes.first { $0.path == UserDiskVolume.dataPath || $0.path == "/" }
       var read: UInt64 = 0
       var write: UInt64 = 0
       var ids: [UInt64] = []
@@ -377,15 +474,11 @@ final class SystemStats {
       let rates = ids.isEmpty ? ("Unavailable", "Unavailable") : Self.rates(current, previousDisk)
       previousDisk = ids.isEmpty ? nil : current
       return Row(
-        name: "Disk", summary: spaceOK ? "\(Self.bytes(free)) free" : "Unavailable",
-        details: [
-          spaceOK
-            ? "Data volume: \(Self.bytes(free)) free / \(Self.bytes(total))"
-            : "Data volume unavailable",
-        ] + (includeDetails ? volumeDetails() : []) + [
+        name: "Disk", summary: startup?.summary ?? "Unavailable",
+        details: (includeDetails ? volumes.map(\.detail) : [startup?.detail ?? "Data volume unavailable"]) + [
           "All physical disks read: \(rates.0)", "All physical disks write: \(rates.1)",
         ],
-        compact: spaceOK ? "FREE \(Self.bytes(free))" : nil)
+        compact: startup?.freeBytes.map { "FREE \(Self.bytes($0))" })
     }
 
     private func battery() -> Row {

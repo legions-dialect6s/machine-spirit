@@ -44,6 +44,7 @@ struct CompactBarState: Equatable {
   var availablePercent: Int? = nil
   var pressureLevel: Pressure?
   var temperature: Sample
+  var disks: [UserDiskVolume] = []
   var awake: Bool?
   var dark: Bool
   var scale: CGFloat
@@ -68,6 +69,7 @@ struct CompactBarState: Equatable {
       descriptions.append("Memory pressure \(pressureLevel?.name ?? "unavailable")")
     }
     describe("Temperature", temperature, unit: " degrees Celsius")
+    descriptions.append(contentsOf: disks.map(\.detail))
     if awake != nil { descriptions.append("Keep awake \(awakeStatus)") }
     return descriptions
   }
@@ -76,7 +78,7 @@ struct CompactBarState: Equatable {
 enum CompactBar {
   private static let spacing: CGFloat = 2
   static let skullWidth: CGFloat = 20
-  private static let awakeWidth: CGFloat = 25
+  private static let awakeWidth: CGFloat = 12
 
   struct Cell: Equatable {
     let label: String
@@ -103,18 +105,8 @@ enum CompactBar {
       : NSColor(srgbRed: 0.52, green: 0.29, blue: 0.02, alpha: 1)
     let hot = state.dark ? NSColor(srgbRed: 1, green: 0.38, blue: 0.38, alpha: 1)
       : NSColor(srgbRed: 0.65, green: 0.10, blue: 0.15, alpha: 1)
-    func heat(_ value: Int?, warm lowerLimit: Int, hot upperLimit: Int) -> NSColor {
-      guard let value else { return foreground }
-      let start = lowerLimit - 25
-      if value <= start { return foreground }
-      if value < lowerLimit {
-        return foreground.blended(withFraction: CGFloat(value - start) / 25, of: warm) ?? foreground
-      }
-      let fraction = min(1, CGFloat(value - lowerLimit) / CGFloat(upperLimit - lowerLimit))
-      return warm.blended(withFraction: fraction, of: hot) ?? warm
-    }
     func percent(_ value: Int?) -> String {
-      value.map { String(max(0, min(100, $0))) } ?? "—"
+      value.map { "\(max(0, min(100, $0)))%" } ?? "—"
     }
 
     var cells: [Cell] = []
@@ -126,16 +118,13 @@ enum CompactBar {
       cells.append(Cell(label: "T3", value: value, width: 43, tint: foreground))
     }
     if state.cpu.isVisible {
-      cells.append(Cell(label: "CPU%", value: percent(state.cpu.value), width: 26,
-                        tint: heat(state.cpu.value, warm: 70, hot: 90)))
+      cells.append(Cell(label: "CPU", value: percent(state.cpu.value), width: 30, tint: foreground))
     }
     if state.gpu.isVisible {
-      cells.append(Cell(label: "GPU%", value: percent(state.gpu.value), width: 26,
-                        tint: heat(state.gpu.value, warm: 70, hot: 90)))
+      cells.append(Cell(label: "GPU", value: percent(state.gpu.value), width: 30, tint: foreground))
     }
     if state.memory.isVisible {
-      cells.append(Cell(label: "RAM%", value: percent(state.memory.value), width: 26,
-                        tint: heat(state.memory.value, warm: 85, hot: 98)))
+      cells.append(Cell(label: "RAM", value: percent(state.memory.value), width: 30, tint: foreground))
       let tint: NSColor
       switch state.pressureLevel {
       case .normal: tint = state.dark ? .systemMint : NSColor(srgbRed: 0, green: 0.36, blue: 0.23, alpha: 1)
@@ -143,7 +132,14 @@ enum CompactBar {
       case .critical: tint = hot
       case nil: tint = foreground
       }
-      cells.append(Cell(label: "AVL%", value: percent(state.availablePercent), width: 26, tint: tint))
+      let tier: String
+      switch state.pressureLevel {
+      case .normal: tier = "1/3"
+      case .warning: tier = "2/3"
+      case .critical: tier = "3/3"
+      case nil: tier = "—"
+      }
+      cells.append(Cell(label: "MPRS", value: tier, width: 28, tint: tint))
     }
     if state.temperature.isVisible {
       let value = state.temperature.value.map { value in
@@ -152,7 +148,10 @@ enum CompactBar {
         return "\(value)°"
       } ?? "—"
       cells.append(Cell(label: "TEMP", value: value, width: 27,
-                        tint: heat(state.temperature.value, warm: 80, hot: 95)))
+                        tint: foreground))
+    }
+    for (volume, label) in zip(state.disks, UserDiskVolume.labels(state.disks)) {
+      cells.append(Cell(label: label, value: volume.compactFree, width: 31, tint: foreground))
     }
     return cells
   }
@@ -192,25 +191,33 @@ enum CompactBar {
       x += cell.width + spacing
     }
     if let awake = state.awake {
-      // Phenyl ring at left, then the two-carbon side chain with methyl and amine ends.
-      let middle = size.height / 2
+      // Rotate the skeletal formula a quarter turn and fit it inside the status bar.
+      NSGraphicsContext.saveGraphicsState()
+      let transform = NSAffineTransform()
+      transform.translateX(by: x + awakeWidth / 2, yBy: size.height / 2)
+      transform.rotate(byDegrees: 90)
+      let scale = min(0.85, (size.height - 2) / 25)
+      transform.scale(by: scale)
+      transform.translateX(by: -12.5, yBy: 0)
+      transform.concat()
       let bonds = NSBezierPath()
       func line(_ points: [(CGFloat, CGFloat)]) {
         for (i, p) in points.enumerated() {
-          let point = NSPoint(x: x + p.0, y: middle + p.1)
+          let point = NSPoint(x: p.0, y: p.1)
           if i == 0 { bonds.move(to: point) } else { bonds.line(to: point) }
         }
       }
       line([(1,0),(3.5,4.4),(8.5,4.4),(11,0),(8.5,-4.4),(3.5,-4.4),(1,0)])
       line([(11,0),(15,2.5),(19,0),(23,2.5)])
       line([(19,0),(19,-4.5)])
-      bonds.appendOval(in: NSRect(x: x + 3.7, y: middle - 2.3, width: 4.6, height: 4.6))
+      bonds.appendOval(in: NSRect(x: 3.7, y: -2.3, width: 4.6, height: 4.6))
       foreground.withAlphaComponent(awake ? 1 : 0.5).setStroke()
       bonds.lineWidth = 1.15
       bonds.lineJoinStyle = .round
       bonds.stroke()
-      let amine = NSBezierPath(ovalIn: NSRect(x: x + 21.6, y: middle + 1.1, width: 2.8, height: 2.8))
+      let amine = NSBezierPath(ovalIn: NSRect(x: 21.6, y: 1.1, width: 2.8, height: 2.8))
       if awake { foreground.setFill(); amine.fill() } else { amine.stroke() }
+      NSGraphicsContext.restoreGraphicsState()
     } else if !state.skull && cells.isEmpty {
       foreground.setFill()
       NSBezierPath(ovalIn: NSRect(x: 0, y: (size.height - 4) / 2, width: 4, height: 4)).fill()

@@ -293,9 +293,9 @@ What the fork adds over stock:
 
 The skull follows the graph’s summon, typing, error and dismissal events. **T3** shows working tasks over open tasks in the local T3 environment. The denominator includes top-level, unsettled, unsnoozed tasks. The numerator counts their latest preparing, starting or running runs, excluding pending input and approvals. Select a named task in **T3 tasks** to open that thread in the desktop app. If the local server or its v2 task projections are unavailable, the bar shows a dash. Plain terminals, attached tmux sessions and detached sessions remain available in the terminal menu.
 
-**CPU%**, **GPU%** and **RAM%** show utilization. **AVL%** shows the kernel’s available-memory percentage. Its color follows the kernel pressure state (green, amber, red), with the state spelled out in the tooltip. CPU, GPU, RAM utilization and temperature tint gradually as readings rise. A missing reading shows a dash. The horizontal amphetamine molecule brightens while keep-awake is active. Each metric has a fixed slot. Choose fields under **Leader Key → Menu bar**.
+**CPU, GPU and RAM** show a percentage below each label. **MPRS** shows the three kernel memory-pressure levels as 1/3 (normal), 2/3 (warning) and 3/3 (critical). Only pressure takes a warning color. Each reading has a fixed-width column. The upright molecule brightens while keep-awake is active. Choose visible fields under **Leader Key → Menu bar**.
 
-![Machine Spirit’s compact menu bar on a three-display Mac](docs/img/menubar.png)
+![Machine Spirit menu bar with startup-disk free space and upright molecule; external-drive columns omitted](docs/img/menubar.png)
 
 Open **Stats** for network throughput and available storage. **Disk** includes the startup data volume and writable drives mounted under `/Volumes`. **Sample Network Activity by Process** ranks a one-second sample by bytes transferred. **Open Little Snitch Network Monitor** opens connection details when installed.
 
@@ -303,7 +303,7 @@ Open **Stats** for network throughput and available storage. **Disk** includes t
 
 *Earlier menu capture. Session names, commands and ages are blurred.*
 
-Open **Now Playing**, directly beneath Stats, to start audio discovery and meters. Closing its submenu releases the capture session. Click an audible app to bring it forward. For a registered web handler, Machine Spirit checks the native tab strip for a single audible tab. A browser that exposes the “Mute tab” control can also select that tab and raise its window. Hidden tab strips, multiple matches, other indicator languages and missing Accessibility permission can leave the browser on the current tab.
+The **Now Playing** rows appear directly below brightness in the main menu. Closing the menu releases the audio capture session. Click an audible app to bring it forward. For a registered web handler, Machine Spirit checks the native tab strip for a single audible tab. A browser that exposes the “Mute tab” control can also select that tab and raise its window. Hidden tab strips, multiple matches, other indicator languages and missing Accessibility permission can leave the browser on the current tab.
 
 The top-level menu includes Stats, T3 tasks, terminals and tmux, brightness, keep-awake, clipboard history and Now Playing. The stats summary uses monospaced digits for CPU,
 GPU, RAM used %, hottest sensor, download/upload MB/s and battery charge.
@@ -332,6 +332,8 @@ Banish All panel, using the existing helpers. There are no blank spacer items.
 - **Temperatures:** CPU/GPU/SoC averages where available, plus the hottest sensor.
   Apple Silicon uses HID sensors, with read-only SMC fallback for known M4 CPU/GPU
   keys. Missing sensors explicitly say **Unavailable**; no guessed SoC reading.
+
+Disk columns show free space on Data and each directly mounted user volume. Hover for full mount paths and capacities. Each column keeps its width as digits change. A background read of the cached mount table refreshes the list every 30 seconds.
 
 One **2-second timer, 0.5-second tolerance**, drives the bar’s sampling. The T3 task ratio refreshes off the main thread at most once per four seconds through a read-only snapshot of the local v2 task registry. Opening the menu requests a fresh snapshot. Background terminal discovery runs at most once per 46 seconds. Machine Spirit reads tmux through its local socket. Menu actions keep using `sheol-core`/`terminals-core`.
 Terminal rows refresh on opening and preserve the existing stable-row behavior

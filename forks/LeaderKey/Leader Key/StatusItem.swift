@@ -7,7 +7,7 @@ class StatusItem: NSObject, NSMenuDelegate {
   let system = SystemMenuSection()
   let sheol = SheolMenuSection()
   let stats = SystemStats()
-  private let nowPlaying = NowPlayingMenuSection()
+  let nowPlaying = NowPlayingMenuSection()
   private var pressure = MemoryPressure.Reading()
   private var timer: Timer?
   private var lastRender: CompactBarState?
@@ -16,13 +16,12 @@ class StatusItem: NSObject, NSMenuDelegate {
   private var nextSheolSample: TimeInterval = 0
   private var statsRows: [String: NSMenuItem] = [:]
   private var statsSummaryItem: NSMenuItem?
-  private var audioMenu: NSMenu?
   private var statsMenu: NSMenu?
   private var menuIsOpen = false
   private var appearanceObservation: NSKeyValueObservation?
   var heartbeat: (() -> Void)?
   static let barSegments = [
-    "Skull", "T3", "CPU", "GPU", "Memory", "Temperature", "Awake",
+    "Skull", "T3", "CPU", "GPU", "Memory", "Temperature", "Disks", "Awake",
   ]
   private var segments: [String] { Self.barSegments }
   private var enabledSegments = Set<String>()
@@ -133,6 +132,7 @@ class StatusItem: NSObject, NSMenuDelegate {
 
   private func sample() {
     if enabledSegments.contains("CPU") { stats.sampleCPU() }
+    if enabledSegments.contains("Disks") { stats.sampleBarDisks() }
     if enabledSegments.contains("T3") { t3.refresh() }
     let now = ProcessInfo.processInfo.systemUptime
     if menuIsOpen || now >= nextSheolSample {
@@ -165,8 +165,7 @@ class StatusItem: NSObject, NSMenuDelegate {
     lastRender = nil
   }
 
-  private func buildMenu() {
-    guard let menu = statusItem?.menu else { return }
+  func buildMenu(_ menu: NSMenu) {
     menu.removeAllItems()
     let summary = NSMenuItem(title: "Stats: Measuring…", action: nil, keyEquivalent: "")
     summary.toolTip = "CPU · GPU · RAM used · hottest sensor · network · free disk · battery. Open for details."
@@ -177,14 +176,6 @@ class StatusItem: NSObject, NSMenuDelegate {
     statsMenu = statistics
     statsSummaryItem = summary
     menu.addItem(summary)
-    let audio = NSMenuItem(title: "Now Playing", action: nil, keyEquivalent: "")
-    let sub = NSMenu()
-    sub.autoenablesItems = false
-    sub.delegate = self
-    audio.submenu = sub
-    audioMenu = sub
-    menu.addItem(audio)
-    nowPlaying.append(to: sub)
     statsRows.removeAll()
     for name in SystemStats.names {
       let row = NSMenuItem(title: name + ": Measuring…", action: nil, keyEquivalent: "")
@@ -205,7 +196,10 @@ class StatusItem: NSObject, NSMenuDelegate {
     statistics.addItem(actionItem("Latest Idle Review…", #selector(showIdleReview)))
     if enabledSegments.contains("T3") { t3.append(to: menu) }
     sheol.append(to: menu)
-    system.append(to: menu)
+    system.appendBrightness(to: menu)
+    menu.addItem(sectionHeader("Now Playing"))
+    nowPlaying.append(to: menu)
+    system.appendControls(to: menu)
     menu.addItem(.separator())
     let leader = NSMenuItem(title: "Leader Key", action: nil, keyEquivalent: "")
     let leaderMenu = NSMenu()
@@ -462,14 +456,13 @@ class StatusItem: NSObject, NSMenuDelegate {
   func menuWillOpen(_ menu: NSMenu) {
     if menu === statusItem?.menu {
       menuIsOpen = true
-      buildMenu()
+      buildMenu(menu)
       if enabledSegments.contains("T3") { t3.refresh(force: true) }
       system.menuWillOpen()
+      nowPlaying.open()
       stats.open()
     } else if menu === karabinerMenu {
       refreshKarabiner()
-    } else if menu === audioMenu {
-      nowPlaying.open()
     } else if menu === statsMenu {
       stats.setDetailsVisible(true)
     }
@@ -479,8 +472,6 @@ class StatusItem: NSObject, NSMenuDelegate {
     if menu === statusItem?.menu {
       menuIsOpen = false
       stats.close()
-      nowPlaying.close()
-    } else if menu === audioMenu {
       nowPlaying.close()
     } else if menu === statsMenu {
       stats.setDetailsVisible(false)
@@ -532,6 +523,7 @@ class StatusItem: NSObject, NSMenuDelegate {
       pressureLevel: enabled("Memory") && pressure.hasPressureLevel
         ? .init(rawValue: pressure.vmPressureLevel) : nil,
       temperature: .init(enabled: enabled("Temperature"), value: stats.bar.temperature),
+      disks: enabled("Disks") ? stats.barDisks : [],
       awake: enabled("Awake") ? system.isAwake : nil,
       dark: button.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua,
       scale: backingScale, height: NSStatusBar.system.thickness)

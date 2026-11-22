@@ -229,6 +229,8 @@ final class NowPlayingMenuSection: NSObject {
       }
       return
     }
+    guard let first = items.first, first.menu === menu else { return }
+    let insertionIndex = menu.index(of: first)
     lastRowKeys = keys
     for item in items where item.menu === menu { menu.removeItem(item) }
     items.removeAll()
@@ -241,22 +243,22 @@ final class NowPlayingMenuSection: NSObject {
       item.isEnabled = row.app != nil
       let view = NowPlayingRowView(name: row.name, icon: row.app?.icon, levels: row.levels)
       item.view = view
-      menu.addItem(item)
+      menu.insertItem(item, at: insertionIndex + items.count)
       items.append(item)
       rowViews.append(view)
     }
     if rows.isEmpty {
-      appendDisabled(enumerationFailed ? "Audio temporarily unavailable" : "silence", to: menu)
+      appendDisabled(enumerationFailed ? "Audio temporarily unavailable" : "silence", to: menu, at: insertionIndex + items.count)
     }
     if metersUnavailable && !rows.isEmpty {
-      appendDisabled("meters need System Audio Recording permission", to: menu)
+      appendDisabled("meters need System Audio Recording permission", to: menu, at: insertionIndex + items.count)
     }
   }
 
-  private func appendDisabled(_ title: String, to menu: NSMenu) {
+  private func appendDisabled(_ title: String, to menu: NSMenu, at index: Int) {
     let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
     item.isEnabled = false
-    menu.addItem(item)
+    menu.insertItem(item, at: index)
     items.append(item)
   }
   private func redrawMeters() {

@@ -221,8 +221,8 @@ final class KeepAwakeAndBarTests: XCTestCase {
 
   func testMenuBarWidthIsStableAcrossValuesAvailabilityAndAwakeState() {
     let baseline = barState
-    XCTAssertEqual(StatusItem.barSegments, ["Skull", "T3", "CPU", "GPU", "Memory", "Temperature", "Awake"])
-    XCTAssertEqual(CompactBar.cells(for: baseline).map(\.label), ["T3", "CPU%", "GPU%", "RAM%", "AVL%", "TEMP"])
+    XCTAssertEqual(StatusItem.barSegments, ["Skull", "T3", "CPU", "GPU", "Memory", "Temperature", "Disks", "Awake"])
+    XCTAssertEqual(CompactBar.cells(for: baseline).map(\.label), ["T3", "CPU", "GPU", "RAM", "MPRS", "TEMP"])
     let width = CompactBar.image(baseline).size.width
 
     var expanded = baseline
@@ -233,7 +233,7 @@ final class KeepAwakeAndBarTests: XCTestCase {
     expanded.pressureLevel = .critical
     expanded.temperature = .value(100)
     expanded.awake = false
-    XCTAssertEqual(CompactBar.cells(for: expanded).map(\.value), ["99+/99+", "100", "100", "100", "44", "100°"])
+    XCTAssertEqual(CompactBar.cells(for: expanded).map(\.value), ["99+/99+", "100%", "100%", "100%", "3/3", "100°"])
     XCTAssertEqual(CompactBar.image(expanded).size.width, width)
     XCTAssertEqual(CompactBar.countsValue(462), "99+")
     XCTAssertEqual(CompactBar.countsValue(99), "99")
@@ -292,20 +292,41 @@ final class KeepAwakeAndBarTests: XCTestCase {
     XCTAssertNil(T3TaskRegistry.read(file: file, environment: environment))
   }
 
+  func testAwakeMoleculeIsUprightAndCompact() throws {
+    var state = barState
+    state.skull = false
+    state.t3 = .hidden
+    state.cpu = .hidden
+    state.gpu = .hidden
+    state.memory = .hidden
+    state.temperature = .hidden
+    let image = CompactBar.image(state)
+    XCTAssertLessThanOrEqual(image.size.width, 14)
+    let rep = try XCTUnwrap(image.representations.first as? NSBitmapImageRep)
+    var ink = CGRect.null
+    for y in 0..<rep.pixelsHigh {
+      for x in 0..<rep.pixelsWide where (rep.colorAt(x: x, y: y)?.alphaComponent ?? 0) > 0.25 {
+        ink = ink.union(CGRect(x: x, y: y, width: 1, height: 1))
+      }
+    }
+    XCTAssertFalse(ink.isNull)
+    XCTAssertGreaterThan(ink.height, ink.width * 1.5)
+  }
+
   func testPressureHasItsOwnLevelAndAccessibleDescription() {
     var state = barState
     state.memory = .value(100)
-    XCTAssertEqual(CompactBar.cells(for: state).first { $0.label == "AVL%" }?.value, "44")
+    XCTAssertEqual(CompactBar.cells(for: state).first { $0.label == "MPRS" }?.value, "1/3")
     XCTAssertTrue(state.descriptions(awakeStatus: "indefinitely").contains("RAM used 100%"))
     XCTAssertTrue(state.descriptions(awakeStatus: "indefinitely").contains("Memory pressure normal"))
 
     state.memory = .value(35)
     state.pressureLevel = .warning
-    XCTAssertEqual(CompactBar.cells(for: state).first { $0.label == "AVL%" }?.value, "44")
+    XCTAssertEqual(CompactBar.cells(for: state).first { $0.label == "MPRS" }?.value, "2/3")
     XCTAssertTrue(state.descriptions(awakeStatus: "off").contains("Memory pressure warning"))
 
     state.pressureLevel = .critical
-    XCTAssertEqual(CompactBar.cells(for: state).first { $0.label == "AVL%" }?.value, "44")
+    XCTAssertEqual(CompactBar.cells(for: state).first { $0.label == "MPRS" }?.value, "3/3")
     XCTAssertTrue(state.descriptions(awakeStatus: "off").contains("Memory pressure critical"))
   }
 
@@ -322,5 +343,85 @@ final class KeepAwakeAndBarTests: XCTestCase {
       name: "Network ↓/↑", summary: "1.2 MB/s / 300 KB/s", details: [],
       compact: "↓1.2 ↑0.3 MB/s")
     XCTAssertEqual(netRow.compactSummary, "↓1.2 ↑0.3 MB/s")
+  }
+}
+
+extension KeepAwakeAndBarTests {
+  @MainActor
+  func testInlineAudioRowsStayBetweenBrightnessAndKeepAwakeWhenMembershipChanges() async throws {
+    guard #available(macOS 14.4, *) else { throw XCTSkip("Process taps require macOS 14.4") }
+    let status = StatusItem()
+    let menu = NSMenu()
+    let audio = status.nowPlaying
+    var sample = 0
+    audio.enumerate = {
+      sample += 1
+      if sample == 1 {
+        return [NowPlayingProcess(object: 101, pid: 999901), NowPlayingProcess(object: 102, pid: 999902)]
+      }
+      return []
+    }
+    audio.makeTap = { _ in throw NSError(domain: "AudioLayoutFixture", code: 1) }
+    status.buildMenu(menu)
+    let header = try XCTUnwrap(menu.items.first { $0.title.lowercased() == "now playing" },
+                               String(describing: menu.items.map(\.title)))
+    let brightness = try XCTUnwrap(menu.item(withTitle: "Brightness"))
+    let awake = try XCTUnwrap(menu.items.first { $0.title.hasPrefix("Keep awake") })
+    let index = menu.index(of: brightness)
+    XCTAssertNil(header.submenu)
+    XCTAssertEqual(menu.index(of: header), index + 1)
+    XCTAssertEqual(menu.item(at: index + 2)?.title, "Checking audio…")
+    XCTAssertEqual(menu.index(of: awake), index + 3)
+    XCTAssertFalse(audio.isOpen)
+    audio.open()
+    defer { audio.close() }
+    func waitForSample(_ count: Int) async throws {
+      let deadline = ContinuousClock.now + .seconds(4)
+      while audio.sampleCount < count && ContinuousClock.now < deadline {
+        try await Task.sleep(for: .milliseconds(10))
+      }
+      XCTAssertGreaterThanOrEqual(audio.sampleCount, count)
+    }
+    try await waitForSample(1)
+    XCTAssertEqual(menu.item(at: index + 2)?.title, "Process 999901")
+    XCTAssertEqual(menu.item(at: index + 3)?.title, "Process 999902")
+    XCTAssertGreaterThan(menu.index(of: awake), index + 3)
+    try await waitForSample(2)
+    XCTAssertEqual(menu.item(at: index + 2)?.title, "silence")
+    XCTAssertEqual(menu.index(of: awake), index + 3)
+    XCTAssertEqual(menu.index(of: header), index + 1)
+    audio.close()
+    XCTAssertTrue(audio.timersAreNil && audio.sessionIsNil)
+  }
+}
+
+extension KeepAwakeAndBarTests {
+  func testDiskCellsHaveStableWidthsAndUnambiguousMountPaths() {
+    let paths = [UserDiskVolume.dataPath, "/Volumes/Work Archive", "/Volumes/Work Backup"]
+    let free: [UInt64?] = [27_100_000_000, 999_999_999_999, 3_127_000_000_000]
+    var state = barState
+    state.disks = zip(paths, free).map { UserDiskVolume(path: $0, freeBytes: $1, totalBytes: nil) }
+    let cells = CompactBar.cells(for: state).suffix(3)
+    XCTAssertEqual(cells.map(\.label), ["DATA", "WORK", "WOR2"])
+    XCTAssertEqual(cells.map(\.value), ["27G", "999G", "3.1T"])
+    for path in paths {
+      XCTAssertTrue(state.descriptions(awakeStatus: "off").contains { $0.hasPrefix(path + " · ") })
+    }
+    let width = CompactBar.image(state).size.width
+    state.disks = paths.map { UserDiskVolume(path: $0, freeBytes: nil, totalBytes: nil) }
+    XCTAssertEqual(CompactBar.cells(for: state).suffix(3).map(\.value), ["—", "—", "—"])
+    XCTAssertEqual(CompactBar.image(state).size.width, width)
+    state.disks.removeLast()
+    XCTAssertLessThan(CompactBar.image(state).size.width, width)
+  }
+
+  func testDiskCellsExcludeSystemMountsAndNestedSnapshots() {
+    for path in ["/", UserDiskVolume.dataPath, "/Volumes/Backups", "/Volumes/TTH Work"] {
+      XCTAssertTrue(UserDiskVolume.isUserMount(path))
+    }
+    for path in ["/Volumes/", "/Volumes/.hidden", "/Volumes/.timemachine/id/snapshot",
+                 "/Volumes/Backups/snapshot", "/System/Volumes/Preboot", "/dev"] {
+      XCTAssertFalse(UserDiskVolume.isUserMount(path))
+    }
   }
 }
