@@ -396,23 +396,95 @@ extension KeepAwakeAndBarTests {
 }
 
 extension KeepAwakeAndBarTests {
-  func testDiskCellsHaveStableWidthsAndUnambiguousMountPaths() {
-    let paths = [UserDiskVolume.dataPath, "/Volumes/Work Archive", "/Volumes/Work Backup"]
-    let free: [UInt64?] = [27_100_000_000, 999_999_999_999, 3_127_000_000_000]
+  func testDiskCellsUseDriveKindLabelsTimeMachineGroupingAndSeparators() throws {
+    let disks = [
+      UserDiskVolume(
+        path: "/Volumes/Backups", freeBytes: 3_127_000_000_000, totalBytes: 5_000_000_000_000,
+        kind: .hdd, isTimeMachine: true, isInternal: false),
+      UserDiskVolume(
+        path: "/Volumes/Archive HDD", freeBytes: 999_999_999_999, totalBytes: nil,
+        kind: .hdd, isTimeMachine: false, isInternal: false),
+      UserDiskVolume(
+        path: "/Volumes/TTH Work", freeBytes: 101_200_000_000, totalBytes: nil,
+        kind: .ssd, isTimeMachine: false, isInternal: false),
+      UserDiskVolume(
+        path: "/Volumes/New Volume", freeBytes: 87_800_000_000, totalBytes: nil,
+        kind: .ssd, isTimeMachine: false, isInternal: false),
+      UserDiskVolume(
+        path: UserDiskVolume.dataPath, freeBytes: 6_800_000_000, totalBytes: nil,
+        kind: .ssd, isTimeMachine: false, isInternal: true),
+    ]
     var state = barState
-    state.disks = zip(paths, free).map { UserDiskVolume(path: $0, freeBytes: $1, totalBytes: nil) }
-    let cells = CompactBar.cells(for: state).suffix(3)
-    XCTAssertEqual(cells.map(\.label), ["DATA", "WORK", "WOR2"])
-    XCTAssertEqual(cells.map(\.value), ["27G", "999G", "3.1T"])
-    for path in paths {
-      XCTAssertTrue(state.descriptions(awakeStatus: "off").contains { $0.hasPrefix(path + " · ") })
+    state.disks = disks
+    let cells = CompactBar.cells(for: state)
+    let diskCells = cells.suffix(5)
+    XCTAssertEqual(diskCells.map(\.label), ["SSD1", "SSD2", "SSD3", "HDD1", "TM"])
+    XCTAssertEqual(diskCells.map(\.value), ["6.8G", "87G", "101G", "999G", "3.1T"])
+    XCTAssertEqual(
+      diskCells.map(\.group), [.disks, .disks, .disks, .disks, .timeMachine])
+
+    // Expect 3 vertical separator lines: after T3, after TEMP, and before TM.
+    let separatorXs = CompactBar.separatorXPositions(for: state)
+    XCTAssertEqual(separatorXs.count, 3)
+
+    let image = CompactBar.image(state)
+    let rep = try XCTUnwrap(image.representations.first as? NSBitmapImageRep)
+    let midY = rep.pixelsHigh / 2
+    for sepX in separatorXs {
+      let px = Int(sepX * state.scale)
+      let alpha = rep.colorAt(x: px, y: midY)?.alphaComponent ?? 0
+      XCTAssertGreaterThan(alpha, 0.15, "Expected visible separator ink at x=\(sepX)")
     }
-    let width = CompactBar.image(state).size.width
-    state.disks = paths.map { UserDiskVolume(path: $0, freeBytes: nil, totalBytes: nil) }
-    XCTAssertEqual(CompactBar.cells(for: state).suffix(3).map(\.value), ["—", "—", "—"])
+
+    // Tooltip includes both the concise label and the full mount path.
+    let descriptions = state.descriptions(awakeStatus: "off")
+    XCTAssertTrue(descriptions.contains { $0.hasPrefix("SSD1 (Data) · /System/Volumes/Data · ") })
+    XCTAssertTrue(descriptions.contains { $0.hasPrefix("TM (Backups) · /Volumes/Backups · ") })
+
+    // Width stays fixed when values become unavailable, and grows dynamically when a new disk mounts.
+    let width = image.size.width
+    state.disks = disks.map {
+      UserDiskVolume(
+        path: $0.path, freeBytes: nil, totalBytes: nil,
+        kind: $0.kind, isTimeMachine: $0.isTimeMachine, isInternal: $0.isInternal)
+    }
+    XCTAssertEqual(CompactBar.cells(for: state).suffix(5).map(\.value), Array(repeating: "—", count: 5))
     XCTAssertEqual(CompactBar.image(state).size.width, width)
-    state.disks.removeLast()
-    XCTAssertLessThan(CompactBar.image(state).size.width, width)
+
+    state.disks.append(
+      UserDiskVolume(
+        path: "/Volumes/Extra SSD", freeBytes: 500_000_000_000, totalBytes: nil,
+        kind: .ssd, isTimeMachine: false, isInternal: false))
+    XCTAssertTrue(CompactBar.cells(for: state).map(\.label).contains("SSD4"))
+    XCTAssertGreaterThan(CompactBar.image(state).size.width, width)
+
+    // Multiple Time Machine drives number TM1, TM2.
+    state.disks.append(
+      UserDiskVolume(
+        path: "/Volumes/Backups 2", freeBytes: 2_000_000_000_000, totalBytes: nil,
+        kind: .hdd, isTimeMachine: true, isInternal: false))
+    XCTAssertEqual(CompactBar.cells(for: state).suffix(2).map(\.label), ["TM1", "TM2"])
+  }
+
+  func testDiskClassificationAndDiskImageFiltering() {
+    XCTAssertEqual(
+      UserDiskVolume.classifyKind(
+        mediumType: "Solid State", interconnect: "USB", modelNames: ["Extreme 55DD"], isStartup: false),
+      .ssd)
+    XCTAssertEqual(
+      UserDiskVolume.classifyKind(
+        mediumType: nil, interconnect: "USB", modelNames: ["PSSD T7"], isStartup: false),
+      .ssd)
+    XCTAssertEqual(
+      UserDiskVolume.classifyKind(
+        mediumType: nil, interconnect: "USB", modelNames: ["Elements 2667"], isStartup: false),
+      .hdd)
+    XCTAssertEqual(
+      UserDiskVolume.classifyKind(
+        mediumType: "Rotational", interconnect: "SATA", modelNames: ["SSD-looking"], isStartup: false),
+      .hdd)
+    XCTAssertTrue(UserDiskVolume.isDiskImage(protocolName: "Virtual Interface", modelName: "Disk Image"))
+    XCTAssertFalse(UserDiskVolume.isDiskImage(protocolName: "USB", modelName: "PSSD T7"))
   }
 
   func testDiskCellsExcludeSystemMountsAndNestedSnapshots() {
@@ -423,5 +495,34 @@ extension KeepAwakeAndBarTests {
                  "/Volumes/Backups/snapshot", "/System/Volumes/Preboot", "/dev"] {
       XCTAssertFalse(UserDiskVolume.isUserMount(path))
     }
+  }
+
+  func testNowPlayingFaviconRequestsAndBrowserTabMatching() {
+    let rawURL = "https://user:pass@www.youtube.com:443/watch?v=eaMbKZPBruU&t=779s#top"
+    XCTAssertEqual(
+      NowPlayingFaviconCache.requestURL(for: rawURL)?.absoluteString,
+      "https://www.google.com/s2/favicons?sz=128&domain=www.youtube.com")
+    XCTAssertNil(NowPlayingFaviconCache.requestURL(for: "file:///tmp/local.html"))
+    XCTAssertNil(NowPlayingFaviconCache.requestURL(for: "safari-extension://abc"))
+
+    XCTAssertEqual(
+      NowPlayingBrowserFocus.cleanTabTitle(
+        "Dopethrone - YouTube - Part of group Music - Memory usage - 429 MB - Audio playing"),
+      "Dopethrone - YouTube")
+
+    let scriptTabs = [
+      NowPlayingBrowserFocus.ScriptTab(
+        windowIndex: 1, tabIndex: 1, title: "ReVanced", url: "https://revanced.app/"),
+      NowPlayingBrowserFocus.ScriptTab(
+        windowIndex: 2, tabIndex: 1,
+        title: "Electric Wizard - Dopethrone (2000) full album - YouTube",
+        url: "https://www.youtube.com/watch?v=eaMbKZPBruU"),
+    ]
+    let matched = NowPlayingBrowserFocus.matchScriptTab(
+      axTitle: "Electric Wizard - Dopethrone (2000) full album - YouTube - Audio playing",
+      windowIndex: 1, tabIndex: 0, scriptTabs: scriptTabs)
+    XCTAssertEqual(matched?.windowIndex, 2)
+    XCTAssertEqual(matched?.tabIndex, 1)
+    XCTAssertEqual(matched?.url, "https://www.youtube.com/watch?v=eaMbKZPBruU")
   }
 }

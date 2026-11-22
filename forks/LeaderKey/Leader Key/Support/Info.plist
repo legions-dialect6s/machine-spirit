@@ -44,5 +44,7 @@
 	     fresh copy that traps in AppKit window-restoration. -->
 	<key>LSMultipleInstancesProhibited</key>
 	<true/>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>MachineSpirit Leader Key reads browser tab URLs and focuses audible tabs from the Now Playing menu.</string>
 </dict>
 </plist>

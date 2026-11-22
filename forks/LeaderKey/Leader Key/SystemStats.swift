@@ -1,5 +1,6 @@
 import Cocoa
 import Darwin
+import DiskArbitration
 import IOKit
 import IOKit.ps
 import SystemConfiguration
@@ -62,17 +63,140 @@ final class CPUUsageReader {
 
 /// Finder-style user mounts plus the writable startup volume. All sizes are decimal bytes.
 struct UserDiskVolume: Equatable {
+  enum DriveKind: String, Equatable {
+    case ssd
+    case hdd
+  }
+
   static let dataPath = "/System/Volumes/Data"
   let path: String
   let freeBytes: UInt64?
   let totalBytes: UInt64?
+  let kind: DriveKind
+  let isTimeMachine: Bool
+  let isInternal: Bool
   var name: String { path == Self.dataPath || path == "/" ? "Data" : String(path.dropFirst(9)) }
+  var isStartup: Bool { path == Self.dataPath || path == "/" }
 
   static func isUserMount(_ path: String) -> Bool {
     if path == dataPath || path == "/" { return true }
     guard path.hasPrefix("/Volumes/") else { return false }
     let name = path.dropFirst(9)
     return !name.isEmpty && !name.hasPrefix(".") && !name.contains("/")
+  }
+
+  static func isDiskImage(protocolName: String?, modelName: String?) -> Bool {
+    if protocolName?.caseInsensitiveCompare("Virtual Interface") == .orderedSame { return true }
+    if modelName?.caseInsensitiveCompare("Disk Image") == .orderedSame { return true }
+    return false
+  }
+
+  static func classifyKind(
+    mediumType: String?, interconnect: String?, modelNames: [String], isStartup: Bool
+  ) -> DriveKind {
+    if mediumType?.caseInsensitiveCompare("Solid State") == .orderedSame { return .ssd }
+    if mediumType?.caseInsensitiveCompare("Rotational") == .orderedSame { return .hdd }
+    if let interconnect = interconnect?.lowercased(),
+      interconnect == "apple fabric" || interconnect == "nvme" || interconnect == "pci-express"
+    {
+      return .ssd
+    }
+    for model in modelNames {
+      let upper = model.uppercased()
+      if upper.contains("SSD") || upper.contains("NVME") || upper.contains("FLASH") {
+        return .ssd
+      }
+    }
+    return isStartup ? .ssd : .hdd
+  }
+
+  private static func timeMachineUUIDs() -> Set<String> {
+    guard
+      let plist = NSDictionary(contentsOfFile: "/Library/Preferences/com.apple.TimeMachine.plist"),
+      let destinations = plist["Destinations"] as? [[String: Any]]
+    else { return [] }
+    var uuids = Set<String>()
+    for destination in destinations {
+      if let list = destination["DestinationUUIDs"] as? [String] {
+        for uuid in list { uuids.insert(uuid.uppercased()) }
+      }
+    }
+    return uuids
+  }
+
+  private static func iokitProperty(_ service: io_registry_entry_t, _ key: String) -> Any? {
+    IORegistryEntrySearchCFProperty(
+      service, kIOServicePlane, key as CFString, kCFAllocatorDefault,
+      IOOptionBits(kIORegistryIterateRecursively | kIORegistryIterateParents))
+  }
+
+  private static func diskMetadata(
+    path: String, session: DASession?, tmUUIDs: Set<String>
+  ) -> (kind: DriveKind, isTimeMachine: Bool, isInternal: Bool, isDiskImage: Bool) {
+    let startup = path == dataPath || path == "/"
+    var isInternal = startup
+    var isTimeMachine = false
+    var mediumType: String?
+    var interconnect: String?
+    var modelNames: [String] = []
+    var protocolName: String?
+    var modelName: String?
+
+    let url = URL(fileURLWithPath: path)
+    if let session,
+      let disk = DADiskCreateFromVolumePath(kCFAllocatorDefault, session, url as CFURL)
+    {
+      if let desc = DADiskCopyDescription(disk) as? [String: Any] {
+        protocolName = desc[kDADiskDescriptionDeviceProtocolKey as String] as? String
+        modelName = desc[kDADiskDescriptionDeviceModelKey as String] as? String
+        if let modelName { modelNames.append(modelName) }
+        if let internalFlag = desc[kDADiskDescriptionDeviceInternalKey as String] as? Bool {
+          isInternal = internalFlag
+        }
+        if let rawUUID = desc[kDADiskDescriptionVolumeUUIDKey as String] {
+          let cfUUID = rawUUID as CFTypeRef
+          if CFGetTypeID(cfUUID) == CFUUIDGetTypeID() {
+            let uuidString = CFUUIDCreateString(kCFAllocatorDefault, (cfUUID as! CFUUID)) as String
+            if tmUUIDs.contains(uuidString.uppercased()) { isTimeMachine = true }
+          }
+        }
+      }
+      let media = DADiskCopyIOMedia(disk)
+      if media != 0 {
+        defer { IOObjectRelease(media) }
+        if let roles = IORegistryEntryCreateCFProperty(media, "Role" as CFString, kCFAllocatorDefault, 0)?.takeRetainedValue() as? [String], roles.contains("Backup") {
+          isTimeMachine = true
+        }
+        if let devChar = iokitProperty(media, "Device Characteristics") as? [String: Any] {
+          mediumType = devChar["Medium Type"] as? String
+          if let product = devChar["Product Name"] as? String { modelNames.append(product) }
+        }
+        if let protoChar = iokitProperty(media, "Protocol Characteristics") as? [String: Any] {
+          interconnect = protoChar["Physical Interconnect"] as? String
+        }
+        if let usbProduct = iokitProperty(media, "USB Product Name") as? String {
+          modelNames.append(usbProduct)
+        }
+      }
+    }
+
+    if !isTimeMachine, !tmUUIDs.isEmpty,
+      let volumeUUID = try? url.resourceValues(forKeys: [.volumeUUIDStringKey]).volumeUUIDString,
+      tmUUIDs.contains(volumeUUID.uppercased())
+    {
+      isTimeMachine = true
+    }
+    if !isTimeMachine && !startup
+      && FileManager.default.fileExists(atPath: path + "/Backups.backupdb")
+    {
+      isTimeMachine = true
+    }
+
+    let kind = classifyKind(
+      mediumType: mediumType, interconnect: interconnect ?? protocolName,
+      modelNames: modelNames, isStartup: startup)
+    let diskImage = !startup && isDiskImage(protocolName: protocolName, modelName: modelName)
+    return (kind, isTimeMachine, isInternal, diskImage)
   }
 
   static func mounted() -> [Self] {
@@ -83,35 +207,62 @@ struct UserDiskVolume: Equatable {
     guard count > 0, let mounts else {
       return [Self(path: dataPath, freeBytes: nil, totalBytes: nil)]
     }
+    let session = DASessionCreate(kCFAllocatorDefault)
+    let tmUUIDs = timeMachineUUIDs()
     var volumes: [Self] = []
     for var fs in UnsafeBufferPointer(start: mounts, count: Int(count)) {
       let path = withUnsafeBytes(of: &fs.f_mntonname) {
         String(decoding: $0.prefix { $0 != 0 }, as: UTF8.self)
       }
       guard isUserMount(path) else { continue }
+      let meta = diskMetadata(path: path, session: session, tmUUIDs: tmUUIDs)
+      if meta.isDiskImage { continue }
       func bytes(_ blocks: UInt64) -> UInt64? {
         guard fs.f_blocks > 0, fs.f_bsize > 0 else { return nil }
         let size = blocks.multipliedReportingOverflow(by: UInt64(fs.f_bsize))
         return size.overflow ? nil : size.partialValue
       }
-      volumes.append(Self(path: path, freeBytes: bytes(fs.f_bavail), totalBytes: bytes(fs.f_blocks)))
+      volumes.append(
+        Self(
+          path: path, freeBytes: bytes(fs.f_bavail), totalBytes: bytes(fs.f_blocks),
+          kind: meta.kind, isTimeMachine: meta.isTimeMachine, isInternal: meta.isInternal))
     }
     if volumes.contains(where: { $0.path == dataPath }) { volumes.removeAll { $0.path == "/" } }
-    return volumes.sorted { $0.path < $1.path }
+    return ordered(volumes)
+  }
+
+  static func ordered(_ volumes: [Self]) -> [Self] {
+    volumes.sorted { a, b in
+      if a.isTimeMachine != b.isTimeMachine { return !a.isTimeMachine }
+      if !a.isTimeMachine {
+        if a.isStartup != b.isStartup { return a.isStartup }
+        if a.isInternal != b.isInternal { return a.isInternal }
+        if a.kind != b.kind { return a.kind == .ssd }
+      }
+      let cmp = a.path.localizedCaseInsensitiveCompare(b.path)
+      return cmp == .orderedSame ? a.path < b.path : cmp == .orderedAscending
+    }
   }
 
   let summary: String
   let detail: String
 
-  init(path: String, freeBytes: UInt64?, totalBytes: UInt64?) {
+  init(
+    path: String, freeBytes: UInt64?, totalBytes: UInt64?,
+    kind: DriveKind = .ssd, isTimeMachine: Bool = false, isInternal: Bool? = nil
+  ) {
     self.path = path
     self.freeBytes = freeBytes
     self.totalBytes = totalBytes
+    self.kind = kind
+    self.isTimeMachine = isTimeMachine
+    self.isInternal = isInternal ?? (path == Self.dataPath || path == "/")
     func format(_ bytes: UInt64) -> String {
       ByteCountFormatter.string(fromByteCount: Int64(clamping: bytes), countStyle: .decimal)
     }
     summary = freeBytes.map { format($0) + " free" } ?? "Free space unavailable"
-    detail = "\(path) · \(summary)" + (totalBytes.map { " / " + format($0) } ?? "")
+    let roleSuffix = isTimeMachine ? " · Time Machine" : ""
+    detail = "\(path) · \(summary)" + (totalBytes.map { " / " + format($0) } ?? "") + roleSuffix
   }
 
   var compactFree: String {
@@ -132,18 +283,23 @@ struct UserDiskVolume: Equatable {
   }
 
   static func labels(_ volumes: [Self]) -> [String] {
-    var used = Set<String>()
+    let tmCount = volumes.filter(\.isTimeMachine).count
+    var ssdIndex = 0
+    var hddIndex = 0
+    var tmIndex = 0
     return volumes.map { volume in
-      let name = volume.name.filter { !$0.isWhitespace }.uppercased()
-      let prefix = name.isEmpty ? "DISK" : String(name.prefix(4))
-      var label = prefix
-      var ordinal = 1
-      while !used.insert(label).inserted {
-        ordinal += 1
-        let suffix = String(ordinal)
-        label = String(prefix.prefix(max(0, 4 - suffix.count))) + suffix
+      if volume.isTimeMachine {
+        tmIndex += 1
+        return tmCount > 1 ? "TM\(tmIndex)" : "TM"
       }
-      return label
+      switch volume.kind {
+      case .ssd:
+        ssdIndex += 1
+        return "SSD\(ssdIndex)"
+      case .hdd:
+        hddIndex += 1
+        return "HDD\(hddIndex)"
+      }
     }
   }
 }
@@ -205,11 +361,12 @@ final class SystemStats {
     return diskCache
   }
 
-  func sampleBarDisks() {
+  func sampleBarDisks(force: Bool = false) {
     let now = ProcessInfo.processInfo.systemUptime
-    guard !diskSampleInFlight, now >= nextDiskSample else { return }
+    guard !diskSampleInFlight, force || now >= nextDiskSample else { return }
     diskSampleInFlight = true
     queue.async {
+      if force { self.diskCacheExpires = 0 }
       let volumes = self.mountedVolumes()
       let expires = self.diskCacheExpires
       DispatchQueue.main.async {

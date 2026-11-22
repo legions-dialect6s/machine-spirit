@@ -105,6 +105,17 @@ class StatusItem: NSObject, NSMenuDelegate {
     }.store(in: &cancellables)
     NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification)
       .sink { [weak self] _ in self?.skullView?.refreshMotionPolicy() }.store(in: &cancellables)
+    for name in [
+      NSWorkspace.didMountNotification,
+      NSWorkspace.didUnmountNotification,
+      NSWorkspace.didRenameVolumeNotification,
+    ] {
+      NSWorkspace.shared.notificationCenter.publisher(for: name)
+        .sink { [weak self] _ in
+          guard let self, self.enabledSegments.contains("Disks") else { return }
+          self.stats.sampleBarDisks(force: true)
+        }.store(in: &cancellables)
+    }
     let center = DistributedNotificationCenter.default()
     center.publisher(for: Notification.Name("com.machinespirit.leader.nav"))
       .sink { [weak self] notification in

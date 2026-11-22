@@ -69,7 +69,10 @@ struct CompactBarState: Equatable {
       descriptions.append("Memory pressure \(pressureLevel?.name ?? "unavailable")")
     }
     describe("Temperature", temperature, unit: " degrees Celsius")
-    descriptions.append(contentsOf: disks.map(\.detail))
+    let orderedDisks = UserDiskVolume.ordered(disks)
+    for (volume, label) in zip(orderedDisks, UserDiskVolume.labels(orderedDisks)) {
+      descriptions.append("\(label) (\(volume.name)) · \(volume.detail)")
+    }
     if awake != nil { descriptions.append("Keep awake \(awakeStatus)") }
     return descriptions
   }
@@ -77,14 +80,23 @@ struct CompactBarState: Equatable {
 
 enum CompactBar {
   private static let spacing: CGFloat = 2
+  static let separatorWidth: CGFloat = 7
   static let skullWidth: CGFloat = 20
   private static let awakeWidth: CGFloat = 12
+
+  enum Group: Equatable {
+    case t3
+    case metrics
+    case disks
+    case timeMachine
+  }
 
   struct Cell: Equatable {
     let label: String
     let value: String
     let width: CGFloat
     var tint: NSColor
+    var group: Group = .metrics
   }
 
   private static let valueFont = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .medium)
@@ -115,16 +127,19 @@ enum CompactBar {
       if case let .counts(working, open) = state.t3 {
         value = "\(countsValue(working))/\(countsValue(open))"
       } else { value = "—" }
-      cells.append(Cell(label: "T3", value: value, width: 43, tint: foreground))
+      cells.append(Cell(label: "T3", value: value, width: 43, tint: foreground, group: .t3))
     }
     if state.cpu.isVisible {
-      cells.append(Cell(label: "CPU", value: percent(state.cpu.value), width: 30, tint: foreground))
+      cells.append(
+        Cell(label: "CPU", value: percent(state.cpu.value), width: 30, tint: foreground, group: .metrics))
     }
     if state.gpu.isVisible {
-      cells.append(Cell(label: "GPU", value: percent(state.gpu.value), width: 30, tint: foreground))
+      cells.append(
+        Cell(label: "GPU", value: percent(state.gpu.value), width: 30, tint: foreground, group: .metrics))
     }
     if state.memory.isVisible {
-      cells.append(Cell(label: "RAM", value: percent(state.memory.value), width: 30, tint: foreground))
+      cells.append(
+        Cell(label: "RAM", value: percent(state.memory.value), width: 30, tint: foreground, group: .metrics))
       let tint: NSColor
       switch state.pressureLevel {
       case .normal: tint = state.dark ? .systemMint : NSColor(srgbRed: 0, green: 0.36, blue: 0.23, alpha: 1)
@@ -139,7 +154,7 @@ enum CompactBar {
       case .critical: tier = "3/3"
       case nil: tier = "—"
       }
-      cells.append(Cell(label: "MPRS", value: tier, width: 28, tint: tint))
+      cells.append(Cell(label: "MPRS", value: tier, width: 28, tint: tint, group: .metrics))
     }
     if state.temperature.isVisible {
       let value = state.temperature.value.map { value in
@@ -147,13 +162,35 @@ enum CompactBar {
         if value < -99 { return "−99−" }
         return "\(value)°"
       } ?? "—"
-      cells.append(Cell(label: "TEMP", value: value, width: 27,
-                        tint: foreground))
+      cells.append(
+        Cell(label: "TEMP", value: value, width: 27, tint: foreground, group: .metrics))
     }
-    for (volume, label) in zip(state.disks, UserDiskVolume.labels(state.disks)) {
-      cells.append(Cell(label: label, value: volume.compactFree, width: 31, tint: foreground))
+    let orderedDisks = UserDiskVolume.ordered(state.disks)
+    for (volume, label) in zip(orderedDisks, UserDiskVolume.labels(orderedDisks)) {
+      cells.append(
+        Cell(
+          label: label, value: volume.compactFree, width: 31, tint: foreground,
+          group: volume.isTimeMachine ? .timeMachine : .disks))
     }
     return cells
+  }
+
+  static func separatorXPositions(for state: CompactBarState) -> [CGFloat] {
+    let cells = cells(for: state)
+    var x = state.skull ? Self.skullWidth : 0
+    var positions: [CGFloat] = []
+    for (index, cell) in cells.enumerated() {
+      if index > 0 {
+        if cell.group != cells[index - 1].group {
+          positions.append(x + floor(separatorWidth / 2))
+          x += separatorWidth
+        } else {
+          x += spacing
+        }
+      }
+      x += cell.width
+    }
+    return positions
   }
 
   static func image(_ state: CompactBarState) -> NSImage {
@@ -161,10 +198,16 @@ enum CompactBar {
     let labelAttr = labelAttributes(foreground: foreground)
     let cells = cells(for: state)
     let skullWidth = state.skull ? Self.skullWidth : 0
-    let awakeSlot = state.awake == nil ? 0 : awakeWidth + spacing
-    let width = max(4, skullWidth + awakeSlot
-      + cells.reduce(0) { $0 + $1.width + spacing }
-      - (state.awake == nil && cells.isEmpty ? 0 : spacing))
+    var cellsWidth: CGFloat = 0
+    for (index, cell) in cells.enumerated() {
+      if index > 0 {
+        cellsWidth += cell.group != cells[index - 1].group ? separatorWidth : spacing
+      }
+      cellsWidth += cell.width
+    }
+    let awakeGap: CGFloat = cells.isEmpty ? 0 : spacing + 2
+    let awakeSlot = state.awake == nil ? 0 : awakeGap + awakeWidth
+    let width = max(4, skullWidth + cellsWidth + awakeSlot)
     let size = NSSize(width: width, height: state.height)
     let rep = NSBitmapImageRep(
       bitmapDataPlanes: nil, pixelsWide: Int(ceil(width * state.scale)),
@@ -176,7 +219,19 @@ enum CompactBar {
     // The status button's skull layer uses this reserved leading slot.
     var x = skullWidth
     let bottom = floor((state.height - 21) / 2)
-    for cell in cells {
+    let dividerHeight: CGFloat = 14
+    let dividerY = floor((state.height - dividerHeight) / 2)
+    for (index, cell) in cells.enumerated() {
+      if index > 0 {
+        if cell.group != cells[index - 1].group {
+          let lineX = x + floor(separatorWidth / 2)
+          foreground.withAlphaComponent(0.28).setFill()
+          NSBezierPath.fill(NSRect(x: lineX, y: dividerY, width: 1, height: dividerHeight))
+          x += separatorWidth
+        } else {
+          x += spacing
+        }
+      }
       let labelWidth = (cell.label as NSString).size(withAttributes: labelAttr).width
       let labelX = x + (cell.width - labelWidth) / 2
       (cell.label as NSString).draw(
@@ -188,9 +243,10 @@ enum CompactBar {
       let valueWidth = (cell.value as NSString).size(withAttributes: attributes).width
       let valueX = x + (cell.width - valueWidth) / 2
       (cell.value as NSString).draw(at: NSPoint(x: valueX, y: bottom), withAttributes: attributes)
-      x += cell.width + spacing
+      x += cell.width
     }
     if let awake = state.awake {
+      x += awakeGap
       // Rotate the skeletal formula a quarter turn and fit it inside the status bar.
       NSGraphicsContext.saveGraphicsState()
       let transform = NSAffineTransform()
