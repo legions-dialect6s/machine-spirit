@@ -34,6 +34,21 @@ Enable this per clone with `git config core.hooksPath .githooks` and `git config
 
 ## Ledger
 
+### v0.6-workspace-source — Opus-resume source checkpoint (`ff7da09`), 2026-11-22
+
+Published `Checkpoint: ready` source baseline on `origin/main` at `ff7da09`, tagged locally as `v0.6-workspace-source`. Summarizes the November 21–22 milestones since `v0.5.1-classic-driver` (`e06d30f`, on a divergent branch whose Backspace fix landed on `main` at `2fc8431`; leave `v0.5.1-classic-driver` intact):
+
+- **Window placement & display geometry (`fab7cdd`)** — Cross-display half-step placement and previews, task-aware T3 menu bar status, and local Pulse workspace/disk reports.
+- **Compact status bar & Now Playing (`cec269d`, `b04f378`, `ce06ea8`, `8ba9942`)** — Upright keep-awake molecule (persisted across restarts), inline Now Playing rows with browser tab titles and single-click focus (including narrow background Safari tabs via the `Tab With Sound` toolbar menu), fixed-width drive cells classified by medium (`SSD1..3`, `HDD1`, `TM`) with group vertical dividers and mount/unmount live refresh, and 1/3–3/3 memory pressure.
+- **Board Apps pane & isolated Tor route (`c049403`, `ff7da09`)** — Board/Apps split with `AppsPane` pipe hardening (bounded 64 KiB concurrent stdout/stderr streaming, `onDisappear` cancellation, Sheol polling paused on Apps tab) and `bin/tor-session.py`.
+- **Flagship README & docs/visuals drift gate (`cbe70c3`, `ff7da09`)** — Multi-agent contract in `AGENTS.md`, `scripts/check-docs-drift.py` enforced by `scripts/push-checkpoint.sh`, live overlay GIF, 168px retina sigil, and 1280×640 social preview.
+
+**Installed vs source parity (2026-11-22 11:44):** Both `~/Applications/MachineSpirit Leader Key.app` and `~/Applications/MachineSpirit.app` pass strict signature verification under `MachineSpirit Local Codesign`, and the 09:00 launcher suite passed **54/54**. However, the installed board and `~/bin/tor-session.py` are **ahead of `ff7da09`** (matching three uncommitted Tor/AppsPane edits parked in the working tree: `app/MachineSpirit/Sources/AppsPane.swift`, `bin/tor-session.py`, `docs/REFERENCE.md`). Private binary UUIDs, hashes, and audit evidence are stored at `~/Library/Application Support/MachineSpirit/Checkpoints/v0.6-workspace-source/STATE.md`.
+
+**Restore / inspect:**
+- **Source inspection (clean tree at `ff7da09`):** `git worktree add --detach ../machine-spirit-ff7da09 v0.6-workspace-source`
+- **Live rollback (signed apps + live configs):** No separate Nov 22 archive bundle was packaged; the Nov 19 private package under `~/Library/Application Support/MachineSpirit/Checkpoints/v0.5.1-classic-driver/` passed its full `SHA256SUMS` check — follow its `RECOVERY.txt` under the supervised-swap rule.
+
 ### v0.5.1-classic-driver — definitive checkpoint, 2026-11-19
 
 Tap and release Caps, enter a group, and press Backspace. The launcher shows the parent. When you reach the root, you can immediately type a different route. The fix changes the launcher's visibility notification when a path becomes empty.

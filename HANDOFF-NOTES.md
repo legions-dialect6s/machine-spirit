@@ -13,6 +13,33 @@ Status legend: 🧭 north-star direction · 🔒 firm decision · 🌱 shapes wo
 
 ---
 
+## Opus resume handoff · November 22 (`v0.6-workspace-source` / `ff7da09`)
+
+Source checkpoint `v0.6-workspace-source` points directly at `ff7da09` (`origin/main`, `Checkpoint: ready`). Private binary UUIDs, helper hashes, and verification details live at `~/Library/Application Support/MachineSpirit/Checkpoints/v0.6-workspace-source/STATE.md`.
+
+### Verification snapshot (2026-11-22)
+
+| Surface | Verified state |
+|---|---|
+| **Leader Key** (`~/Applications/MachineSpirit Leader Key.app`) | Running and signed (`MachineSpirit Local Codesign`, 08:37 AM); `Info.plist` includes `NSAppleEventsUsageDescription`. Launcher tests recorded **54 passed, 0 failed, 0 skipped**. Live shortcut JSON matches `config/leader-key/config.json` after `$HOME` normalization. Website favicon fetch/draw verified offscreen, **live installed-menu favicon still unverified** (TCC Automation grant for Safari could not be read from `TCC.db`). |
+| **MachineSpirit board** (`~/Applications/MachineSpirit.app`) | Running and signed (`MachineSpirit Local Codesign`, 11:27 AM). **Ahead of `ff7da09`**: binary includes uncommitted `AppsPane.swift` edits parked in the working tree. |
+| **Tor helper & guest** (`bin/tor-session.py`) | Installed `~/bin/tor-session.py` matches the uncommitted working copy and differs from `ff7da09`. Three parked working-tree edits remain untouched: `app/MachineSpirit/Sources/AppsPane.swift`, `bin/tor-session.py`, `docs/REFERENCE.md`. Last inspected guest boot failed DHCP (`dhcpcd` missing); no packet-level verification yet. |
+
+### Ready-to-execute priorities for Opus
+
+1. **Harden `NowPlayingMenu.swift` favicons & Safari sound titles** (from read-only Sol audit — exact bugs localized):
+   - **Late favicon host guard (`NowPlayingMenu.swift:676, 763, 889`)**: `AppRow.key` omits normalized host, so same-title navigation can let an in-flight favicon overwrite the new site's icon and latch `isFavicon = true`. Guard the async callback by normalized host and enrich a single AX snapshot with script results instead of re-scanning between fast/full stages.
+   - **Automation denial observability (`NowPlayingMenu.swift:195, 426`)**: Log AppleScript error code (never tab URLs) and allow cached `-1743` denials to recheck after a TCC permission change instead of latching for process lifetime. Then live-verify an actual website favicon in the installed menu with Safari playing a public HTTPS page.
+   - **Stale `safariTitles` lifecycle (`NowPlayingMenu.swift:722, 998`; `StatusItem.swift:471`)**: Clear `safariTitles` in `close()`, bind each capture to one menu opening, and expire popup-derived hints across the 1s poll so stopped/switched narrow tabs don't linger or bleed into non-`showStatusMenu()` opens.
+   - **Duplicate Safari sound titles (`NowPlayingMenu.swift:321, 389, 419`)**: `soundTitles(from:)` collapses repeated entries into a `Set<String>`, and line 419 drops all repeated fallback candidates — hiding both audible same-title tabs, OR falsely promoting a silent twin when one tab has an explicit AX mute button. Track multiset counts, subtract AX-confirmed tabs, and apply fallback only when remaining counts match unambiguously.
+   - **Ambiguous script matching & `knownTabURLs` (`NowPlayingMenu.swift:172, 544, 763`)**: Reject ambiguous `matchScriptTab()` matches on duplicate titles instead of falling back to first match, and remove unbounded `PID:rawTitle` `knownTabURLs` hints (keep the bounded host-image cache).
+   - **Popup validation (`NowPlayingMenu.swift:255, 287`)**: Tie the discovered popup window to the initiating toolbar button before reading/canceling it, verify cancellation, and keep scanning additional windows if the first toolbar button's menu read fails.
+2. **Finish or reconcile the 3 parked Tor/AppsPane working-tree edits** (`AppsPane.swift`, `bin/tor-session.py`, `docs/REFERENCE.md`), verify guest DHCP + firewall acceptance, and re-sync/commit cleanly.
+3. **Visual freshness check before next `Visuals-Reviewed: current`**: Eyeball `docs/img/menu.png` and `docs/img/board.png` against current UI/captions (the drift gate checks filenames, size, and PNG chunks, not screenshot content).
+4. **Performance profiling** (from Nov 22 handoff below): Measure cold vs warm `ms win place`, profile top-level menu construction with deferred Karabiner helpers, and profile board pan/drag obstacle scans.
+
+---
+
 ## Personal companion proposal · November 21
 
 **First interaction.** When you return to your Mac, the pet can ask “Gather those three Finder windows?” Choosing Review should show the folders and the proposed change. The menu and pet should open the same review. A local notification can surface it while the pet is hidden. Sending it to your phone would be a separate, opt-in destination.
