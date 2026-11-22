@@ -2,6 +2,7 @@ import Cocoa
 import Combine
 
 class StatusItem: NSObject, NSMenuDelegate {
+  private var mainMenu: NSMenu?
   var statusItem: NSStatusItem?
   private var cancellables = Set<AnyCancellable>()
   let system = SystemMenuSection()
@@ -69,8 +70,11 @@ class StatusItem: NSObject, NSMenuDelegate {
     let menu = NSMenu()
     menu.autoenablesItems = false
     menu.delegate = self
-    item.menu = menu
+    mainMenu = menu
     if let button = item.button {
+      button.target = self
+      button.action = #selector(showStatusMenu)
+      button.sendAction(on: [.leftMouseUp, .rightMouseUp])
       button.setAccessibilityLabel("MachineSpirit — stats, terminals and system controls")
       skullView = StatusSkullView(button: button)
     }
@@ -464,8 +468,15 @@ class StatusItem: NSObject, NSMenuDelegate {
 
   // MARK: - NSMenuDelegate
 
+  @objc private func showStatusMenu() {
+    guard let item = statusItem, let menu = mainMenu else { return }
+    nowPlaying.prepareForMenu()
+    item.menu = menu
+    item.button?.performClick(nil)
+  }
+
   func menuWillOpen(_ menu: NSMenu) {
-    if menu === statusItem?.menu {
+    if menu === mainMenu {
       menuIsOpen = true
       buildMenu(menu)
       if enabledSegments.contains("T3") { t3.refresh(force: true) }
@@ -480,8 +491,14 @@ class StatusItem: NSObject, NSMenuDelegate {
   }
 
   func menuDidClose(_ menu: NSMenu) {
-    if menu === statusItem?.menu {
+    if menu === mainMenu {
       menuIsOpen = false
+      DispatchQueue.main.async { [weak self] in
+        guard let self, !self.menuIsOpen else { return }
+        self.statusItem?.menu = nil
+        self.statusItem?.button?.target = self
+        self.statusItem?.button?.action = #selector(self.showStatusMenu)
+      }
       stats.close()
       nowPlaying.close()
     } else if menu === statsMenu {

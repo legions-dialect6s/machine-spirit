@@ -497,6 +497,12 @@ extension KeepAwakeAndBarTests {
     }
   }
 
+  func testSafariSoundMenuListsOnlyPages() {
+    XCTAssertEqual(NowPlayingBrowserFocus.soundTitles(from: ["Mute This Tab", "", "Tab With Sound", "A", ""]), ["A"])
+    XCTAssertEqual(NowPlayingBrowserFocus.soundTitles(from: ["Tabs With Sound", "A", "B", "", "Other"]), ["A", "B"])
+    XCTAssertTrue(NowPlayingBrowserFocus.soundTitles(from: ["Mute All Tabs"]).isEmpty)
+  }
+
   func testNowPlayingFaviconRequestsAndBrowserTabMatching() {
     let rawURL = "https://user:pass@www.youtube.com:443/watch?v=eaMbKZPBruU&t=779s#top"
     XCTAssertEqual(
