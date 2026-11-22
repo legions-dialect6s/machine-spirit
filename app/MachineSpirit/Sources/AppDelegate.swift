@@ -88,6 +88,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         state.appsSelected = true
         openBoard()
       case "board":
+        state.appsSelected = false
         let transient = URLComponents(url: url, resolvingAgainstBaseURL: false)?
           .queryItems?.first(where: { $0.name == "transient" })?.value == "1"
         openBoard(transient: transient)

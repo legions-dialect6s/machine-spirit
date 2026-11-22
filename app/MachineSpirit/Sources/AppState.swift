@@ -686,9 +686,12 @@ final class AppState {
     guard boardOpen, sheolPollTask == nil else { return }
     sheolPollTask = Task { [weak self] in
       while !Task.isCancelled {
-        let spirits = await SheolService.list()
-        guard let self, !Task.isCancelled, self.boardOpen else { return }
-        if self.spirits != spirits { self.spirits = spirits }
+        guard let self, self.boardOpen else { return }
+        if !self.appsSelected {
+          let spirits = await SheolService.list()
+          guard !Task.isCancelled, self.boardOpen else { return }
+          if self.spirits != spirits { self.spirits = spirits }
+        }
         try? await Task.sleep(for: .seconds(2))
       }
     }

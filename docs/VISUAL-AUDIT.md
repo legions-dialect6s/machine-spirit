@@ -8,7 +8,9 @@ No full-desktop screenshot was taken. Overlay captures used only graph rectangle
 
 | File | Pixels / Format | Description | Treatment |
 |---|---:|---|---|
-| [overlay-walk.gif](img/overlay-walk.gif) | 760 × 575 (20 fps GIF) | Live Core Animation overlay walkthrough: root skull bloom → `s` → `s/s` → backspace retract → root → `g` branch → blue completion pulse → collapse. | Captured strictly over a borderless `#0b0f0c` backdrop window; 6 keyframes visually audited; zero desktop pixels or personal data. |
+| [overlay-walk.gif](img/overlay-walk.gif) | 680 × 514 (12 fps GIF) | Live Core Animation overlay walkthrough: root skull bloom → `s` → `s/s` → backspace retract → root → `g` branch → blue completion pulse → collapse. | Captured strictly over a borderless `#0b0f0c` backdrop window; 6 keyframes visually audited; palette-optimized to ~1.2 MiB; zero desktop pixels or personal data. |
+| [sigil-168.png](img/sigil-168.png) | 168 × 168 PNG | 2× retina header sigil resized from `assets/icon_transparent.png` (21 KiB vs 1.1 MiB source). | Resized offline; metadata stripped; zero text. |
+| [social-preview.png](img/social-preview.png) | 1280 × 640 PNG | GitHub repository social preview card combining the sigil, `hero.png` radial branch, and project tagline on `#0b0f0c`. | Synthetically composed via CoreGraphics; visually inspected; metadata stripped; no personal text. |
 | [display-half-steps.gif](img/display-half-steps.gif) | Animated GIF | Replay of seven WindowServer rectangles stepping across an external M28U above a MacBook Pro via `ddd`, `xxx`, and `www`. | Synthetic diagram redrawn from observed WindowServer bounds; zero desktop pixels. |
 | [hero.png](img/hero.png) | 1320 × 1060 PNG | Center-anchored `s` navigation branch on a plain dark background. | Tight region capture; no personal text present; metadata stripped. |
 | [overlay-corner.png](img/overlay-corner.png) | 1000 × 1240 PNG | The same `s` branch fanning inward from the top-left corner. | Crop starts below the menu bar; focus circle intentionally clipped at top; metadata stripped. |

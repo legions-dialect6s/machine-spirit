@@ -19,6 +19,8 @@ struct AppsPane: View {
   @State private var applianceReady = false
   @State private var message = ""
   @State private var isError = false
+  @State private var activeTask: Process?
+  @State private var requestID = 0
 
   var body: some View {
     ScrollView {
@@ -110,9 +112,18 @@ struct AppsPane: View {
     }
     .frame(maxHeight: .infinity)
     .onAppear { refresh() }
+    .onDisappear {
+      requestID += 1
+      if let proc = activeTask, proc.isRunning { proc.terminate() }
+      activeTask = nil
+    }
   }
 
   private func runHelper(_ args: [String], onSuccess: @escaping @MainActor @Sendable (Data) -> Void) {
+    requestID += 1
+    let token = requestID
+    if let prev = activeTask, prev.isRunning { prev.terminate() }
+
     let task = Process()
     let out = Pipe()
     let err = Pipe()
@@ -120,12 +131,52 @@ struct AppsPane: View {
     task.arguments = args
     task.standardOutput = out
     task.standardError = err
+    activeTask = task
+
+    final class PipeBuffer: @unchecked Sendable {
+      private let lock = NSLock()
+      private var data = Data()
+      private let limit: Int
+      init(limit: Int = 65_536) { self.limit = limit }
+      func append(_ chunk: Data) {
+        guard !chunk.isEmpty else { return }
+        lock.lock()
+        let remaining = limit - data.count
+        if remaining > 0 { data.append(chunk.prefix(remaining)) }
+        lock.unlock()
+      }
+      func snapshot() -> Data {
+        lock.lock()
+        defer { lock.unlock() }
+        return data
+      }
+    }
+
+    let outBuf = PipeBuffer()
+    let errBuf = PipeBuffer()
+    let outHandle = out.fileHandleForReading
+    let errHandle = err.fileHandleForReading
+    outHandle.readabilityHandler = { handle in
+      let chunk = handle.availableData
+      if chunk.isEmpty { handle.readabilityHandler = nil } else { outBuf.append(chunk) }
+    }
+    errHandle.readabilityHandler = { handle in
+      let chunk = handle.availableData
+      if chunk.isEmpty { handle.readabilityHandler = nil } else { errBuf.append(chunk) }
+    }
+
     task.terminationHandler = { proc in
-      let outData = out.fileHandleForReading.readDataToEndOfFile()
-      let errText = String(data: err.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
+      outHandle.readabilityHandler = nil
+      errHandle.readabilityHandler = nil
+      outBuf.append(outHandle.readDataToEndOfFile())
+      errBuf.append(errHandle.readDataToEndOfFile())
+      let outData = outBuf.snapshot()
+      let errText = String(data: errBuf.snapshot(), encoding: .utf8)?
         .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
       let status = proc.terminationStatus
       Task { @MainActor in
+        guard token == requestID else { return }
+        if activeTask === proc { activeTask = nil }
         if status == 0 {
           isError = false
           onSuccess(outData)
@@ -138,6 +189,9 @@ struct AppsPane: View {
     do {
       try task.run()
     } catch {
+      outHandle.readabilityHandler = nil
+      errHandle.readabilityHandler = nil
+      activeTask = nil
       isError = true
       message = error.localizedDescription
     }

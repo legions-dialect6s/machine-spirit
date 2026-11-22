@@ -1,10 +1,10 @@
 <div align="center">
 
-<img src="assets/icon_transparent.png" alt="Machine Spirit sigil" width="84" />
+<img src="docs/img/sigil-168.png" alt="Machine Spirit sigil" width="84" />
 
 # machine-spirit
 
-**A native macOS input layer, spatial window grid, unified menu bar, and agent-ready desktop CLI.**  
+**A native macOS input layer, spatial window grid, unified menu bar, and agent-ready desktop CLI.**<br />
 *Keyboard where keyboard wins. Mouse where mouse wins. Never choose.*
 
 [Watch It Move](#a-launcher-you-can-see-as-you-type) · [Spatial Grid](#spatial-window-geometry-across-every-display) · [Unified Menu Bar](#one-menu-bar-item-to-replace-four-utilities) · [Sheol](#sheol--a-necromancers-ledger-for-tmux) · [`ms` CLI & MCP](#ms--native-desktop-geometry-for-scripts--ai-agents) · [Under the Hood](#under-the-hood) · [Full Reference](docs/REFERENCE.md)
