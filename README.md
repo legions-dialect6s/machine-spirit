@@ -128,7 +128,7 @@ The tree follows four rules, by escalating "weight" of the action:
 | `⇪ d i` | Discord | | `⇪ s e` | System Settings ✕ |
 | `⇪ f a c` / `⇪ f t` | FaceTime ✕ (from Messages: FaceTime the selected chat) | | `⇪ s p` | Spotify |
 | `⇪ f i` (keep ⇪ down, tap `i` again) | Gather one more Finder tab per press | | `⇪ t e x` | TextEdit ✕ (closes all; asks if unsaved) |
-| `⇪ g p` | ChatGPT | | `⇪ t e r` | Terminal |
+| `⇪ g p` | ChatGPT Classic | | `⇪ t e r` | Terminal |
 | `⇪ i t` | iTerm | | `⇪ v l c` | VLC (jump/cycle) |
 | `⇪ m e` | Messages → straight into conversation search (type a name) | | `⇪ v m w` | VMware Fusion |
 | `⇪ w h` | WhatsApp | | `⇪ k` | Clipboard history |
@@ -244,13 +244,13 @@ Rectangle does the window math; Leader Key drives it through Rectangle's URL sch
 ⇪ = =     grow            ⇪ - -     shrink          ⇪ q u i t  ⌘Q frontmost app
 ```
 
-- **Destination preview.** With the graph overlay active, the second letter in a quarter or half sequence previews the landing spot. The third letter runs the existing Rectangle shortcut. For a directional transfer, the first arrow previews the new frame and the second arrow moves the window. F/F and G/G mark the destination display. The green outline fades when the board observes the landing. Escape clears a pending preview.
+- **Destination preview.** With the graph overlay active, the second letter in a quarter or half sequence marks the selected window with a thin dashed stroke. A solid green outline previews the destination. The third letter runs Rectangle. For directional transfers the first arrow shows the new frame and the display names, and the second moves the window. When Rectangle uses private repeat history, the solid outline appears at the observed landing. Escape clears a pending preview.
 - **Triple letters** for placement to reduce accidental placement; the two resize keys are **double-taps** because they're pressed repeatedly. (Notes moved to `⇪ n o` when `n` became the right-third group.)
 - **Thirds two ways**: the spatial letters `v`/`b`/`n` (left/center/right) and the numeric row `1`/`2`/`3` (first/center/last) both drive Rectangle's thirds — pick whichever your hand reaches for.
 - **Two centers**: `⇪ c s s` is Rectangle's own center action; `⇪ c e n` runs [`bin/center-window.applescript`](bin/center-window.applescript), which centers the frontmost window on *whichever display it currently sits on* (multi-monitor aware) without resizing it.
 - **`⇪ a m m m` / `⇪ m m m`** use [`ms win place`](tools/ms/README.md) (90% inset / exact visible frame — **maximize stops above the Dock**), so they share geometry with the `⇪ ␣ ␣` ladder.
 - **`⇪ ␣ ␣`** places the window on the pointer’s display. In the center, repeat the chord to alternate between a 90% inset and the whole usable frame. At an edge or corner, repeat within 1.5 seconds to grow from the selected half or quarter. Keeping Caps down and tapping Space walks the existing ladder through native fullscreen.
-- **`⇪ ␣ M`** toggles native fullscreen. Tap Caps, then Space, then M. Repeat to leave fullscreen.
+- **`⇪ ␣ M`** toggles the focused window’s native fullscreen state. Tap Caps, then Space, then M. Repeat to leave fullscreen. A subsequent grid or display-move command waits for the window to leave its fullscreen Space before placing it.
 - The green outline previews almost-maximize, maximize and directional moves. On arrival the stroke expands a few points and fades. The new iTerm window from `⇪ T T` and the Messages window from `⇪ M E` show their outline when their actual bounds are available. Reduce Motion uses a fade.
 - **Grow/shrink bypass Rectangle**: [`bin/win-lerp.applescript`](bin/win-lerp.applescript) animates the frontmost window ±120 px over 22 smoothstep-eased frames — centered as it scales, with a primary-origin left/top clamp and a 300×200 floor so shrink-spam can't crush a window. This helper interpolates the resize; its clamp is not fully multi-monitor-aware (negative-origin displays are a limitation).
 - **`⇪ f f f` / `⇪ g g g`** send the window to the next / previous display; hold `⇪` and spam `f` or `g` to keep going in the **first** direction.
@@ -294,10 +294,20 @@ rendering adopts the menu-bar foreground; the green skull and warning colors
 remain visible in light and dark appearances. Unchanged rendered content causes
 no image/title setter calls.
 
-**Leader Key → Menu bar** toggles **Skull / Sheol / CPU / Memory / Awake**
-(`msBarSkull`, `msBarSheol`, `msBarCPU`, `msBarMemory`, `msBarAwake`), all on by
-default. With every segment off, a tiny dot keeps the menu reachable. The old
-Settings “show menu bar icon” control now toggles the skull segment.
+**Leader Key → Menu bar** lets you choose the visible segments. Turn on **Disk**
+to show free startup space in the existing bar. It refreshes at most every 30
+seconds and turns amber below 10 GiB or red below 5 GiB. **Stats → Disk** shows
+capacity for the startup data volume and writable drives mounted under
+`/Volumes`. **Sample Network Activity by Process** ranks a one-second local
+sample by total bytes transferred. **Open Little Snitch Network Monitor** opens
+the connection and rule interface when installed. With every segment off, a
+small dot keeps the menu reachable.
+
+Click an app in the audio menu to bring it forward. For Safari, Chrome and
+Brave, Machine Spirit looks for the browser’s native mute-tab button when you
+click. A single exposed audible tab is selected and its window raised. Hidden
+tab bars, missing Accessibility access and multiple audible matches can leave
+the browser on its current tab. English audio indicators have been tested.
 
 The top-level menu fits within roughly **600 points without scrolling**:
 **one-line stats summary → Terminals & tmux → Brightness → Keep awake → Clipboard
@@ -600,18 +610,26 @@ tile their windows on the mouse screen (app-level only, no browser per-tab API).
 with installed on-device languages on macOS 26+, copies the result and shows a
 HUD. Unavailable translation explicitly falls back to OCR text.
 
-`ms pulse collect` appends a private monthly JSONL usage snapshot;
-`ms pulse report [--hours N]` summarizes it. The optional hourly LaunchAgent
-at `config/pulse/com.machinespirit.pulse.plist` is a template, not installed.
+`ms pulse collect` appends a private monthly JSONL usage snapshot.
+`ms pulse report [--hours N]` summarizes it. The hourly LaunchAgent is optional
+on a fresh install. Its template lives at `config/pulse/com.machinespirit.pulse.plist`.
+After ten minutes of inactivity, the next hourly sample also records duplicate-tab
+counts and Finder window-gathering suggestions. **Stats → Latest Idle Review**
+shows the latest such sample from the last 24 hours. All cleanup decisions
+remain manual.
 `MS_PULSE_DIR` supports isolated verification. Window counts are CGWindowList
 estimates; exact minimized counts are unavailable without AX. The warmed
 collector can meet 400 ms wall/100 ms CPU, but cold/load outliers remain.
 MCP adds read-only `audio_list` and `pulse_report`.
 
+Press **⌘ Esc** to move keyboard focus out of an editable field. The launcher
+asks Accessibility for a focusable non-editable item in the same window or web
+document. A field with no such destination gives an audible failure indication.
+The shortcut is configurable in General settings.
+
 `bin/messages-find.sh` focuses Messages conversation search and is shared by
 `blur-field.sh`. It reveals search when needed and verifies focus before
-returning success; it does not type or send messages. Binding `⇪ m e` and live
-installation remain integration-owner work.
+returning success. Use `⇪ m e` to open conversation search.
 
 **Installer gap:** `install.sh` currently copies `bin/ms` into `~/bin` along with other helpers, but the wrapper locates `tools/ms` relative to the repository. Use `./bin/ms` from the checkout, or a symlink to that wrapper, rather than the copied standalone file. Prebuild before connecting an MCP client. [Complete command reference, registration, privacy limits, and verification](tools/ms/README.md).
 

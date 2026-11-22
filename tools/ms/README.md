@@ -33,6 +33,7 @@ arguments, e.g. `ms run --dry-run -- -/-`. `ms --help` lists syntax.
 | `focus TARGET` | Activate an exact running app name/bundle ID, or raise a numeric window ID. Window focus may unminimize it. |
 | `mouse` | Mouse position, screen ID and screen/usable frames, in **AppKit** coordinates. |
 | `win place MODE [--app NAME]` | Place the focused window; modes and grow ladder below. |
+| `win rectangle "rectangle://execute-action?name=ACTION"` | Leave native fullscreen if needed, then dispatch the Rectangle action. |
 | `win tile-all` | Unhide regular apps, unminimize windows, tile standard windows across all displays. |
 | `win hide-all` | Hide every regular app, including Finder/frontmost, except Leader Key/MachineSpirit helpers. |
 | `win cycle [--app NAME]` | Raise the next standard window in ascending window-ID order, wrapping. |
@@ -215,6 +216,11 @@ thermal state, frontmost app, regular app count and per-app window estimates.
 `offScreenWindows` also includes hidden and other-Space windows.
 `minimizedWindows` is explicitly null, never mislabeled as an exact count.
 Battery health can be an explicitly labeled raw/design-capacity estimate.
+
+If the input session has been idle for ten minutes, the collector can add an
+`idleReview` array of suggestions from the same tab and window observations.
+The `latestIdleReview` report field contains the timestamp and suggestions for
+the newest qualifying sample, or null. Older logs remain readable.
 
 Running Safari and Chrome are queried in bulk through one `osascript`, with a
 three-second Apple-event timeout and a shared three-second subprocess deadline.

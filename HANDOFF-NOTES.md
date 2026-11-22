@@ -13,6 +13,20 @@ Status legend: 🧭 north-star direction · 🔒 firm decision · 🌱 shapes wo
 
 ---
 
+## Personal companion proposal · November 21
+
+**First interaction.** When you return to your Mac, the pet can ask “Gather those three Finder windows?” Choosing Review should show the folders and the proposed change. The menu and pet should open the same review. A local notification can surface it while the pet is hidden. Sending it to your phone would be a separate, opt-in destination.
+
+**Cheap observations.** The hourly Pulse collector already knows duplicate URL counts and approximate Finder window counts. A ten-minute idle sample can generate a suggestion with that information alone. Before acting, identify the current windows or tabs again. Two tabs with the same URL can hold different drafts, scroll positions or active sessions. Start with gathering Finder windows. Keep pinned tabs, audio, uploads, forms and running jobs out of automatic closure. A regular app with zero windows is insufficient evidence to quit it. For harder choices, an on-device model could phrase a question from the counts and app names. Give it selected text or a screenshot only when the user attaches one. [Apple Foundation Models](https://developer.apple.com/documentation/foundationmodels/systemlanguagemodel)
+
+**Appearance.** Reuse the board’s click-through, nonactivating panel. A short reaction when a review becomes ready is enough. Pause rendering when it settles. A small interchangeable local sprite pack lets the existing offline VTuber work inform the movement while keeping client assets out of the installer.
+
+**Ownership.** Make the first acceptance test a restore to a second Mac. The owner should be able to export encrypted preferences and memory, recover them with their own key, see which device authorized a rule, and revoke that device for future actions. Use a signed sequence of action receipts to record what an adapter observed, what the model suggested and what the user authorized. Those signatures establish provenance. The model’s interpretation can still be wrong. Inference and the pet should be replaceable without losing that history.
+
+**Network.** Keep native interface counters in the bar and measure busy processes on demand. Show blocked connections or change profiles through Little Snitch’s own facilities. Its traffic log on the development Mac requires elevated privileges. [Little Snitch traffic log](https://help.obdev.at/littlesnitch6/cmd-log-traffic)
+
+---
+
 ## Design cache (items 1–15, plus loose notes 16–21)
 
 **1. Letter-by-letter logo build on summon.** 🧭
