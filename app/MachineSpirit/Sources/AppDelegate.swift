@@ -159,7 +159,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
           let mode = Placement(rawValue: name),
           UserDefaults(suiteName: "com.machinespirit.leader-key")?.object(forKey: "msGraphOverlayEnabled") as? Bool != false else { return }
     overlay?.placementPreview.commandDestination(pid: pid.int32Value, id: (info["windowID"] as? NSNumber)?.uint32Value,
-                                                frame: NSRectFromString(raw), mode: mode)
+                                                frame: NSRectFromString(raw), mode: mode,
+                                                sourceFrame: (info["sourceFrame"] as? String).map(NSRectFromString))
   }
 
   @objc private func fired(_ notification: Notification) {

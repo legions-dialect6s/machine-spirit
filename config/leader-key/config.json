@@ -13,7 +13,7 @@
             {
               "key" : "1",
               "type" : "command",
-              "value" : "open -g \"rectangle://execute-action?name=first-third\""
+              "value" : "~/bin/ms win rectangle \"rectangle://execute-action?name=first-third\""
             }
           ],
           "key" : "1",
@@ -30,7 +30,7 @@
             {
               "key" : "2",
               "type" : "command",
-              "value" : "open -g \"rectangle://execute-action?name=center-third\""
+              "value" : "~/bin/ms win rectangle \"rectangle://execute-action?name=center-third\""
             }
           ],
           "key" : "2",
@@ -47,7 +47,7 @@
             {
               "key" : "3",
               "type" : "command",
-              "value" : "open -g \"rectangle://execute-action?name=last-third\""
+              "value" : "~/bin/ms win rectangle \"rectangle://execute-action?name=last-third\""
             }
           ],
           "key" : "3",
@@ -86,7 +86,7 @@
             {
               "key" : "a",
               "type" : "command",
-              "value" : "open -g \"rectangle://execute-action?name=left-half\""
+              "value" : "~/bin/ms win rectangle \"rectangle://execute-action?name=left-half\""
             }
           ],
           "key" : "a",
@@ -132,7 +132,7 @@
             {
               "key" : "b",
               "type" : "command",
-              "value" : "open -g \"rectangle://execute-action?name=center-third\""
+              "value" : "~/bin/ms win rectangle \"rectangle://execute-action?name=center-third\""
             }
           ],
           "key" : "b",
@@ -160,7 +160,7 @@
             {
               "key" : "c",
               "type" : "command",
-              "value" : "open -g \"rectangle://execute-action?name=bottom-right\""
+              "value" : "~/bin/ms win rectangle \"rectangle://execute-action?name=bottom-right\""
             }
           ],
           "key" : "c",
@@ -187,7 +187,7 @@
             {
               "key" : "s",
               "type" : "command",
-              "value" : "open -g \"rectangle://execute-action?name=center\""
+              "value" : "~/bin/ms win rectangle \"rectangle://execute-action?name=center\""
             }
           ],
           "key" : "s",
@@ -208,7 +208,7 @@
           "key" : "o",
           "label" : "Codex",
           "type" : "application",
-          "value" : "/Applications/Codex.app"
+          "value" : "/Applications/ChatGPT.app"
         },
         {
           "key" : "x",
@@ -251,7 +251,7 @@
             {
               "key" : "d",
               "type" : "command",
-              "value" : "open -g \"rectangle://execute-action?name=right-half\""
+              "value" : "~/bin/ms win rectangle \"rectangle://execute-action?name=right-half\""
             }
           ],
           "key" : "d",
@@ -281,7 +281,7 @@
             {
               "key" : "e",
               "type" : "command",
-              "value" : "open -g \"rectangle://execute-action?name=top-right\""
+              "value" : "~/bin/ms win rectangle \"rectangle://execute-action?name=top-right\""
             }
           ],
           "key" : "e",
@@ -380,11 +380,11 @@
         {
           "actions" : [
             {
-              "hold" : "open -g \"rectangle://execute-action?name=next-display\"",
+              "hold" : "~/bin/ms win rectangle \"rectangle://execute-action?name=next-display\"",
               "holdKeys" : "fg",
               "key" : "f",
               "type" : "command",
-              "value" : "open -g \"rectangle://execute-action?name=next-display\""
+              "value" : "~/bin/ms win rectangle \"rectangle://execute-action?name=next-display\""
             }
           ],
           "key" : "f",
@@ -487,7 +487,7 @@
         {
           "key" : "p",
           "type" : "application",
-          "value" : "/Applications/ChatGPT.app"
+          "value" : "/Applications/ChatGPT Classic.app"
         },
         {
           "hold" : "~/bin/web-collect.sh chatgpt.com,chat.openai.com",
@@ -499,12 +499,12 @@
         {
           "actions" : [
             {
-              "hold" : "open -g \"rectangle://execute-action?name=previous-display\"",
+              "hold" : "~/bin/ms win rectangle \"rectangle://execute-action?name=previous-display\"",
               "holdKeys" : "gf",
               "key" : "g",
               "label" : "Previous display",
               "type" : "command",
-              "value" : "open -g \"rectangle://execute-action?name=previous-display\""
+              "value" : "~/bin/ms win rectangle \"rectangle://execute-action?name=previous-display\""
             }
           ],
           "key" : "g",
@@ -697,7 +697,7 @@
             {
               "key" : "n",
               "type" : "command",
-              "value" : "open -g \"rectangle://execute-action?name=last-third\""
+              "value" : "~/bin/ms win rectangle \"rectangle://execute-action?name=last-third\""
             }
           ],
           "key" : "n",
@@ -750,7 +750,7 @@
             {
               "key" : "q",
               "type" : "command",
-              "value" : "open -g \"rectangle://execute-action?name=top-left\""
+              "value" : "~/bin/ms win rectangle \"rectangle://execute-action?name=top-left\""
             }
           ],
           "key" : "q",
@@ -1080,7 +1080,7 @@
             {
               "key" : "v",
               "type" : "command",
-              "value" : "open -g \"rectangle://execute-action?name=first-third\""
+              "value" : "~/bin/ms win rectangle \"rectangle://execute-action?name=first-third\""
             }
           ],
           "key" : "v",
@@ -1124,7 +1124,7 @@
             {
               "key" : "w",
               "type" : "command",
-              "value" : "open -g \"rectangle://execute-action?name=top-half\""
+              "value" : "~/bin/ms win rectangle \"rectangle://execute-action?name=top-half\""
             }
           ],
           "key" : "w",
@@ -1148,7 +1148,7 @@
             {
               "key" : "x",
               "type" : "command",
-              "value" : "open -g \"rectangle://execute-action?name=bottom-half\""
+              "value" : "~/bin/ms win rectangle \"rectangle://execute-action?name=bottom-half\""
             }
           ],
           "key" : "x",
@@ -1177,7 +1177,7 @@
             {
               "key" : "z",
               "type" : "command",
-              "value" : "open -g \"rectangle://execute-action?name=bottom-left\""
+              "value" : "~/bin/ms win rectangle \"rectangle://execute-action?name=bottom-left\""
             }
           ],
           "key" : "z",

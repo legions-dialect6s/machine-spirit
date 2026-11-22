@@ -9,6 +9,7 @@ ms — structured access to this Mac (append --json for machine-readable output)
   focus <app-name|bundle-id|window-id>
   mouse
   win place <smart|aim|toggle-fullscreen|step|amm|max|left|right|top|bottom|tl|tr|bl|br|center|fullscreen|display-left|display-right|display-up|display-down> [--app NAME]
+  win rectangle <rectangle://execute-action?name=ACTION>
   win <tile-all|hide-all>
   win cycle [--app NAME]
   binds [--flat|--tree] [--grep TEXT]
@@ -66,6 +67,9 @@ struct MS {
             } else {
                 let output: Output
                 if name == "translate-area" { output = try await translateArea(Array(args.dropFirst())) }
+                else if name == "win", args.dropFirst().first == "rectangle" {
+                    output = try await runRectangleAction(Array(args.dropFirst(2)))
+                }
                 else { output = try command(name, Array(args.dropFirst())) }
                 print(json ? try jsonString(output.json) : output.text)
             }

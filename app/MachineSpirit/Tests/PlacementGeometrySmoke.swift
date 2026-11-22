@@ -7,6 +7,11 @@ import MachineSpiritKit
 @main struct PlacementGeometrySmoke {
   @MainActor static func main() async {
     var cases = 0
+    let notchedDisplay = CGRect(x: 0, y: 0, width: 1728, height: 1117)
+    let notchedFullscreen = CGRect(x: 0, y: 33, width: 1728, height: 1084)
+    let notchedUsable = CGRect(x: 0, y: 33, width: 1728, height: 1027)
+    precondition(ObservedWindow.fillsFullscreenArea(notchedFullscreen, display: notchedDisplay, usable: notchedUsable))
+    precondition(!ObservedWindow.fillsFullscreenArea(notchedUsable, display: notchedDisplay, usable: notchedUsable))
     for screen in [CGRect(x: 0, y: 38, width: 1728, height: 1000),
                    CGRect(x: -1920, y: -580, width: 1920, height: 1080),
                    CGRect(x: 100, y: 1600, width: 1280, height: 720)] {
@@ -36,7 +41,8 @@ import MachineSpiritKit
     fixture.collectionBehavior = [.stationary, .ignoresCycle]
     fixture.orderFrontRegardless()
     defer { fixture.orderOut(nil) }
-    let preview = PlacementPreview(currentOwner: { getpid() }, runningPID: { _ in getpid() })
+    let preview = PlacementPreview(currentOwner: { getpid() }, runningPID: { _ in getpid() },
+                                   queryFocused: { pid, _ in await ObservedWindow.read(pid: pid, id: nil) })
     let panel = preview.preparePanel()
     panel.alphaValue = 0
     let outline = panel.contentView!.layer!.sublayers!.first!
@@ -60,6 +66,15 @@ import MachineSpiritKit
     }
     let fx = OverlayFX(defaults: UserDefaults(suiteName: UUID().uuidString)!)
     let action = PlacementIntent(action: .command("open -g \"rectangle://execute-action?name=top-left\""))!
+    if let other = NSScreen.screens.first(where: { $0 != screen }),
+       UserDefaults(suiteName: "com.knollsoft.Rectangle")?.bool(forKey: "useCursorScreenDetection") != true {
+      let ddd = PlacementIntent(action: .command("open -g \"rectangle://execute-action?name=right-half\""))!
+      let point = CGPoint(x: other.frame.midX, y: other.frame.midY)
+      let (placement, destination) = ddd.destination(window: start!.frame, screens: NSScreen.screens, cursor: point)!
+      precondition(destination == screen && placement.label.contains(screen.localizedName),
+                   "DDD follows the source window when the pointer is on another display")
+      precondition(placement.frame.midX > screen.visibleFrame.midX)
+    }
     for (mode, expected) in [("amm", screen.visibleFrame.insetBy(dx: screen.visibleFrame.width * 0.05,
                                                                  dy: screen.visibleFrame.height * 0.05)),
                              ("max", screen.visibleFrame)] {
@@ -88,19 +103,37 @@ import MachineSpiritKit
     CATransaction.flush()
     let placement = preview.target!
     precondition(!panel.canBecomeKey && panel.ignoresMouseEvents && outline.opacity > 0 && outline.borderWidth > 0)
-    precondition(fixture.frame == source, "Cue must be ordered before the triggering key and before real movement")
+    let origin = preview.sourcePanel!
+    precondition(origin.isVisible && !origin.canBecomeKey && origin.ignoresMouseEvents)
+    precondition(ObservedWindow.matches(origin.frame, fixture.frame))
+    precondition((origin.contentView?.layer?.sublayers?.first as? CAShapeLayer)?.lineDashPattern == [5, 4])
+    origin.alphaValue = 0
+    precondition(ObservedWindow.matches(fixture.frame, source),
+                 "Cue moved the fixture before the triggering key. Expected \(source), saw \(fixture.frame)")
     precondition(placement.frame == CGRect(x: screen.visibleFrame.minX, y: screen.visibleFrame.midY,
       width: screen.visibleFrame.width / 2, height: screen.visibleFrame.height / 2))
     send("nav", ["state": "hidden"])
     await wait { !panel.isVisible }
+    precondition(!origin.isVisible)
     send("nav", ["state": "shown", "path": "q/q"])
     await wait { panel.isVisible }
     send("fired", ["path": "q/q/q"])
     send("nav", ["state": "hidden"])
     try? await Task.sleep(for: .milliseconds(75))
+    precondition(!origin.isVisible)
     precondition(panel.isVisible && outline.opacity == 1, "Early acknowledgment without an actual move")
     await moveFixture(to: placement.frame)
     if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion { await wait { outline.animation(forKey: "landing") != nil } }
+    await wait { !panel.isVisible }
+    // Rectangle owns repeat history. The board follows the same window to its actual landing.
+    preview.arm(action, path: "q/q/q", fx: fx)
+    await wait { origin.isVisible }
+    precondition(!panel.isVisible)
+    preview.fire(path: "q/q/q")
+    let landed = NSScreen.screens.dropFirst().first?.visibleFrame.insetBy(dx: 60, dy: 50) ?? source
+    await moveFixture(to: landed)
+    await wait { panel.isVisible && outline.animation(forKey: "landing") != nil }
+    precondition(ObservedWindow.matches(preview.target!.frame, fixture.frame))
     await wait { !panel.isVisible }
     // A command-side receipt also works when the next key beat the prefix read.
     let axSource = flipScreenRect(source, primaryTop: screen.frame.maxY)
@@ -118,7 +151,7 @@ import MachineSpiritKit
     await wait { panel.isVisible }
     preview.fire(path: "q/q/q")
     preview.arm(.rectangle(.tr), path: "e/e/e", fx: fx)
-    await wait { preview.target?.label == "top-right quarter" }
+    await wait { preview.target?.label.hasPrefix("top-right quarter") == true }
     try? await Task.sleep(for: .milliseconds(780))
     precondition(panel.isVisible && preview.active)
     preview.fire(path: "e/e/e")
@@ -130,6 +163,7 @@ import MachineSpiritKit
       await wait { panel.isVisible }
       let destination = preview.target!.frame
       precondition(!screen.frame.intersects(destination))
+      precondition(preview.target!.label.hasPrefix(screen.localizedName + " → "))
       preview.fire(path: "arrow/arrow")
       await moveFixture(to: destination)
       if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion { await wait { outline.animation(forKey: "landing") != nil } }
@@ -150,6 +184,6 @@ import MachineSpiritKit
     preview.launch(.focus("com.apple.MobileSMS"), path: "m/e", fx: fx)
     await wait { panel.isVisible && outline.animation(forKey: "landing") != nil }
     await wait { !panel.isVisible }
-    print("PASS \(cases) placement cases; private navigation/fired IPC, real WindowServer fixture, pre-key outline, arrival, cancellation, replacement, refusal timeout and available display transfer")
+    print("PASS \(cases) placement cases; real WindowServer fixture, private navigation/fired IPC, DDD source display, arrival, cancellation, replacement, refusal timeout and display transfer when available")
   }
 }

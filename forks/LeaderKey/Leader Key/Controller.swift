@@ -25,6 +25,9 @@ class Controller {
   private var cheatsheetTimer: Timer?
   private var boardScreenFrame: NSRect = .zero
   private var boardPanelShown = false
+  private var boardFocusObserver: NSObjectProtocol?
+  private let boardFocusQueue = DispatchQueue(
+    label: "com.machinespirit.leader.focus", qos: .userInitiated)
 
   private var cancellables = Set<AnyCancellable>()
 
@@ -74,6 +77,57 @@ class Controller {
     }.store(in: &cancellables)
 
     self.cheatsheetWindow = Cheatsheet.createWindow(for: userState)
+
+    boardFocusObserver = DistributedNotificationCenter.default().addObserver(
+      forName: Notification.Name("com.machinespirit.leader.focus.request"), object: nil, queue: .main
+    ) { [weak self] notification in
+      guard let self, let token = notification.object as? String, UUID(uuidString: token) != nil,
+        let text = notification.userInfo?["pid"] as? String, let pid = pid_t(text), pid > 0,
+        NSWorkspace.shared.frontmostApplication?.processIdentifier == pid
+      else { return }
+      self.boardFocusQueue.async { Self.replyWithBoardFocus(pid: pid, token: token) }
+    }
+  }
+
+  deinit {
+    if let boardFocusObserver {
+      DistributedNotificationCenter.default().removeObserver(boardFocusObserver)
+    }
+  }
+
+  private static func replyWithBoardFocus(pid: pid_t, token: String) {
+    guard AXIsProcessTrusted(),
+      NSWorkspace.shared.frontmostApplication?.processIdentifier == pid
+    else { return }
+    let app = AXUIElementCreateApplication(pid)
+    AXUIElementSetMessagingTimeout(app, 0.08)
+    var rawWindow: CFTypeRef?
+    guard AXUIElementCopyAttributeValue(app, kAXFocusedWindowAttribute as CFString, &rawWindow)
+      == .success, let rawWindow, CFGetTypeID(rawWindow) == AXUIElementGetTypeID()
+    else { return }
+    let window = unsafeDowncast(rawWindow, to: AXUIElement.self)
+    AXUIElementSetMessagingTimeout(window, 0.08)
+    var rawValues: CFArray?
+    let attributes = [kAXPositionAttribute, kAXSizeAttribute, "AXFullScreen"]
+    guard AXUIElementCopyMultipleAttributeValues(
+      window, attributes as CFArray, AXCopyMultipleAttributeOptions(rawValue: 0), &rawValues
+    ) == .success, let values = rawValues as? [Any], values.count == attributes.count
+    else { return }
+    let position = values[0] as CFTypeRef
+    let dimensions = values[1] as CFTypeRef
+    var point = CGPoint.zero
+    var size = CGSize.zero
+    guard CFGetTypeID(position) == AXValueGetTypeID(), CFGetTypeID(dimensions) == AXValueGetTypeID(),
+      AXValueGetValue(unsafeDowncast(position, to: AXValue.self), .cgPoint, &point),
+      AXValueGetValue(unsafeDowncast(dimensions, to: AXValue.self), .cgSize, &size),
+      NSWorkspace.shared.frontmostApplication?.processIdentifier == pid
+    else { return }
+    var reply = ["pid": String(pid),
+      "frame": [point.x, point.y, size.width, size.height].map { String(Double($0)) }.joined(separator: ",")]
+    if let fullscreen = values[2] as? Bool { reply["fullscreen"] = fullscreen ? "1" : "0" }
+    DistributedNotificationCenter.default().postNotificationName(
+      Notification.Name("com.machinespirit.leader.focus.reply"), object: token,
+      userInfo: reply, deliverImmediately: true)
   }
 
   func show() {
@@ -562,7 +616,8 @@ class Controller {
 
   private func runHoldCommand(_ command: String, n: Int, key: String, path: String) {
     let env = "export MS_HOLD_N=\(n) MS_HOLD_KEY=\(key.shellQuoted) MS_HOLD_PATH=\(path.shellQuoted); "
-    CommandRunner.run(env + command) { [weak self] result in
+    let input = CommandRunner.rectangleActionURL(for: command) == nil ? env + command : command
+    CommandRunner.run(input) { [weak self] result in
       switch result.status {
       case 10: self?.postFeedback("done", path: path)
       case 11:

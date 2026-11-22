@@ -22,14 +22,15 @@ struct SmartPlacement: Equatable {
   let label: String
   static func target(mouse: CGPoint, visibleFrame s: CGRect, window: ObservedWindow? = nil,
                      owner: pid_t? = nil, screenID: UInt32 = 0, previous: PlacementState? = nil,
-                     primaryTop: CGFloat = 0, fullscreen: Bool = false, screenFrame: CGRect? = nil) -> Self {
+                     primaryTop: CGFloat = 0, fullscreen: Bool = false, screenFrame: CGRect? = nil,
+                     windowIsOnScreen: Bool = true) -> Self {
     let zone = mouseZone(mouse, visibleFrame: s)
     let bounds = flipScreenRect(s, primaryTop: primaryTop)
     var mode = zone
     if let window, let owner {
       mode = aimedPlacement(zone: zone, current: classifyPlacement(window.frame, visibleFrame: bounds),
                             fullscreen: fullscreen, previous: previous, key: "\(owner):\(window.id)",
-                            screen: screenID, now: Date().timeIntervalSince1970)
+                            screen: screenID, now: Date().timeIntervalSince1970, windowIsOnScreen: windowIsOnScreen)
     }
     if mode == .fullscreen, let screenFrame { return Self(frame: screenFrame, label: mode.previewLabel) }
     let frame = placementFrame(mode, visibleFrame: bounds, current: window?.frame ?? .zero)
@@ -53,6 +54,8 @@ final class OverlaySurfacePanel: NSPanel {
 @MainActor
 final class PlacementPreview {
   private(set) var panel: OverlaySurfacePanel?
+  private(set) var sourcePanel: OverlaySurfacePanel?
+  private let sourceStroke = CAShapeLayer()
   private let outline = CALayer()
   private let label = CATextLayer()
   private var globalMonitor: Any?
@@ -75,13 +78,16 @@ final class PlacementPreview {
   private let currentOwner: () -> pid_t?
   private let runningPID: (String) -> pid_t?
   private let query: @Sendable (pid_t, CGWindowID?) async -> ObservedWindow?
+  private let queryFocused: @Sendable (pid_t, Bool) async -> ObservedWindow?
 
   init(currentOwner: @escaping () -> pid_t? = { NSWorkspace.shared.frontmostApplication?.processIdentifier },
        runningPID: @escaping (String) -> pid_t? = { NSRunningApplication.runningApplications(withBundleIdentifier: $0).first?.processIdentifier },
-       query: @escaping @Sendable (pid_t, CGWindowID?) async -> ObservedWindow? = ObservedWindow.read) {
+       query: @escaping @Sendable (pid_t, CGWindowID?) async -> ObservedWindow? = ObservedWindow.read,
+       queryFocused: @escaping @Sendable (pid_t, Bool) async -> ObservedWindow? = ObservedWindow.focused) {
     self.runningPID = runningPID
     self.currentOwner = currentOwner
     self.query = query
+    self.queryFocused = queryFocused
   }
   var monitoring: Bool { globalMonitor != nil || localMonitor != nil }
 
@@ -104,12 +110,18 @@ final class PlacementPreview {
         if let self, self.currentOwner() != self.owner { self.hide() }
       }
     }
-    observation = Task { [weak self, query] in
-      let source = await query(pid, nil)
+    observation = Task { [weak self, queryFocused] in
+      let source = await queryFocused(pid, next.usesRectangle)
       guard let self, !Task.isCancelled, armedPath == path, !committed, currentOwner() == pid else { return }
+      guard let source else { return }
       window = source
       if next == .mouse || next == .aim { showMouse(); return }
-      guard let source, let (placement, screen) = next.destination(window: source.frame, screens: NSScreen.screens) else { return }
+      guard let (placement, screen) = next.destination(window: source.frame, screens: NSScreen.screens) else {
+        if case .rectangle = next, let primary = NSScreen.screens.first {
+          showSource(flipScreenRect(source.frame, primaryTop: primary.frame.maxY))
+        }
+        return
+      }
       render(placement, on: screen)
     }
   }
@@ -122,19 +134,55 @@ final class PlacementPreview {
     guard active, !committed, let owner, currentOwner() == owner,
           let window, let intent, let primary = NSScreen.screens.first else { hide(); return }
     if intent == .mouse || intent == .aim { update(mouse: NSEvent.mouseLocation) }
-    guard let target, let display = panel?.screen else { hide(); return }
     committed = true
     active = false
+    sourcePanel?.orderOut(nil)
     stopTrackingMouse()
+    guard let target, let display = panel?.screen else {
+      if case .rectangle = intent { observeRectangleLanding(owner: owner, source: window) }
+      else { hide() }
+      return
+    }
     let expected = flipScreenRect(target.frame, primaryTop: primary.frame.maxY)
     let cycleDisplay: NSScreen?
     if case .cycle = intent { cycleDisplay = display } else { cycleDisplay = nil }
     observeArrival(owner: owner, id: window.id, expected: expected, cycleScreen: cycleDisplay)
   }
 
-  private func observeArrival(owner: pid_t, id: CGWindowID?, expected: CGRect, cycleScreen: NSScreen?) {
+  /// Rectangle can choose a repeat from its own history. Mark the settled window
+  /// on the display it actually reached when its destination was unknown at key-down.
+  private func observeRectangleLanding(owner: pid_t, source: ObservedWindow) {
+    observation?.cancel()
+    observation = Task { [weak self, query] in
+      let deadline = ContinuousClock.now + .milliseconds(900)
+      var last: CGRect?
+      while !Task.isCancelled && ContinuousClock.now < deadline {
+        try? await Task.sleep(for: .milliseconds(30))
+        guard !Task.isCancelled else { return }
+        let current = await query(owner, source.id)
+        guard let self, !Task.isCancelled else { return }
+        guard currentOwner() == owner else { hide(); return }
+        guard let current, !ObservedWindow.matches(source.frame, current.frame) else { last = nil; continue }
+        guard let previous = last, ObservedWindow.matches(previous, current.frame) else { last = current.frame; continue }
+        let screens = NSScreen.screens
+        guard let primary = screens.first else { hide(); return }
+        let bounds = screens.map { flipScreenRect($0.frame, primaryTop: primary.frame.maxY) }
+        let from = screens[overlapScreen(source.frame, screens: bounds)]
+        let to = screens[overlapScreen(current.frame, screens: bounds)]
+        let label = from == to ? to.localizedName : transferLabel(from: from, to: to)
+        render(.init(frame: flipScreenRect(current.frame, primaryTop: primary.frame.maxY), label: label), on: to)
+        await finish(landed: true)
+        return
+      }
+      if !Task.isCancelled { self?.hide() }
+    }
+  }
+
+  private func observeArrival(owner: pid_t, id: CGWindowID?, expected: CGRect, cycleScreen: NSScreen?,
+                              fullscreenUsable: CGRect? = nil, sourceFrame: CGRect? = nil) {
     let screens = NSScreen.screens
-    let frames = screens.map { flipScreenRect($0.frame, primaryTop: screens[0].frame.maxY) }
+    guard let primary = screens.first else { hide(); return }
+    let frames = screens.map { flipScreenRect($0.frame, primaryTop: primary.frame.maxY) }
     observation?.cancel()
     observation = Task { [weak self, query] in
       let deadline = ContinuousClock.now + .milliseconds(700)
@@ -148,7 +196,10 @@ final class PlacementPreview {
         guard let current else { continue }
         let landed: Bool
         if let cycleScreen { landed = screens[overlapScreen(current.frame, screens: frames)] == cycleScreen }
-        else { landed = ObservedWindow.matches(current.frame, expected) }
+        else if let fullscreenUsable {
+          landed = ObservedWindow.fillsFullscreenArea(current.frame, display: expected, usable: fullscreenUsable) &&
+            !(sourceFrame.map { ObservedWindow.matches(current.frame, $0) } ?? false)
+        } else { landed = ObservedWindow.matches(current.frame, expected) }
         if landed {
           await finish(landed: true)
           return
@@ -224,25 +275,40 @@ final class PlacementPreview {
     }
   }
 
-  func commandDestination(pid: pid_t, id: CGWindowID?, frame: CGRect, mode: Placement) {
+  func commandDestination(pid: pid_t, id: CGWindowID?, frame: CGRect, mode: Placement, sourceFrame: CGRect? = nil) {
     guard currentOwner() == pid, let primary = NSScreen.screens.first,
           frame.width > 0, frame.height > 0, OverlayFX().placementPreview else { return }
     let screens = NSScreen.screens
     let appFrame = flipScreenRect(frame, primaryTop: primary.frame.maxY)
     let index = overlapScreen(appFrame, screens: screens.map(\.frame))
     guard screens[index].frame.intersects(appFrame) else { return }
-    let identity = id ?? (owner == pid ? window?.id : nil)
+    let identity = id ?? window.flatMap { candidate in
+      guard owner == pid, sourceFrame.map({ ObservedWindow.matches(candidate.frame, $0) }) ?? true else { return nil }
+      return candidate.id
+    }
     let reuse = owner == pid && armedPath != nil
     observation?.cancel()
+    sourcePanel?.orderOut(nil)
     stopTrackingMouse()
     armedPath = "placement"
     owner = pid
     committed = true
     active = false
     if !reuse { keyInterval = 0; fx = OverlayFX(); window = nil }
-    let label = mode.isDisplayTransfer ? screens[index].localizedName : mode.previewLabel
+    let origin = sourceFrame.map {
+      overlapScreen(flipScreenRect($0, primaryTop: primary.frame.maxY), screens: screens.map(\.frame))
+    }
+    let label = if let origin, origin != index {
+      "\(mode.previewLabel) · \(transferLabel(from: screens[origin], to: screens[index]))"
+    } else {
+      screenLabel(mode.previewLabel, on: screens[index],
+                  showDisplay: !screens[index].frame.contains(NSEvent.mouseLocation))
+    }
     render(.init(frame: appFrame, label: label), on: screens[index])
-    observeArrival(owner: pid, id: identity, expected: frame, cycleScreen: nil)
+    let fullscreenUsable = mode == .fullscreen
+      ? flipScreenRect(screens[index].visibleFrame, primaryTop: primary.frame.maxY) : nil
+    observeArrival(owner: pid, id: identity, expected: frame, cycleScreen: nil,
+                   fullscreenUsable: fullscreenUsable, sourceFrame: sourceFrame)
   }
 
   func leaveNavigation() {
@@ -257,7 +323,7 @@ final class PlacementPreview {
       outline.cornerRadius = 12; outline.borderWidth = 2
       outline.shadowRadius = 10; outline.shadowOffset = .zero
       label.font = NSFont.monospacedSystemFont(ofSize: 13, weight: .semibold)
-      label.fontSize = 13; label.alignmentMode = .center
+      label.fontSize = 13; label.alignmentMode = .center; label.truncationMode = .end
       label.backgroundColor = NSColor(calibratedWhite: 0.025, alpha: 0.94).cgColor
       label.cornerRadius = 7
       view.layer?.addSublayer(outline); outline.addSublayer(label)
@@ -282,15 +348,32 @@ final class PlacementPreview {
   }
 
   func update(mouse: CGPoint) {
-    guard active, intent == .mouse || intent == .aim, let screen = NSScreen.screens.first(where: { $0.frame.contains(mouse) }) else { return }
-    let primaryTop = NSScreen.screens.first?.frame.maxY ?? screen.frame.maxY
+    let screens = NSScreen.screens
+    guard active, intent == .mouse || intent == .aim, let primary = screens.first,
+          let screen = screens.first(where: { $0.frame.contains(mouse) }) else { return }
+    let primaryTop = primary.frame.maxY
     let screenID = (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value ?? 0
-    let fullFrame = flipScreenRect(screen.frame, primaryTop: primaryTop)
+    let source = window.map { observation in
+      screens[overlapScreen(observation.frame, screens: screens.map { flipScreenRect($0.frame, primaryTop: primaryTop) })]
+    }
+    let fullscreen = window.map { observation in
+      observation.fullscreen ?? source.map {
+        let bounds = flipScreenRect($0.frame, primaryTop: primaryTop)
+        let usable = flipScreenRect($0.visibleFrame, primaryTop: primaryTop)
+        let recentFullscreen = owner.map { pid in
+          previousPlacement?.last == "fullscreen" &&
+            previousPlacement?.matches("\(pid):\(observation.id)", now: Date().timeIntervalSince1970) == true
+        } ?? false
+        return ObservedWindow.fillsFullscreenArea(observation.frame, display: bounds, usable: usable) &&
+          (!ObservedWindow.matches(observation.frame, usable) || recentFullscreen)
+      } ?? false
+    } ?? false
     let next = SmartPlacement.target(mouse: mouse, visibleFrame: screen.visibleFrame, window: intent == .aim ? window : nil,
       owner: owner, screenID: screenID, previous: previousPlacement, primaryTop: primaryTop,
-      fullscreen: window.map { ObservedWindow.matches($0.frame, fullFrame) && (screen.visibleFrame != screen.frame || previousPlacement?.last == "fullscreen") } ?? false,
-      screenFrame: screen.frame)
-    render(next, on: screen)
+      fullscreen: fullscreen,
+      screenFrame: screen.frame, windowIsOnScreen: source == screen)
+    let transfer = source.flatMap { $0 == screen ? nil : transferLabel(from: $0, to: screen) }
+    render(.init(frame: next.frame, label: transfer.map { "\(next.label) · \($0)" } ?? next.label), on: screen)
   }
 
   private func render(_ next: SmartPlacement, on screen: NSScreen) {
@@ -301,6 +384,11 @@ final class PlacementPreview {
     let previous = outline.presentation()?.frame ?? outline.frame
     let hadTarget = target != nil
     target = next
+    if active, let window, let primary = NSScreen.screens.first {
+      let frame = flipScreenRect(window.frame, primaryTop: primary.frame.maxY)
+      if ObservedWindow.matches(frame, next.frame) { sourcePanel?.orderOut(nil) }
+      else { showSource(frame) }
+    }
     CATransaction.begin(); CATransaction.setDisableActions(true)
     panel.setFrame(screen.frame, display: false)
     outline.opacity = 1
@@ -315,8 +403,9 @@ final class PlacementPreview {
     outline.shadowPath = CGPath(roundedRect: outline.bounds, cornerWidth: 12, cornerHeight: 12, transform: nil)
       .copy(strokingWithWidth: 2, lineCap: .round, lineJoin: .round, miterLimit: 1)
     label.foregroundColor = color; label.string = next.label
-    label.frame = CGRect(x: max(4, (outline.bounds.width - 220) / 2), y: outline.bounds.height - 40,
-                         width: min(220, outline.bounds.width - 8), height: 26)
+    let labelWidth = max(0, min(CGFloat(max(220, next.label.count * 8 + 16)), outline.bounds.width - 8))
+    label.frame = CGRect(x: (outline.bounds.width - labelWidth) / 2, y: outline.bounds.height - 40,
+                         width: labelWidth, height: 26)
     if hadTarget && !movedScreen && fx.openingDuration > 0 && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
       for (key, from, to) in [("position", NSValue(point: CGPoint(x: previous.midX, y: previous.midY)), NSValue(point: outline.position)),
                              ("bounds", NSValue(rect: CGRect(origin: .zero, size: previous.size)), NSValue(rect: outline.bounds))] {
@@ -330,6 +419,31 @@ final class PlacementPreview {
     panel.orderFrontRegardless()
   }
 
+  private func showSource(_ frame: CGRect) {
+    if sourcePanel == nil {
+      let panel = OverlaySurfacePanel()
+      let view = NSView()
+      view.wantsLayer = true
+      view.layer?.addSublayer(sourceStroke)
+      panel.contentView = view
+      sourceStroke.fillColor = nil
+      sourceStroke.lineWidth = 1
+      sourceStroke.lineDashPattern = [5, 4]
+      sourcePanel = panel
+    }
+    guard let sourcePanel, !sourcePanel.isVisible || sourcePanel.frame != frame else { return }
+    sourcePanel.setFrame(frame, display: false)
+    CATransaction.begin()
+    CATransaction.setDisableActions(true)
+    sourceStroke.contentsScale = sourcePanel.backingScaleFactor
+    sourceStroke.frame = CGRect(origin: .zero, size: frame.size)
+    sourceStroke.path = CGPath(roundedRect: sourceStroke.bounds.insetBy(dx: 2, dy: 2),
+                               cornerWidth: 9, cornerHeight: 9, transform: nil)
+    sourceStroke.strokeColor = fx.accentColor.withAlphaComponent(0.47).cgColor
+    CATransaction.commit()
+    sourcePanel.orderFrontRegardless()
+  }
+
   func hide() {
     guard armedPath != nil || active || committed else { return }
     observation?.cancel(); observation = nil
@@ -338,6 +452,7 @@ final class PlacementPreview {
     active = false; target = nil; armedPath = nil; committed = false
     owner = nil; intent = nil; window = nil
     stopTrackingMouse()
+    sourcePanel?.orderOut(nil)
     outline.removeAllAnimations(); panel?.orderOut(nil)
   }
 

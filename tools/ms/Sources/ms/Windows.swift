@@ -1,5 +1,6 @@
 import AppKit
 import ApplicationServices
+import Darwin
 
 private let fullscreenAttribute = "AXFullScreen"
 
@@ -48,12 +49,14 @@ private func windowElement(_ value: CFTypeRef?) -> AXUIElement? {
     return unsafeDowncast(value, to: AXUIElement.self)
 }
 
-private func targetWindow(_ app: AXUIElement) throws -> AXUIElement {
+private func targetWindow(_ app: AXUIElement, rectangle: Bool = false) throws -> AXUIElement {
     if let focused = windowElement(axAttribute(app, kAXFocusedWindowAttribute)) { return focused }
-    if let main = windowElement(axAttribute(app, kAXMainWindowAttribute)) { return main }
-    if let windows = axAttribute(app, kAXWindowsAttribute) as? [AXUIElement],
-       let standard = windows.first(where: { axAttribute($0, kAXSubroleAttribute) as? String == kAXStandardWindowSubrole }) {
-        return standard
+    if !rectangle, let main = windowElement(axAttribute(app, kAXMainWindowAttribute)) { return main }
+    if let windows = axAttribute(app, kAXWindowsAttribute) as? [AXUIElement] {
+        if rectangle, let first = windows.first { return first }
+        if let standard = windows.first(where: { axAttribute($0, kAXSubroleAttribute) as? String == kAXStandardWindowSubrole }) {
+            return standard
+        }
     }
     throw Failure("app has no accessible focused, main or standard window", exitCode: 11)
 }
@@ -128,16 +131,37 @@ private func setFrame(_ element: AXUIElement, _ frame: CGRect) throws {
     }
 }
 
-private func leaveFullscreen(_ element: AXUIElement) throws {
-    try setAX(element, fullscreenAttribute, kCFBooleanFalse)
-    let deadline = ProcessInfo.processInfo.systemUptime + 1.2
+private func setFullscreen(_ fullscreen: Bool, on element: AXUIElement, before: CGRect) throws -> CGRect {
+    let desired = fullscreen as CFBoolean
+    try setAX(element, fullscreenAttribute, desired)
+    let start = ProcessInfo.processInfo.systemUptime
+    let deadline = start + 2.5
+    var lastFrame: CGRect?
+    var stableSince: TimeInterval = 0
+    var retried = false
     repeat {
-        if let full = axAttribute(element, fullscreenAttribute) as? Bool, !full { return }
-        let remaining = deadline - ProcessInfo.processInfo.systemUptime
+        let now = ProcessInfo.processInfo.systemUptime
+        let state = axAttribute(element, fullscreenAttribute) as? Bool
+        if state == fullscreen, let frame = axFrame(element) {
+            if frame != lastFrame { lastFrame = frame; stableSince = now }
+            // AXFullScreen can change while the window still reports its old frame.
+            // An already display-sized window can legitimately keep that geometry.
+            if now - stableSince >= (frame == before ? 0.45 : 0.12) { return frame }
+        } else {
+            lastFrame = nil
+            // AppKit can acknowledge a write while its previous native Space
+            // animation is still running and then ignore it. Retry once after
+            // that animation when AX still explicitly reports the old value.
+            if state == !fullscreen, !retried, now - start >= 0.6 {
+                try setAX(element, fullscreenAttribute, desired)
+                retried = true
+            }
+        }
+        let remaining = deadline - now
         if remaining <= 0 { break }
         Thread.sleep(forTimeInterval: min(0.05, remaining))
     } while ProcessInfo.processInfo.systemUptime < deadline
-    throw Failure("window did not leave fullscreen within 1.2 seconds")
+    throw Failure("window did not finish \(fullscreen ? "entering" : "leaving") fullscreen within 2.5 seconds")
 }
 
 private func savePlacementState(_ state: PlacementState) throws {
@@ -147,43 +171,101 @@ private func savePlacementState(_ state: PlacementState) throws {
     } catch { throw Failure("placement applied but cannot save ladder state: \(error.localizedDescription)") }
 }
 
+private func withPlacementLock<T>(_ action: () throws -> T) throws -> T {
+    // Each key chord spawns a new CLI process. Read and write the AX state under
+    // the same lock so a second request observes the first completed transition.
+    let lock = PlacementState.fileURL.deletingPathExtension().appendingPathExtension("lock")
+    let fd = Darwin.open(lock.path, O_WRONLY | O_CREAT | O_NOFOLLOW, mode_t(0o600))
+    guard fd >= 0 else { throw Failure("cannot open window placement lock") }
+    defer { Darwin.close(fd) }
+    guard flock(fd, LOCK_EX) == 0 else { throw Failure("cannot lock window placement") }
+    return try action()
+}
+
+@MainActor
+func runRectangleAction(_ args: [String]) async throws -> Output {
+    let parsed = try Arguments(args)
+    try parsed.count(1)
+    let url = parsed.positionals[0]
+    let prefix = "rectangle://execute-action?name="
+    let name = url.dropFirst(prefix.count)
+    guard url.hasPrefix(prefix), !name.isEmpty,
+          name.utf8.allSatisfy({ (97...122).contains($0) || (48...57).contains($0) || $0 == 45 }),
+          let actionURL = URL(string: url) else {
+        throw Failure("expected a Rectangle action URL")
+    }
+    let exitedFullscreen = try withPlacementLock {
+        guard AXIsProcessTrusted(), let app = NSWorkspace.shared.frontmostApplication else { return false }
+        let element = appElement(app.processIdentifier)
+        if let window = try? targetWindow(element, rectangle: true),
+           axAttribute(window, fullscreenAttribute) as? Bool == true {
+            guard let frame = axFrame(window) else { throw Failure("window does not expose a valid frame") }
+            _ = try setFullscreen(false, on: window, before: frame)
+            // Rectangle uses the focused window on receipt. A focus change
+            // during the native transition must not move a different window.
+            guard NSWorkspace.shared.frontmostApplication?.processIdentifier == app.processIdentifier,
+                  let focused = try? targetWindow(element, rectangle: true), CFEqual(window, focused) else {
+                throw Failure("focused window changed before Rectangle placement")
+            }
+            try? FileManager.default.removeItem(at: PlacementState.fileURL)
+            return true
+        }
+        return false
+    }
+    let configuration = NSWorkspace.OpenConfiguration()
+    configuration.activates = false
+    _ = try await NSWorkspace.shared.open(actionURL, configuration: configuration)
+    return Output(json: ["status": "dispatched", "action": String(name), "exitedFullscreen": exitedFullscreen],
+                  text: "Dispatched Rectangle action \(name)")
+}
+
 @MainActor
 private func placeWindow(_ requested: Placement, appName: String?) throws -> Output {
     let app = try targetApp(appName)
+    return try withPlacementLock { try applyPlacement(requested, to: app) }
+}
+
+@MainActor
+private func applyPlacement(_ requested: Placement, to app: NSRunningApplication) throws -> Output {
     let snapshot = try AXWindowSnapshot(targetWindow(appElement(app.processIdentifier)))
     guard let currentFrame = snapshot.frame else { throw Failure("window does not expose a valid frame") }
     let screens = try availableScreens()
     let primaryTop = screens[0].frame.maxY
     let screenFrames = screens.map { flipScreenRect($0.frame, primaryTop: primaryTop) }
     let fallback = screens.firstIndex { screenID($0) == CGMainDisplayID() } ?? 0
+    let source = overlapScreen(currentFrame, screens: screenFrames, fallback: fallback)
     // The board observes arrival. AX writes never wait for animation or acknowledgment.
     func announce(_ frame: CGRect, mode: Placement, windowID: UInt32? = nil) {
         var info: [String: Any] = ["pid": app.processIdentifier, "frame": NSStringFromRect(frame),
-                                  "mode": mode.rawValue]
+                                  "mode": mode.rawValue, "sourceFrame": NSStringFromRect(currentFrame)]
         if let windowID { info["windowID"] = windowID }
         DistributedNotificationCenter.default().postNotificationName(
             Notification.Name("com.machinespirit.leader.placement"), object: nil, userInfo: info, deliverImmediately: true)
     }
     if requested == .toggleFullscreen {
         if !snapshot.fullscreen {
-            let display = screens[overlapScreen(currentFrame, screens: screenFrames)]
+            let display = screens[source]
             announce(flipScreenRect(display.frame, primaryTop: primaryTop), mode: .fullscreen)
         }
-        try setAX(snapshot.element, fullscreenAttribute, snapshot.fullscreen ? kCFBooleanFalse : kCFBooleanTrue)
+        _ = try setFullscreen(!snapshot.fullscreen, on: snapshot.element, before: currentFrame)
+        try? FileManager.default.removeItem(at: PlacementState.fileURL)
         return Output(json: ["status": "requested", "fullscreen": !snapshot.fullscreen],
                       text: snapshot.fullscreen ? "Leaving fullscreen" : "Entering fullscreen")
     }
     if requested.isDisplayTransfer {
-        let source = overlapScreen(currentFrame, screens: screenFrames, fallback: fallback)
         guard let index = destinationDisplay(for: requested, from: source, screens: screenFrames) else {
             return Output(json: ["status": "unchanged", "mode": requested.rawValue,
                                  "pid": app.processIdentifier, "screen": screenID(screens[source])],
                           text: "No display in that direction")
         }
-        if snapshot.fullscreen { try leaveFullscreen(snapshot.element) }
-        let target = transferredFrame(currentFrame,
-            from: flipScreenRect(screens[source].visibleFrame, primaryTop: primaryTop),
-            to: flipScreenRect(screens[index].visibleFrame, primaryTop: primaryTop))
+        let windowFrame = snapshot.fullscreen
+            ? try setFullscreen(false, on: snapshot.element, before: currentFrame) : currentFrame
+        let refreshed = NSScreen.screens
+        let sourceScreen = refreshed.first { screenID($0) == screenID(screens[source]) } ?? screens[source]
+        let destination = refreshed.first { screenID($0) == screenID(screens[index]) } ?? screens[index]
+        let target = transferredFrame(windowFrame,
+            from: flipScreenRect(sourceScreen.visibleFrame, primaryTop: primaryTop),
+            to: flipScreenRect(destination.visibleFrame, primaryTop: primaryTop))
         announce(target, mode: requested)
         try setFrame(snapshot.element, target)
         // Moving displays breaks the fullscreen ladder. No window ID enumeration
@@ -196,7 +278,7 @@ private func placeWindow(_ requested: Placement, appName: String?) throws -> Out
     let point = NSEvent.mouseLocation
     let index = requested == .smart || requested == .aim
         ? (screens.firstIndex { $0.frame.contains(point) } ?? screens.firstIndex { $0 == NSScreen.main } ?? fallback)
-        : overlapScreen(currentFrame, screens: screenFrames, fallback: fallback)
+        : source
     let screen = screens[index]
     let visible = flipScreenRect(screen.visibleFrame, primaryTop: primaryTop)
     let windows = (try? windowList(allSpaces: true)) ?? []
@@ -209,7 +291,8 @@ private func placeWindow(_ requested: Placement, appName: String?) throws -> Out
     if requested == .smart { mode = zone }
     if requested == .aim {
         mode = aimedPlacement(zone: zone, current: classifyPlacement(currentFrame, visibleFrame: visible),
-                              fullscreen: snapshot.fullscreen, previous: previous, key: key, screen: screenID(screen), now: now)
+                              fullscreen: snapshot.fullscreen, previous: previous, key: key, screen: screenID(screen),
+                              now: now, windowIsOnScreen: index == source)
     }
     if requested == .step {
         mode = nextPlacement(classifyPlacement(currentFrame, visibleFrame: visible), fullscreen: snapshot.fullscreen,
@@ -219,19 +302,21 @@ private func placeWindow(_ requested: Placement, appName: String?) throws -> Out
     var frame: CGRect?
     if mode == .fullscreen {
         if !snapshot.fullscreen { announce(flipScreenRect(screen.frame, primaryTop: primaryTop), mode: mode, windowID: windowID) }
-        if !snapshot.fullscreen { try setAX(snapshot.element, fullscreenAttribute, kCFBooleanTrue) }
+        if !snapshot.fullscreen { _ = try setFullscreen(true, on: snapshot.element, before: currentFrame) }
     } else {
-        if snapshot.fullscreen { try leaveFullscreen(snapshot.element) }
+        let windowFrame = snapshot.fullscreen
+            ? try setFullscreen(false, on: snapshot.element, before: currentFrame) : currentFrame
         // Native fullscreen can change Dock/menu-bar reservations. Re-read the usable
         // area after leaving, retaining the destination display selected above.
         let destination = NSScreen.screens.first { screenID($0) == screenID(screen) } ?? screen
         let usable = flipScreenRect(destination.visibleFrame, primaryTop: primaryTop)
-        let target = placementFrame(mode, visibleFrame: usable, current: currentFrame)
+        let target = placementFrame(mode, visibleFrame: usable, current: windowFrame)
         announce(target, mode: mode, windowID: windowID)
         try setFrame(snapshot.element, target)
         frame = target
     }
-    try savePlacementState(PlacementState(windowKey: key, last: mode.rawValue, fromFullscreen: fromFullscreen, t: now,
+    try savePlacementState(PlacementState(windowKey: key, last: mode.rawValue, fromFullscreen: fromFullscreen,
+                                          t: Date().timeIntervalSince1970,
                                           aimZone: requested == .aim ? zone : nil, aimScreen: screenID(screen)))
     return Output(json: ["windowKey": key, "pid": app.processIdentifier, "mode": mode.rawValue,
                          "screen": screenID(screen), "frame": frame.map(frameJSON) as Any? ?? NSNull(),
@@ -338,7 +423,7 @@ func tileAllWindows(onlyPIDs: Set<pid_t>? = nil, underMouse: Bool = false) throw
 @MainActor
 func win(_ args: [String]) throws -> Output {
     let parsed = try Arguments(args, values: ["--app"])
-    guard let verb = parsed.positionals.first else { throw Failure("usage: ms win <place|tile-all|hide-all|cycle>") }
+    guard let verb = parsed.positionals.first else { throw Failure("usage: ms win <place|rectangle|tile-all|hide-all|cycle>") }
     let mode: Placement?
     if verb == "place" {
         try parsed.count(2)

@@ -14,6 +14,8 @@ class PanelWindow: NSPanel {
     isFloatingPanel = true
     isReleasedWhenClosed = false
     animationBehavior = .none
+    // The same nonactivating key receiver must be available inside fullscreen Spaces.
+    collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
     backgroundColor = .clear
     isOpaque = false
   }

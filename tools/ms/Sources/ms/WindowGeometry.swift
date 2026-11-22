@@ -120,7 +120,9 @@ func nextPlacement(_ current: Placement?, fullscreen: Bool, fromFullscreen: Bool
 /// A fresh center chord alternates the inset and usable bounds. Repeating an
 /// edge chord quickly keeps the existing grow ladder on that window and display.
 func aimedPlacement(zone: Placement, current: Placement?, fullscreen: Bool,
-                    previous: PlacementState?, key: String, screen: UInt32, now: TimeInterval) -> Placement {
+                    previous: PlacementState?, key: String, screen: UInt32, now: TimeInterval,
+                    windowIsOnScreen: Bool = true) -> Placement {
+    guard windowIsOnScreen else { return zone }
     if zone == .amm { return current == .amm && !fullscreen ? .max : .amm }
     if let previous, previous.matches(key, now: now), now - previous.t < 1.5,
        previous.aimZone == zone, previous.aimScreen == screen {
