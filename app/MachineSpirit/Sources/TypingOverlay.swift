@@ -72,7 +72,10 @@ final class TypingOverlay {
 
   func show(path: String, screen: String?, preview: Bool = false, held: Bool = false) {
     let node = path.isEmpty ? nil : state.route(atPath: path)?.last.flatMap { renderer.nodes[$0] }
-    if !held { placementPreview.prepareLaunch(for: node?.children.compactMap { LaunchCue(action: $0.action) } ?? []) }
+    if !held {
+      let children = node?.children ?? (path.isEmpty ? state.model?.children ?? [] : [])
+      placementPreview.prepareLaunch(for: children.compactMap { LaunchCue(action: $0.action) })
+    }
     if held { placementPreview.leaveNavigation() }
     else if preview, let child = node?.children.first(where: { $0.key == "space" }),
             let intent = PlacementIntent(action: child.action) {
@@ -82,6 +85,13 @@ final class TypingOverlay {
             node.children.count == 1, let child = node.children.first, let key = child.key,
             let intent = PlacementIntent(action: child.action) {
       placementPreview.arm(intent, path: path + "/" + key, fx: shown ? renderer.fx : OverlayFX())
+    } else if let node, let key = node.key,
+              let branch = node.children.first(where: { $0.key == key }), branch.children.count == 1,
+              let leaf = branch.children.first, leaf.key == key,
+              let intent = PlacementIntent(action: leaf.action) {
+      // On the first key only identify the window. Another branch can still win.
+      placementPreview.arm(intent, path: [path, key, key].joined(separator: "/"),
+                           fx: shown ? renderer.fx : OverlayFX(), sourceOnly: true)
     } else { placementPreview.leaveNavigation() }
     enqueue(Request(path: path, screen: screen, received: CACurrentMediaTime()))
   }
@@ -361,6 +371,7 @@ final class OverlayLayerView: NSView {
   private(set) var nodes: [String: Node] = [:]
   private(set) var focusID: String?
   private var widths: [String: CGFloat] = [:]
+  private var captureNodes: Set<String> = []
   private var visible: Set<String> = []
   private var scale: CGFloat = 0
   private var cachedLayouts: [String: [String: OverlayScene.Item]] = [:]
@@ -370,6 +381,9 @@ final class OverlayLayerView: NSView {
   private let ease = CAMediaTimingFunction(controlPoints: 0.2, 0.9, 0.3, 1)
   private var mint: CGColor { fx.accentColor.cgColor }
   private let red = NSColor(calibratedRed: 1, green: 59 / 255, blue: 59 / 255, alpha: 1).cgColor
+  private let captureAmber = NSColor(srgbRed: 1, green: 0.66, blue: 0.23, alpha: 1).cgColor
+  private let captureChip = NSColor(srgbRed: 0.36, green: 0.17, blue: 0.03, alpha: 0.96).cgColor
+  private let normalChip = NSColor(calibratedWhite: 0.025, alpha: 0.88).cgColor
   private let blue = NSColor(calibratedRed: 59 / 255, green: 168 / 255, blue: 1, alpha: 1).cgColor
   override var isFlipped: Bool { true }
   var layerCount: Int {
@@ -447,10 +461,11 @@ final class OverlayLayerView: NSView {
     CATransaction.setDisableActions(true)
     nodeRoot.sublayers = nil
     edgeRoot.sublayers = nil
-    visuals.removeAll(); edges.removeAll(); nodes.removeAll(); widths.removeAll()
+    visuals.removeAll(); edges.removeAll(); nodes.removeAll(); widths.removeAll(); captureNodes.removeAll()
     visible.removeAll(); displayed.removeAll(); hovered = nil; cachedLayouts.removeAll(); focusID = nil
     func visit(_ node: Node, parent: String?) {
       nodes[node.id] = node
+      if node.interactiveCaptureLabel != nil { captureNodes.insert(node.id) }
       let container = CALayer()
       container.name = node.id
       container.bounds = CGRect(x: -24, y: -24, width: 48, height: 48)
@@ -494,7 +509,7 @@ final class OverlayLayerView: NSView {
       widths[node.id] = width
       let chip = CALayer()
       chip.frame = CGRect(x: -width / 2, y: 28, width: width, height: 22)
-      chip.backgroundColor = NSColor(calibratedWhite: 0.025, alpha: 0.88).cgColor
+      chip.backgroundColor = normalChip
       chip.cornerRadius = 6
       let label = text(name, size: 12, color: NSColor.white.cgColor)
       label.frame = CGRect(x: 6, y: 3, width: width - 12, height: 17)
@@ -683,6 +698,17 @@ final class OverlayLayerView: NSView {
       }
       if fresh || (splash && id == focus) { arrivalJitter(v.container) }
       v.label.opacity = item.label ? 1 : 0
+      if captureNodes.contains(id) {
+        let armed = item.parent == focus
+        let color = armed ? captureAmber : mint
+        v.disc.borderColor = color
+        v.glyph.foregroundColor = color
+        v.label.backgroundColor = armed ? captureChip : normalChip
+        edges[id]?.strokeColor = color
+        if armed && fx.letterPop && focusID != focus {
+          pulse(v.glyph, strength: 1.25, duration: fx.popDuration)
+        }
+      }
       v.container.zPosition = id == focus ? 2 : (item.scale == 1 ? 1 : 0)
       if let edge = edges[id], let parent = item.parent, let source = items[parent]?.center {
         let path = tracePath(from: source, to: item.center)
@@ -958,7 +984,8 @@ final class OverlayLayerView: NSView {
     defer { CATransaction.commit() }
     for (node, item) in displayed {
       let highlighted = active.contains(node)
-      let dimmed = id != nil && !highlighted
+      let armedCapture = item.parent == focusID && captureNodes.contains(node)
+      let dimmed = id != nil && !highlighted && !armedCapture
       if let v = visuals[node] {
         animate(v.container, "transform.scale", to: item.scale * (highlighted ? 1.08 : 1),
                 duration: duration, springy: highlighted)

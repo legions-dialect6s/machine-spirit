@@ -26,6 +26,12 @@ owner confirmation only**.
 
 ---
 
+## Publishing a reviewed checkpoint
+
+In this checkout a commit on `main` with the final trailer `Checkpoint: ready` triggers [.githooks/post-commit](.githooks/post-commit). Use the trailer after checking the affected app or subsystem. Ordinary commits stay local. The hook invokes [scripts/push-checkpoint.sh](scripts/push-checkpoint.sh), which requires a clean checkout, checks the outgoing diff, scans all outgoing commits with gitleaks, runs both Swift package suites, tests the launcher or builds the board when their code changes, and pushes the tested commit to `origin/main` as a fast-forward. It pushes a single branch. There is no scheduler, model call or background process.
+
+Enable this per clone with `git config core.hooksPath .githooks` and `git config machinespirit.pushCheckpoints true`. Disable automatic publication with `git config machinespirit.pushCheckpoints false`. If verification or the network fails, the commit remains local. Retry with `./scripts/push-checkpoint.sh` after addressing the reported error.
+
 ## Ledger
 
 ### v0.5.1-classic-driver — definitive checkpoint, 2026-11-19

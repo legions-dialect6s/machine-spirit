@@ -104,14 +104,27 @@ struct AppIconImage: View {
 }
 
 struct FavIconImage: View {
-  let url: String
+  let url: URL?
   let icon: String
   let size: NSSize
 
   init(url: String, icon: String, size: NSSize = NSSize(width: 24, height: 24)) {
-    self.url = "https://www.google.com/s2/favicons?sz=128&domain=\(url)"
+    self.url = Self.requestURL(for: url)
     self.size = size
     self.icon = icon
+  }
+
+  static func requestURL(for value: String) -> URL? {
+    guard let site = URLComponents(string: value),
+      ["http", "https"].contains(site.scheme?.lowercased() ?? ""),
+      let host = site.host, !host.isEmpty
+    else { return nil }
+    var request = URLComponents()
+    request.scheme = "https"
+    request.host = "www.google.com"
+    request.path = "/s2/favicons"
+    request.queryItems = [URLQueryItem(name: "sz", value: "128"), URLQueryItem(name: "domain", value: host)]
+    return request.url
   }
 
   var fallback: some View {
@@ -120,8 +133,8 @@ struct FavIconImage: View {
   }
 
   var body: some View {
-    if url.starts(with: "http:") || url.starts(with: "https:") {
-      KFImage.url(URL(string: url)).placeholder({
+    if let url {
+      KFImage.url(url).placeholder({
         fallback
       }).resizable()
         .padding(4)

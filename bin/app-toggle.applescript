@@ -3,8 +3,6 @@ use scripting additions
 -- app-toggle.sh <App Name> [--close quit|windows]. Internal argv also includes
 -- the sibling FaceTime helper. Resolve apps through NSWorkspace, then use PID
 -- for AX so localized/process names need not equal the requested application.
--- AppKit mouse coordinates are flipped using the PRIMARY screen's top edge,
--- not the active screen: this handles monitors above/left of the main display.
 -- Poll only after launch (100 ms, at most 3 s). No work occurs while idle.
 -- Failures are silent; TextEdit's intentional native save prompt is preserved.
 on run argv
@@ -17,12 +15,17 @@ on run argv
   if appName = "FaceTime" and (frontApp's bundleIdentifier() as text) = "com.apple.MobileSMS" then
    return do shell script "/usr/bin/osascript " & quoted form of item 3 of argv & " 2>/dev/null"
   end if
-  set appPath to ws's fullPathForApplication:appName
+  set appURL to ws's URLForApplicationWithBundleIdentifier:appName
+  if appURL is missing value then
+   set appPath to ws's fullPathForApplication:appName
+  else
+   set appPath to appURL's |path|()
+  end if
   if appPath is missing value then return "NONE"
   set bundleID to (current application's NSBundle's bundleWithPath:appPath)'s bundleIdentifier()
   set apps to current application's NSRunningApplication's runningApplicationsWithBundleIdentifier:bundleID
   if (apps's |count|()) = 0 then
-   do shell script "/usr/bin/open -a " & quoted form of appName & " >/dev/null 2>&1"
+   do shell script "/usr/bin/open -a " & quoted form of (appPath as text) & " >/dev/null 2>&1"
    set deadline to (current application's NSDate's timeIntervalSinceReferenceDate()) + 3
    repeat 30 times
     delay 0.1
@@ -56,77 +59,44 @@ on run argv
   end if
   set runningApp to apps's firstObject()
   set pid to runningApp's processIdentifier() as integer
-  set wasFront to runningApp's isActive() as boolean
+  set wasFront to ((frontApp's processIdentifier()) as integer) = pid
   set wasHidden to runningApp's isHidden() as boolean
-  -- TextEdit frontmost with zero documents is only its Open panel — a Dock
-  -- ghost. Re-typing the bind quits it.
-  if wasFront and (bundleID as text) = "com.apple.TextEdit" then
-   tell application "TextEdit" to set docCount to count of documents
-   if docCount = 0 then
-    tell application "TextEdit" to quit
-    return "OK"
+  -- A focused quit needs no Accessibility round-trip. Let the app resolve unsaved work.
+  if wasFront and not wasHidden and closeMode = "quit" then
+   if (bundleID as text) = "com.apple.TextEdit" then
+    tell application "TextEdit" to quit saving ask
+   else if not (runningApp's terminate() as boolean) then
+    return "NONE"
    end if
+   return "OK"
   end if
+  -- Focused utility windows close on repeat, even with the pointer on another display.
+  -- Reopening through Launch Services also restores windowless background utilities.
   with timeout of 2 seconds
-   if not wasFront or wasHidden then
-    runningApp's unhide()
-    tell application "System Events" to tell (first application process whose unix id is pid)
+   tell application "System Events" to tell (first application process whose unix id is pid)
+    set windowCount to count of windows
+    if not wasFront or wasHidden then
      repeat with w in windows
       try
        if value of attribute "AXMinimized" of w then set value of attribute "AXMinimized" of w to false
       end try
      end repeat
-    end tell
-    runningApp's activateWithOptions:(current application's NSApplicationActivateIgnoringOtherApps)
-    return "OK"
-   end if
-   set mousePoint to current application's NSEvent's mouseLocation()
-   set primaryFrame to (current application's NSScreen's screens()'s firstObject())'s frame()
-   set mouseX to mousePoint's x
-   set mouseY to ((item 2 of item 1 of primaryFrame) + (item 2 of item 2 of primaryFrame)) - (mousePoint's y)
-   set overWindow to false
-   tell application "System Events" to tell (first application process whose unix id is pid)
-    repeat with w in windows
-     -- Some apps expose transient AX windows without geometry/minimized state.
-     try
-      set minimized to false
-      try
-       if (value of attribute "AXMinimized" of w) is true then set minimized to true
-      end try
-      if not minimized then
-       set {wx, wy} to position of w
-       set {ww, wh} to size of w
-       if mouseX >= wx and mouseX < wx + ww and mouseY >= wy and mouseY < wy + wh then set overWindow to true
-      end if
-     end try
-    end repeat
-    -- Frontmost with no windows = a Dock ghost: re-typing it closes it.
-    if (count of windows) = 0 then set overWindow to true
-    if not overWindow then
-     if not frontmost then return "NONE"
-     keystroke "`" using command down
-     -- Cmd-` raises the next window itself; do not race it by re-raising window 1.
-     return "OK"
     end if
    end tell
   end timeout
-  -- Keep user-facing save confirmations outside the short AX timeout.
+  if windowCount = 0 and (not wasFront or wasHidden or closeMode = "windows") then
+   do shell script "/usr/bin/open -a " & quoted form of (appPath as text)
+   runningApp's activateWithOptions:(current application's NSApplicationActivateIgnoringOtherApps)
+   return "OK"
+  end if
+  if not wasFront or wasHidden then
+   runningApp's unhide()
+   if not (runningApp's activateWithOptions:(current application's NSApplicationActivateIgnoringOtherApps)) then return "NONE"
+   return "OK"
+  end if
+  if not (runningApp's isActive() as boolean) then return "NONE"
   if (bundleID as text) = "com.apple.TextEdit" then
-   tell application "TextEdit"
-    close every document saving ask
-   end tell
-   -- close is asynchronous: give it up to 1.5s to settle before quitting.
-   -- If the user cancels a save prompt the document remains and we keep the app.
-   if closeMode = "quit" then
-    repeat 15 times
-     tell application "TextEdit" to set docCount to count of documents
-     if docCount = 0 then exit repeat
-     delay 0.1
-    end repeat
-    if docCount = 0 then tell application "TextEdit" to quit
-   end if
-  else if closeMode = "quit" then
-   tell application appName to quit
+   tell application "TextEdit" to close every document saving ask
   else
    with timeout of 2 seconds
     tell application "System Events" to tell (first application process whose unix id is pid)

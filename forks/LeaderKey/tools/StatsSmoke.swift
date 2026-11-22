@@ -27,13 +27,18 @@ struct StatsSmoke {
       precondition(rows.map(\.name) == SystemStats.names)
       if updates == 2 {
         for row in rows {
-          print("\(row.name): \(row.summary)")
+          print("\(row.name): \(row.summary) [compact: \(row.compactSummary)]")
           for detail in row.details { print("  \(detail)") }
         }
+        let disk = rows.first { $0.name == "Disk" }
+        precondition(disk?.compactSummary.hasPrefix("FREE ") == true)
+        let net = rows.first { $0.name == "Network ↓/↑" }
+        precondition(net != nil && net?.details.isEmpty == false)
       }
     }
-    // Closed means no detailed samples, even if the bar CPU is being sampled.
+    // Closed means no detailed samples, even if the bar CPU/GPU/Temp are being sampled.
     stats.sampleCPU()
+    stats.sampleBar(gpu: false, temperature: false)
     RunLoop.main.run(until: Date().addingTimeInterval(1.2))
     precondition(stats.detailedSamples == 0)
     stats.open()

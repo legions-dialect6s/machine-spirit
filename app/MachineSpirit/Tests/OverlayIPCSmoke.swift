@@ -28,7 +28,9 @@ final class IPCDefaults: UserDefaults, @unchecked Sendable {
       }
     }
     let defaults = IPCDefaults()
-    let stats = StatsStore(defaults: defaults, url: URL(fileURLWithPath: "/dev/null"))
+    let statsFile = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: statsFile) }
+    let stats = StatsStore(defaults: defaults, url: statsFile)
     let state = AppState(stats: stats)
     state.model = Node(id: "root", children: [
       Node(id: "root/a", key: "a", label: "applications", children: [
@@ -271,8 +273,10 @@ final class IPCDefaults: UserDefaults, @unchecked Sendable {
     try capture("graphics", window: graphics)
     graphics.orderOut(nil)
     defaults.optedIn = true
-    send("fired", ["path": "a/m"]); pump(0.05)
-    precondition(stats.snapshot.totalFires == 1 && stats.snapshot.firesPerPath == ["a/m": 1])
+    send("fired", ["path": "a/m"])
+    let receiptDeadline = ProcessInfo.processInfo.systemUptime + 2
+    while stats.snapshot.totalFires == 0 && ProcessInfo.processInfo.systemUptime < receiptDeadline { pump(0.02) }
+    precondition(stats.snapshot.totalFires == 1 && stats.snapshot.firesPerPath == ["a/m": 1], "Expected one a/m fire, observed \(stats.snapshot.firesPerPath)")
     delegate.application(NSApp, open: [URL(string: "machinespirit://fired?path=a/m")!])
     precondition(stats.snapshot.totalFires == 1, "Legacy URL double-counted stats")
     stats.disable()

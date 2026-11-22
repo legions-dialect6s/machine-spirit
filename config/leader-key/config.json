@@ -137,6 +137,18 @@
           ],
           "key" : "b",
           "type" : "group"
+        },
+        {
+          "actions" : [
+            {
+              "key" : "e",
+              "label" : "Blender",
+              "type" : "application",
+              "value" : "/Applications/Blender.app"
+            }
+          ],
+          "key" : "l",
+          "type" : "group"
         }
       ],
       "key" : "b",
@@ -332,8 +344,9 @@
           "actions" : [
             {
               "key" : "c",
-              "type" : "application",
-              "value" : "/System/Applications/FaceTime.app"
+              "label" : "FaceTime",
+              "type" : "command",
+              "value" : "~/bin/run-quiet.sh ~/bin/app-toggle.sh \"com.apple.FaceTime\""
             },
             {
               "key" : "e",
@@ -380,11 +393,11 @@
         {
           "actions" : [
             {
-              "hold" : "~/bin/ms win rectangle \"rectangle://execute-action?name=next-display\"",
+              "hold" : "~/bin/run-quiet.sh ~/bin/ms win place display-next",
               "holdKeys" : "fg",
               "key" : "f",
               "type" : "command",
-              "value" : "~/bin/ms win rectangle \"rectangle://execute-action?name=next-display\""
+              "value" : "~/bin/run-quiet.sh ~/bin/ms win place display-next"
             }
           ],
           "key" : "f",
@@ -398,6 +411,12 @@
           "value" : "~/bin/run-quiet.sh osascript ~/bin/app-jump.applescript Finder"
         },
         {
+          "key" : "m",
+          "label" : "Find My",
+          "type" : "command",
+          "value" : "~/bin/run-quiet.sh ~/bin/app-toggle.sh \"com.apple.findmy\""
+        },
+        {
           "key" : "p",
           "type" : "folder",
           "value" : "__HOME__/projects"
@@ -406,7 +425,7 @@
           "actions" : [
             {
               "key" : "s",
-              "type" : "application",
+              "type" : "folder",
               "value" : "__HOME__/Documents/screenshots_n_recordings"
             }
           ],
@@ -499,12 +518,12 @@
         {
           "actions" : [
             {
-              "hold" : "~/bin/ms win rectangle \"rectangle://execute-action?name=previous-display\"",
+              "hold" : "~/bin/run-quiet.sh ~/bin/ms win place display-previous",
               "holdKeys" : "gf",
               "key" : "g",
               "label" : "Previous display",
               "type" : "command",
-              "value" : "~/bin/ms win rectangle \"rectangle://execute-action?name=previous-display\""
+              "value" : "~/bin/run-quiet.sh ~/bin/ms win place display-previous"
             }
           ],
           "key" : "g",
@@ -567,8 +586,9 @@
               "actions" : [
                 {
                   "key" : "m",
+                  "label" : "Little Snitch Network Monitor",
                   "type" : "command",
-                  "value" : "open -a \"Little Snitch Network Monitor\""
+                  "value" : "~/bin/run-quiet.sh ~/bin/app-toggle.sh \"Little Snitch Network Monitor\" --close windows"
                 }
               ],
               "key" : "n",
@@ -791,6 +811,8 @@
     {
       "actions" : [
         {
+          "hold" : "~/bin/safari-merge-windows.sh",
+          "holdKeys" : "a",
           "key" : "a",
           "type" : "command",
           "value" : "~/bin/run-quiet.sh osascript ~/bin/app-jump.applescript Safari"
@@ -1123,8 +1145,9 @@
           "actions" : [
             {
               "key" : "w",
+              "label" : "Step up",
               "type" : "command",
-              "value" : "~/bin/ms win rectangle \"rectangle://execute-action?name=top-half\""
+              "value" : "~/bin/run-quiet.sh ~/bin/ms win place half-up"
             }
           ],
           "key" : "w",
@@ -1147,8 +1170,9 @@
           "actions" : [
             {
               "key" : "x",
+              "label" : "Step down",
               "type" : "command",
-              "value" : "~/bin/ms win rectangle \"rectangle://execute-action?name=bottom-half\""
+              "value" : "~/bin/run-quiet.sh ~/bin/ms win place half-down"
             }
           ],
           "key" : "x",

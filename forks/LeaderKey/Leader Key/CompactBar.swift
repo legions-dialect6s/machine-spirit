@@ -1,73 +1,162 @@
 import Cocoa
 
-/// Visible, rounded content only: identical frames never reach the status button.
+/// Only configured segments reserve space. A missing sample keeps its slot.
 struct CompactBarState: Equatable {
+  enum Sample: Equatable {
+    case hidden
+    case unavailable
+    case value(Int)
+
+    var isVisible: Bool { self != .hidden }
+    var value: Int? {
+      if case let .value(value) = self { return value }
+      return nil
+    }
+
+    init(enabled: Bool, value: Int?) {
+      self = enabled ? value.map(Self.value) ?? .unavailable : .hidden
+    }
+  }
+
+  enum Pressure: Int {
+    case normal = 1
+    case warning = 2
+    case critical = 4
+
+    var name: String {
+      switch self {
+      case .normal: return "normal"
+      case .warning: return "warning"
+      case .critical: return "critical"
+      }
+    }
+  }
+
   var skull: Bool
-  var summoned: Bool
-  var counts: String
-  var cpu: Int?
-  var pressure: Int?  // RAM used percent; pressure level determines warning color.
-  var level: Int
-  var awake: Bool
+  enum TaskCount: Equatable {
+    case hidden, unavailable
+    case counts(working: Int, open: Int)
+  }
+  var t3: TaskCount
+  var cpu: Sample
+  var gpu: Sample
+  var memory: Sample
+  var pressureLevel: Pressure?
+  var temperature: Sample
+  var awake: Bool?
   var dark: Bool
   var scale: CGFloat
   var height: CGFloat
-  var gpu: Int? = nil
-  var temperature: Int? = nil
-  var network: String? = nil
-  var freeGiB: Double? = nil
+
+  func descriptions(awakeStatus: String) -> [String] {
+    var descriptions: [String] = []
+    func describe(_ label: String, _ sample: Sample, unit: String) {
+      guard sample.isVisible else { return }
+      descriptions.append("\(label) " + (sample.value.map { "\($0)\(unit)" } ?? "unavailable"))
+    }
+    switch t3 {
+    case .hidden: break
+    case .unavailable: descriptions.append("T3 task data unavailable")
+    case .counts(let working, let open): descriptions.append("T3 tasks: \(working) working / \(open) open")
+    }
+    describe("CPU", cpu, unit: "%")
+    describe("GPU", gpu, unit: "%")
+    describe("RAM used", memory, unit: "%")
+    if memory.isVisible {
+      descriptions.append("Memory pressure \(pressureLevel?.name ?? "unavailable")")
+    }
+    describe("Temperature", temperature, unit: " degrees Celsius")
+    if awake != nil { descriptions.append("Keep awake \(awakeStatus)") }
+    return descriptions
+  }
 }
 
 enum CompactBar {
-  static let warm = NSColor(srgbRed: 1, green: 176 / 255, blue: 32 / 255, alpha: 1)
-  static let hot = NSColor(srgbRed: 1, green: 77 / 255, blue: 77 / 255, alpha: 1)
+  private static let spacing: CGFloat = 2
+  static let skullWidth: CGFloat = 20
+  private static let awakeWidth: CGFloat = 17
+
+  struct Cell: Equatable {
+    let label: String
+    let value: String
+    let width: CGFloat
+    var tint: NSColor
+  }
+
+  private static let valueFont = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .medium)
+  private static func labelAttributes(foreground: NSColor) -> [NSAttributedString.Key: Any] {
+    [
+      .font: NSFont.systemFont(ofSize: 7, weight: .semibold), .kern: 0.6,
+      .foregroundColor: foreground.withAlphaComponent(0.72),
+    ]
+  }
+
+  static func countsValue(_ count: Int) -> String {
+    count > 99 ? "99+" : String(count)
+  }
+
+  static func cells(for state: CompactBarState) -> [Cell] {
+    let foreground: NSColor = state.dark ? .white : .black
+    let warm = state.dark ? NSColor(srgbRed: 1, green: 0.70, blue: 0.20, alpha: 1)
+      : NSColor(srgbRed: 0.52, green: 0.29, blue: 0.02, alpha: 1)
+    let hot = state.dark ? NSColor(srgbRed: 1, green: 0.38, blue: 0.38, alpha: 1)
+      : NSColor(srgbRed: 0.65, green: 0.10, blue: 0.15, alpha: 1)
+    func heat(_ value: Int?, warm lowerLimit: Int, hot upperLimit: Int) -> NSColor {
+      guard let value else { return foreground }
+      return value >= upperLimit ? hot : value >= lowerLimit ? warm : foreground
+    }
+    func percent(_ value: Int?) -> String {
+      value.map { String(max(0, min(100, $0))) } ?? "—"
+    }
+
+    var cells: [Cell] = []
+    if state.t3 != .hidden {
+      let value: String
+      if case let .counts(working, open) = state.t3 {
+        value = "\(countsValue(working))/\(countsValue(open))"
+      } else { value = "—" }
+      cells.append(Cell(label: "T3", value: value, width: 43, tint: foreground))
+    }
+    if state.cpu.isVisible {
+      cells.append(Cell(label: "CPU%", value: percent(state.cpu.value), width: 26,
+                        tint: heat(state.cpu.value, warm: 70, hot: 90)))
+    }
+    if state.gpu.isVisible {
+      cells.append(Cell(label: "GPU%", value: percent(state.gpu.value), width: 26,
+                        tint: heat(state.gpu.value, warm: 70, hot: 90)))
+    }
+    if state.memory.isVisible {
+      cells.append(Cell(label: "RAM%", value: percent(state.memory.value), width: 26, tint: foreground))
+      let pressure: (String, NSColor)
+      switch state.pressureLevel {
+      case .normal: pressure = ("OK", foreground)
+      case .warning: pressure = ("WARN", warm)
+      case .critical: pressure = ("CRIT", hot)
+      case nil: pressure = ("—", foreground)
+      }
+      cells.append(Cell(label: "MPRS", value: pressure.0, width: 34, tint: pressure.1))
+    }
+    if state.temperature.isVisible {
+      let value = state.temperature.value.map { value in
+        if value > 999 { return "999+" }
+        if value < -99 { return "−99−" }
+        return "\(value)°"
+      } ?? "—"
+      cells.append(Cell(label: "TEMP", value: value, width: 27,
+                        tint: heat(state.temperature.value, warm: 80, hot: 95)))
+    }
+    return cells
+  }
 
   static func image(_ state: CompactBarState) -> NSImage {
     let foreground: NSColor = state.dark ? .white : .black
-    let font = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .medium)
-    let labelAttributes: [NSAttributedString.Key: Any] = [
-      .font: NSFont.systemFont(ofSize: 7, weight: .semibold), .kern: 0.6,
-      .foregroundColor: foreground.withAlphaComponent(0.60),
-    ]
-    func color(_ value: Int, warm: Int, hot: Int) -> NSColor {
-      value >= hot ? Self.hot : value >= warm ? Self.warm : foreground
-    }
-    var cells: [(label: String, value: String, color: NSColor, width: CGFloat)] = []
-    func cell(_ label: String, _ value: String, _ tint: NSColor, minimum: CGFloat = 28) {
-      let width = max(
-        minimum,
-        ceil(
-          max(
-            (label as NSString).size(withAttributes: labelAttributes).width,
-            (value as NSString).size(withAttributes: [.font: font]).width)))
-      cells.append((label, value, tint, width))
-    }
-    let counts = state.counts.split(separator: "·")
-    if counts.count == 3 {
-      for (label, value) in zip(["TERM", "TMUX", "SHEOL"], counts) {
-        cell(label, String(value), foreground, minimum: 25)
-      }
-    }
-    if let cpu = state.cpu { cell("CPU", "\(cpu)%", color(cpu, warm: 70, hot: 90)) }
-    if let gpu = state.gpu { cell("GPU", "\(gpu)%", color(gpu, warm: 70, hot: 90)) }
-    if let ram = state.pressure {
-      let tint =
-        state.level == 4 || ram >= 95
-        ? Self.hot : state.level == 2 || ram >= 85 ? Self.warm : foreground
-      cell("RAM", "\(ram)%", tint)
-    }
-    if let temperature = state.temperature {
-      cell("TEMP", "\(temperature)°", color(temperature, warm: 80, hot: 95))
-    }
-    if let network = state.network { cell("NET", network, foreground, minimum: 94) }
-    if let available = state.freeGiB {
-      cell("FREE", String(format: "%.1fG", available), available < 5 ? Self.hot : (available < 10 ? Self.warm : foreground))
-    }
-    let skullWidth: CGFloat = state.skull ? 21 : 0
-    let width = max(
-      4,
-      skullWidth + cells.reduce(0) { $0 + $1.width + 4 }
-        + (state.awake ? 8 : 0) - (cells.isEmpty ? 0 : 4))
+    let labelAttr = labelAttributes(foreground: foreground)
+    let cells = cells(for: state)
+    let skullWidth = state.skull ? Self.skullWidth : 0
+    let awakeSlot = state.awake == nil ? 0 : awakeWidth + spacing
+    let width = max(4, skullWidth + awakeSlot
+      + cells.reduce(0) { $0 + $1.width + spacing }
+      - (state.awake == nil && cells.isEmpty ? 0 : spacing))
     let size = NSSize(width: width, height: state.height)
     let rep = NSBitmapImageRep(
       bitmapDataPlanes: nil, pixelsWide: Int(ceil(width * state.scale)),
@@ -76,110 +165,49 @@ enum CompactBar {
     rep.size = size
     NSGraphicsContext.saveGraphicsState()
     NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
-    if state.skull {
-      let rect = NSRect(x: 0, y: (size.height - 17) / 2, width: 17, height: 17)
-      NSImage(named: state.summoned ? "StatusItem-filled" : "StatusItem")?.draw(in: rect)
-      if !state.summoned {
-        foreground.setFill()
-        rect.fill(using: .sourceAtop)
-      }
-    }
+    // The status button's skull layer uses this reserved leading slot.
     var x = skullWidth
-    // Two lines occupy 21 points, centered in either a 22- or 24-point menu bar.
     let bottom = floor((state.height - 21) / 2)
     for cell in cells {
-      let labelWidth = (cell.label as NSString).size(withAttributes: labelAttributes).width
+      let labelWidth = (cell.label as NSString).size(withAttributes: labelAttr).width
+      let labelX = x + (cell.width - labelWidth) / 2
       (cell.label as NSString).draw(
-        at: NSPoint(x: x + (cell.width - labelWidth) / 2, y: bottom + 12),
-        withAttributes: labelAttributes)
-      let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: cell.color]
+        at: NSPoint(x: labelX, y: bottom + 12),
+        withAttributes: labelAttr)
+      let attributes: [NSAttributedString.Key: Any] = [
+        .font: valueFont, .foregroundColor: cell.tint,
+      ]
       let valueWidth = (cell.value as NSString).size(withAttributes: attributes).width
-      (cell.value as NSString).draw(
-        at: NSPoint(x: x + (cell.width - valueWidth) / 2, y: bottom),
-        withAttributes: attributes)
-      x += cell.width + 4
+      let valueX = x + (cell.width - valueWidth) / 2
+      (cell.value as NSString).draw(at: NSPoint(x: valueX, y: bottom), withAttributes: attributes)
+      x += cell.width + spacing
     }
-    if state.awake || (!state.skull && cells.isEmpty) {
+    if let awake = state.awake {
+      let rect = NSRect(x: x + 1, y: (size.height - 7) / 2, width: 15, height: 7)
+      let capsule = NSBezierPath(roundedRect: rect, xRadius: 3.5, yRadius: 3.5)
+      NSGraphicsContext.saveGraphicsState()
+      capsule.addClip()
+      if awake {
+        foreground.withAlphaComponent(0.35).setFill()
+        rect.fill()
+        foreground.setFill()
+        NSRect(x: rect.midX, y: rect.minY, width: rect.width / 2, height: rect.height).fill()
+      }
+      NSGraphicsContext.restoreGraphicsState()
+      foreground.withAlphaComponent(awake ? 0.95 : 0.5).setStroke()
+      capsule.lineWidth = 1
+      capsule.stroke()
+    } else if !state.skull && cells.isEmpty {
       foreground.setFill()
-      NSBezierPath(
-        ovalIn: NSRect(
-          x: state.awake ? max(0, width - 4) : 0,
-          y: (size.height - 4) / 2, width: 4, height: 4)
-      ).fill()
+      NSBezierPath(ovalIn: NSRect(x: 0, y: (size.height - 4) / 2, width: 4, height: 4)).fill()
     }
     NSGraphicsContext.restoreGraphicsState()
     let image = NSImage(size: size)
     image.addRepresentation(rep)
-    image.isTemplate = false  // Preserve amber/red; appearance is explicitly part of the render key.
+    image.isTemplate = false
     return image
   }
-}
 
-/// All bar numbers share one demand-driven timer. Main-thread confined.
-/// No run-loop work remains after a 400 ms transition; retarget from the current value.
-final class NumberTween {
-  private struct Value {
-    var start: Double
-    var target: Double
-    var began: TimeInterval
-    func at(_ now: TimeInterval) -> Double {
-      let t = min(1, max(0, (now - began) / 0.4))
-      return start + (target - start) * (1 - pow(1 - t, 3))
-    }
-  }
-  private var values: [String: Value] = [:]
-  private(set) var timer: Timer?
-  var onFrame: (() -> Void)?
-
-  func set(_ targets: [String: Double], now: TimeInterval = ProcessInfo.processInfo.systemUptime) {
-    values = values.filter { targets[$0.key] != nil }
-    for (key, target) in targets where target.isFinite {
-      // Only the machine-spirit counts glide: they change rarely. Stats
-      // resample every second, so tweening them kept the bar redrawing at
-      // ~12 fps forever (measured ~6% CPU idle) — they snap instead.
-      if !key.hasPrefix("count") {
-        values[key] = Value(start: target, target: target, began: now)
-      } else if let old = values[key] {
-        if old.target != target {
-          values[key] = Value(start: old.at(now), target: target, began: now)
-        }
-      } else {
-        values[key] = Value(start: target, target: target, began: now)
-      }
-    }
-    if !isAnimating(at: now) {
-      stop()
-      return
-    }
-    guard timer == nil else { return }
-    let timer = Timer(timeInterval: 1 / 30, repeats: true) { [weak self] _ in self?.tick() }
-    self.timer = timer
-    RunLoop.main.add(timer, forMode: .common)
-  }
-
-  func value(_ key: String, now: TimeInterval = ProcessInfo.processInfo.systemUptime) -> Double? {
-    values[key]?.at(now)
-  }
-
-  private func isAnimating(at now: TimeInterval) -> Bool {
-    values.values.contains { $0.start != $0.target && now - $0.began < 0.4 }
-  }
-
-  private func tick() {
-    if !isAnimating(at: ProcessInfo.processInfo.systemUptime) { stop() }
-    onFrame?()
-  }
-
-  func stop() {
-    let wasRunning = timer != nil
-    timer?.invalidate()
-    timer = nil
-    #if DEBUG
-      assert(timer == nil, "A settled number tween must have no timer")
-      if wasRunning { NSLog("NumberTween settled: timer=nil") }
-    #endif
-  }
-  deinit { timer?.invalidate() }
 }
 
 extension NSMenuItem {

@@ -5,7 +5,7 @@ struct GraphicsSettings: View {
   @State private var resetID = UUID()
   init(expanded: Bool = false) { _expanded = State(initialValue: expanded) }
   var body: some View {
-    DisclosureGroup("Graphics", isExpanded: $expanded) {
+    DisclosureGroup("Graphics & feedback", isExpanded: $expanded) {
       ScrollView {
         GraphicsControls().id(resetID)
         HStack {
@@ -27,10 +27,16 @@ private struct GraphicsControls: View {
   @AppStorage("msFX.curvature") private var curvature = 0.4
   @AppStorage("msFX.randomness") private var randomness = 0.35
   @AppStorage("msFX.shake") private var shake = 0.4
+  @AppStorage("msFX.audioFeedback") private var audioFeedback = "off"
   @AppStorage("msFX.glitch") private var glitch = 0.5
   private let flags = ["skull", "skullGlow", "letterPop", "shockwave", "miss", "back", "done", "hold", "close", "hover", "curvedTraces", "placementPreview", "hud", "capsFollower"]
   var body: some View {
     VStack(spacing: 7) {
+      Picker("Shortcut audio", selection: $audioFeedback) {
+        Text("Off").tag("off")
+        Text("Gentle command and error tones").tag("sounds")
+        Text("Speak keys and commands").tag("speech")
+      }
       ColorPicker("Accent", selection: Binding(get: {
         Color(nsColor: OverlayFX.color(hex: accentHex) ?? OverlayFX.color(hex: "#36DE6A")!)
       }, set: { color in

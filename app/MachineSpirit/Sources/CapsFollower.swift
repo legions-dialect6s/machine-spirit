@@ -84,6 +84,8 @@ final class CapsFollower {
       window.setContentSize(CGSize(width: 36, height: 26))
       window.contentView = CapsBadgeView(frame: CGRect(x: 0, y: 0, width: 36, height: 26))
       panel = window
+      lastMove = 0
+      lastScale = 0
     }
     guard let panel, let view = panel.contentView as? CapsBadgeView else { return }
     CATransaction.begin(); CATransaction.setDisableActions(true)
@@ -116,13 +118,28 @@ final class CapsFollower {
 
   private var lastMove: CFTimeInterval = 0
   private var lastScale: CGFloat = 0
+  private var pendingMouse: CGPoint?
+  private var trailingMove: Task<Void, Never>?
 
   func move(to mouse: CGPoint) {
     // ≤ 60 window moves/s (120 Hz pointers otherwise double the WindowServer work).
+    guard capsOn, fx.capsFollower, !fading, let panel else { return }
     let now = CACurrentMediaTime()
-    guard now - lastMove >= 1.0 / 60 else { return }
-    guard capsOn, fx.capsFollower, !fading, let panel,
-      let screen = NSScreen.screens.first(where: { $0.frame.contains(mouse) }) ?? NSScreen.main else { return }
+    let remaining = 1.0 / 60 - (now - lastMove)
+    if remaining > 0 {
+      pendingMouse = mouse
+      if trailingMove == nil {
+        trailingMove = Task { [weak self] in
+          do { try await Task.sleep(for: .seconds(remaining)) } catch { return }
+          guard let self else { return }
+          trailingMove = nil
+          if let point = pendingMouse { move(to: point) }
+        }
+      }
+      return
+    }
+    pendingMouse = nil
+    guard let screen = NSScreen.screens.first(where: { $0.frame.contains(mouse) }) ?? NSScreen.main else { return }
     lastMove = now
     panel.setFrameOrigin(Self.origin(mouse: mouse, screen: screen.frame))
     if screen.backingScaleFactor != lastScale {
@@ -132,6 +149,9 @@ final class CapsFollower {
   }
 
   private func removeMouseMonitors() {
+    trailingMove?.cancel()
+    trailingMove = nil
+    pendingMouse = nil
     if let globalMouse { NSEvent.removeMonitor(globalMouse) }
     if let localMouse { NSEvent.removeMonitor(localMouse) }
     globalMouse = nil; localMouse = nil

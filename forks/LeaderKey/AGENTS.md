@@ -7,8 +7,18 @@ This file provides guidance to coding agents when working with code in this repo
 ## Build & Test Commands
 
 - Build and run: `xcodebuild -scheme "Leader Key" -configuration Debug -derivedDataPath ./DerivedData.noindex build`
-- Run all tests: `xcodebuild -scheme "Leader Key" -derivedDataPath ./DerivedData.noindex -testPlan "TestPlan" test`
-- Run single test: `xcodebuild -scheme "Leader Key" -derivedDataPath ./DerivedData.noindex -testPlan "TestPlan" -only-testing:Leader KeyTests/UserConfigTests/testInitializesWithDefaults test`
+- Run tests alongside the installed launcher with a distinct bundle identifier. The production host enforces one running instance. From this directory run:
+
+  ```sh
+  xcodebuild -scheme "Leader Key" -configuration Debug -derivedDataPath ./DerivedData.noindex \
+    -skipPackagePluginValidation -skipMacroValidation -testPlan TestPlan \
+    -parallel-testing-enabled NO test CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- \
+    DEVELOPMENT_TEAM= ENABLE_HARDENED_RUNTIME=NO \
+    MS_LEADER_SCHEME=msleaderkey-testing MS_LEGACY_SCHEME=leaderkey-testing \
+    'PRODUCT_BUNDLE_IDENTIFIER=com.machinespirit.testing.$(PRODUCT_NAME:rfc1034identifier)'
+  ```
+
+  To select one test, add `-only-testing:"Leader KeyTests/UserConfigTests/testInitializesWithDefaults"`.
 - Bump version: `bin/bump`
 - Create release: `bin/release`
 
@@ -38,11 +48,11 @@ ditto "DerivedData-Release.noindex/Build/Products/Release/Leader Key.app" "$HOME
 codesign --force --deep -s "MachineSpirit Local Codesign" "$HOME/Applications/MachineSpirit Leader Key.app"
 launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/com.machinespirit.leader-key.plist"
 ```
-Menu-bar icon assets: `Leader Key/Assets.xcassets/StatusItem*.imageset` (idle = template
-skull; `StatusItem-filled` = green non-template summon glow). App icon:
-`AppIcon.appiconset` — the summoned green skull on a dark squircle, regenerated from the
-menu-bar mark by `tools/make-appicon.sh` (ImageMagick + `qlmanage`; PNGs ship pre-rendered).
-Re-run it if the skull mark or palette changes, then `clean build`.
+The live menu skull is a Core Animation layer in `StatusSkullView.swift`. The Xcode
+project references the board's `SkullMark.swift` and `OverlayFX.swift` directly.
+`tools/make-appicon.sh` uses the bundled artwork to regenerate the separate
+`AppIcon.appiconset` (ImageMagick and `qlmanage`). Use a clean build after changing
+the asset catalog.
 
 ## Architecture Overview
 

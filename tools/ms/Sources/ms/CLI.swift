@@ -8,7 +8,7 @@ ms — structured access to this Mac (append --json for machine-readable output)
   windows [--app NAME] [--all-spaces] [--all-layers]
   focus <app-name|bundle-id|window-id>
   mouse
-  win place <smart|aim|toggle-fullscreen|step|amm|max|left|right|top|bottom|tl|tr|bl|br|center|fullscreen|display-left|display-right|display-up|display-down> [--app NAME]
+  win place <smart|aim|toggle-fullscreen|step|amm|max|left|right|top|bottom|tl|tr|bl|br|center|fullscreen|display-left|display-right|display-up|display-down|display-next|display-previous|half-up|half-down> [--app NAME]
   win rectangle <rectangle://execute-action?name=ACTION>
   win <tile-all|hide-all>
   win cycle [--app NAME]
@@ -19,7 +19,7 @@ ms — structured access to this Mac (append --json for machine-readable output)
   capslock [on|off|toggle|status]
   audio [list|tile]
   translate-area [--to LANG]
-  pulse [collect|report [--hours N]]
+  pulse [collect|disk [--crash-preview|--explain]|report [--hours N]]
   screenshot [--screen ID | --window ID | --rect x,y,w,h] [--out PATH]
   clipboard [list [-n 20] | get INDEX]  (requires MS_ALLOW_CLIPBOARD=1)
   mcp  (newline-delimited JSON-RPC on stdio; --json has no effect)
@@ -67,6 +67,7 @@ struct MS {
             } else {
                 let output: Output
                 if name == "translate-area" { output = try await translateArea(Array(args.dropFirst())) }
+                else if name == "pulse" { output = try await pulseCLI(Array(args.dropFirst())) }
                 else if name == "win", args.dropFirst().first == "rectangle" {
                     output = try await runRectangleAction(Array(args.dropFirst(2)))
                 }

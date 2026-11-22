@@ -1,13 +1,14 @@
 import Cocoa
 
 enum NowPlayingBrowserFocus {
-  private static let supportedBundles: Set<String> = [
-    "com.apple.Safari", "com.google.Chrome", "com.brave.Browser", "com.microsoft.edgemac",
-    "org.chromium.Chromium",
-  ]
-
-  static func supports(_ bundleIdentifier: String?) -> Bool {
-    bundleIdentifier.map { supportedBundles.contains($0) } ?? false
+  /// Ask Launch Services on click so a newly installed browser needs no app update.
+  /// Being a web handler only qualifies the app for a bounded tab-strip inspection.
+  static func isWebHandler(_ app: NSRunningApplication) -> Bool {
+    guard let bundle = app.bundleURL?.resolvingSymlinksInPath() else { return false }
+    let probe = URL(string: "https://example.invalid/")!
+    return NSWorkspace.shared.urlsForApplications(toOpen: probe).contains {
+      $0.resolvingSymlinksInPath() == bundle
+    }
   }
 
   /// Safari and Chromium expose a native "Mute tab" button under audible tabs.
@@ -138,8 +139,6 @@ final class NowPlayingMenuSection: NSObject {
     items.removeAll()
     rowViews.removeAll()
     lastRowKeys.removeAll()
-    menu.addItem(.separator())
-    menu.addItem(.msSectionHeader(title: "Now Playing"))
     let item = NSMenuItem(title: "Checking audio…", action: nil, keyEquivalent: "")
     item.isEnabled = false
     menu.addItem(item)
@@ -269,9 +268,9 @@ final class NowPlayingMenuSection: NSObject {
       return
     }
     app.activate(options: [])
-    guard NowPlayingBrowserFocus.supports(app.bundleIdentifier), AXIsProcessTrusted() else { return }
+    guard AXIsProcessTrusted() else { return }
     browserFocusQueue.async {
-      guard !app.isTerminated else { return }
+      guard !app.isTerminated, NowPlayingBrowserFocus.isWebHandler(app) else { return }
       let pid = app.processIdentifier
       _ = NowPlayingBrowserFocus.focusAudibleTab(in: AXUIElementCreateApplication(pid)) {
         !app.isTerminated && NSWorkspace.shared.frontmostApplication?.processIdentifier == pid

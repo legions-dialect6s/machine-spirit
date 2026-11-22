@@ -2,17 +2,6 @@ import Cocoa
 import Combine
 
 class StatusItem: NSObject, NSMenuDelegate {
-  enum Appearance {
-    case normal
-    case active
-  }
-
-  var appearance: Appearance = .normal {
-    didSet {
-      updateStatusItemAppearance()
-    }
-  }
-
   var statusItem: NSStatusItem?
   private var cancellables = Set<AnyCancellable>()
   let system = SystemMenuSection()
@@ -22,16 +11,20 @@ class StatusItem: NSObject, NSMenuDelegate {
   private var pressure = MemoryPressure.Reading()
   private var timer: Timer?
   private var lastRender: CompactBarState?
-  private let numbers = NumberTween()
+  private var skullView: StatusSkullView?
+  private let t3 = T3TaskMenu()
+  private var nextSheolSample: TimeInterval = 0
   private var statsRows: [String: NSMenuItem] = [:]
   private var statsSummaryItem: NSMenuItem?
+  private var audioMenu: NSMenu?
   private var statsMenu: NSMenu?
   private var menuIsOpen = false
   private var appearanceObservation: NSKeyValueObservation?
   var heartbeat: (() -> Void)?
-  private let segments = [
-    "Skull", "Sheol", "CPU", "GPU", "Memory", "Temperature", "Network", "Disk", "Awake",
+  static let barSegments = [
+    "Skull", "T3", "CPU", "GPU", "Memory", "Temperature", "Awake",
   ]
+  private var segments: [String] { Self.barSegments }
   private var enabledSegments = Set<String>()
   private var backingScale: CGFloat = 2
 
@@ -39,7 +32,6 @@ class StatusItem: NSObject, NSMenuDelegate {
   var handleAbout: (() -> Void)?
   var handleReloadConfig: (() -> Void)?
   var handleRevealConfig: (() -> Void)?
-  var handleCheckForUpdates: (() -> Void)?
 
   // Karabiner-Elements ships an official signed CLI; we drive it, never rebuild.
   private let karabinerCLI =
@@ -48,6 +40,7 @@ class StatusItem: NSObject, NSMenuDelegate {
   // Live items rebuilt each time the menu opens.
   private var karabinerStatusItem: NSMenuItem?
   private var karabinerProfileItem: NSMenuItem?
+  private weak var karabinerMenu: NSMenu?
 
   // Rectangle window actions, mirroring the rectangle:// binds in the Leader
   // Key config.
@@ -65,7 +58,10 @@ class StatusItem: NSObject, NSMenuDelegate {
 
   func enable() {
     guard statusItem == nil else { return }
-    for segment in segments { UserDefaults.standard.register(defaults: ["msBar" + segment: segment != "Disk"]) }
+    let hasT3 = FileManager.default.fileExists(atPath: T3TaskRegistry.directory.appendingPathComponent("statev2.sqlite").path)
+    for segment in segments {
+      UserDefaults.standard.register(defaults: ["msBar" + segment: segment != "T3" || hasT3])
+    }
     refreshPreferences()
     refreshScale()
     let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -75,13 +71,13 @@ class StatusItem: NSObject, NSMenuDelegate {
     menu.autoenablesItems = false
     menu.delegate = self
     item.menu = menu
-    item.button?.setAccessibilityLabel("MachineSpirit — stats, terminals and system controls")
-    item.button?.toolTip =
-      "TERM · TMUX · SHEOL | CPU · GPU · RAM used · CPU temperature | NET: en*/utun* B/s | keep-awake"
+    if let button = item.button {
+      button.setAccessibilityLabel("MachineSpirit — stats, terminals and system controls")
+      skullView = StatusSkullView(button: button)
+    }
     system.onChange = { [weak self] in self?.updateStatusItemAppearance() }
-    sheol.onChange = { [weak self] in self?.updateStatusItemAppearance() }
+    t3.changed = { [weak self] in self?.updateStatusItemAppearance() }
     system.enable()
-    numbers.onFrame = { [weak self] in self?.renderStatusItem() }
     stats.onBarUpdate = { [weak self] in self?.updateStatusItemAppearance() }
     stats.onUpdate = { [weak self] rows in self?.updateStats(rows) }
     sample()
@@ -103,11 +99,25 @@ class StatusItem: NSObject, NSMenuDelegate {
       }.store(in: &cancellables)
     Events.sink { [weak self] event in
       switch event {
-      case .willActivate: self?.appearance = .active
-      case .willDeactivate: self?.appearance = .normal
+      case .willActivate: self?.skullView?.setActive(true)
+      case .willDeactivate: self?.skullView?.setActive(false)
       default: break
       }
     }.store(in: &cancellables)
+    NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification)
+      .sink { [weak self] _ in self?.skullView?.refreshMotionPolicy() }.store(in: &cancellables)
+    let center = DistributedNotificationCenter.default()
+    center.publisher(for: Notification.Name("com.machinespirit.leader.nav"))
+      .sink { [weak self] notification in
+        guard notification.userInfo?["state"] as? String == "shown",
+              let path = notification.userInfo?["path"] as? String else { return }
+        self?.skullView?.navigate(path)
+      }.store(in: &cancellables)
+    center.publisher(for: Notification.Name("com.machinespirit.leader.feedback"))
+      .sink { [weak self] notification in
+        guard let kind = notification.userInfo?["kind"] as? String else { return }
+        self?.skullView?.feedback(kind)
+      }.store(in: &cancellables)
   }
 
   private func refreshPreferences() {
@@ -122,13 +132,17 @@ class StatusItem: NSObject, NSMenuDelegate {
   }
 
   private func sample() {
-    if enabledSegments.contains("CPU") || stats.isOpen { stats.sampleCPU() }
-    if enabledSegments.contains("Sheol") || menuIsOpen { sheol.sample() }
-    if enabledSegments.contains("Memory") { pressure = MemoryPressure.read() }
+    if enabledSegments.contains("CPU") { stats.sampleCPU() }
+    if enabledSegments.contains("T3") { t3.refresh() }
+    let now = ProcessInfo.processInfo.systemUptime
+    if menuIsOpen || now >= nextSheolSample {
+      nextSheolSample = now + 46
+      sheol.sample()
+    }
+    if enabledSegments.contains("Memory") { pressure = MemoryPressure.read(barOnly: true) }
     stats.sampleBar(
       gpu: enabledSegments.contains("GPU"),
-      temperature: enabledSegments.contains("Temperature"),
-      network: enabledSegments.contains("Network"), disk: enabledSegments.contains("Disk"))
+      temperature: enabledSegments.contains("Temperature"))
     heartbeat?()
     system.checkExpiry()
     updateStatusItemAppearance()
@@ -141,9 +155,11 @@ class StatusItem: NSObject, NSMenuDelegate {
     nowPlaying.close()
     stats.close()
     stats.stopBar()
-    numbers.stop()
+    t3.changed = nil
     cancellables.removeAll()
     appearanceObservation = nil
+    skullView?.removeFromSuperview()
+    skullView = nil
     if let item = statusItem { NSStatusBar.system.removeStatusItem(item) }
     statusItem = nil
     lastRender = nil
@@ -153,7 +169,7 @@ class StatusItem: NSObject, NSMenuDelegate {
     guard let menu = statusItem?.menu else { return }
     menu.removeAllItems()
     let summary = NSMenuItem(title: "Stats: Measuring…", action: nil, keyEquivalent: "")
-    summary.toolTip = "CPU · GPU · RAM used · hottest sensor · network · battery. Open for details."
+    summary.toolTip = "CPU · GPU · RAM used · hottest sensor · network · free disk · battery. Open for details."
     let statistics = NSMenu()
     statistics.autoenablesItems = false
     statistics.delegate = self
@@ -179,6 +195,7 @@ class StatusItem: NSObject, NSMenuDelegate {
       statistics.addItem(actionItem("Open Little Snitch Network Monitor…", #selector(openNetworkMonitor)))
     }
     statistics.addItem(actionItem("Latest Idle Review…", #selector(showIdleReview)))
+    if enabledSegments.contains("T3") { t3.append(to: menu) }
     sheol.append(to: menu)
     system.append(to: menu)
     menu.addItem(.separator())
@@ -192,7 +209,14 @@ class StatusItem: NSObject, NSMenuDelegate {
       NSMenuItem(
         title: "Quit MachineSpirit Leader Key", action: #selector(NSApplication.terminate(_:)),
         keyEquivalent: "q"))
-    nowPlaying.append(to: menu)
+    let audio = NSMenuItem(title: "Now Playing", action: nil, keyEquivalent: "")
+    let sub = NSMenu()
+    sub.autoenablesItems = false
+    sub.delegate = self
+    audio.submenu = sub
+    audioMenu = sub
+    menu.addItem(audio)
+    nowPlaying.append(to: sub)
   }
 
   private func appendLeaderOptions(to menu: NSMenu) {
@@ -202,7 +226,6 @@ class StatusItem: NSObject, NSMenuDelegate {
     menu.addItem(actionItem("Settings…", #selector(showPreferences), key: ","))
     menu.addItem(actionItem("Reload config", #selector(reloadConfig)))
     menu.addItem(actionItem("Show config in Finder", #selector(revealConfigFile)))
-    menu.addItem(actionItem("Check for Updates…", #selector(checkForUpdates)))
     let bar = NSMenuItem(title: "Menu bar", action: nil, keyEquivalent: "")
     let options = NSMenu()
     options.autoenablesItems = false
@@ -234,9 +257,10 @@ class StatusItem: NSObject, NSMenuDelegate {
     karabinerProfileItem = profile
     keyMenu.addItem(profile)
     keyMenu.addItem(actionItem("Open Karabiner Settings…", #selector(openKarabinerSettings)))
+    keyMenu.delegate = self
+    karabinerMenu = keyMenu
     keys.submenu = keyMenu
     menu.addItem(keys)
-    refreshKarabiner()
   }
 
   @objc private func toggleSegment(_ item: NSMenuItem) {
@@ -277,7 +301,6 @@ class StatusItem: NSObject, NSMenuDelegate {
   @objc func showAbout() { handleAbout?() }
   @objc func reloadConfig() { handleReloadConfig?() }
   @objc func revealConfigFile() { handleRevealConfig?() }
-  @objc func checkForUpdates() { handleCheckForUpdates?() }
 
   @objc private func openNetworkMonitor() {
     if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "at.obdev.littlesnitch.networkmonitor") {
@@ -392,11 +415,11 @@ class StatusItem: NSObject, NSMenuDelegate {
     task.arguments = args
     let out = Pipe()
     task.standardOutput = out
-    task.standardError = Pipe()
+    task.standardError = FileHandle.nullDevice
     do {
       try task.run()
-      task.waitUntilExit()
       let data = out.fileHandleForReading.readDataToEndOfFile()
+      task.waitUntilExit()
       let s = String(data: data, encoding: .utf8)?
         .trimmingCharacters(in: .whitespacesAndNewlines)
       return (s?.isEmpty ?? true) ? nil : s
@@ -411,11 +434,11 @@ class StatusItem: NSObject, NSMenuDelegate {
     task.arguments = ["-f", pattern]
     let out = Pipe()
     task.standardOutput = out
-    task.standardError = Pipe()
+    task.standardError = FileHandle.nullDevice
     do {
       try task.run()
-      task.waitUntilExit()
       let data = out.fileHandleForReading.readDataToEndOfFile()
+      task.waitUntilExit()
       return !(String(data: data, encoding: .utf8) ?? "")
         .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     } catch {
@@ -440,8 +463,12 @@ class StatusItem: NSObject, NSMenuDelegate {
     if menu === statusItem?.menu {
       menuIsOpen = true
       buildMenu()
+      if enabledSegments.contains("T3") { t3.refresh(force: true) }
       system.menuWillOpen()
       stats.open()
+    } else if menu === karabinerMenu {
+      refreshKarabiner()
+    } else if menu === audioMenu {
       nowPlaying.open()
     } else if menu === statsMenu {
       stats.setDetailsVisible(true)
@@ -453,6 +480,8 @@ class StatusItem: NSObject, NSMenuDelegate {
       menuIsOpen = false
       stats.close()
       nowPlaying.close()
+    } else if menu === audioMenu {
+      nowPlaying.close()
     } else if menu === statsMenu {
       stats.setDetailsVisible(false)
     }
@@ -460,7 +489,7 @@ class StatusItem: NSObject, NSMenuDelegate {
 
   /// Update existing rows, never rebuild the sheol controls under the pointer.
   private func updateStats(_ rows: [SystemStats.Row]) {
-    let order = ["CPU", "GPU", "Memory", "Temperatures", "Network ↓/↑", "Battery"]
+    let order = ["CPU", "GPU", "Memory", "Temperatures", "Network ↓/↑", "Disk", "Battery"]
     let title = order.compactMap { name in
       rows.first { $0.name == name }?.compactSummary
     }.joined(separator: " · ")
@@ -490,62 +519,39 @@ class StatusItem: NSObject, NSMenuDelegate {
   }
 
   private func updateStatusItemAppearance() {
-    guard statusItem != nil else { return }
-    var targets: [String: Double] = [:]
-    if enabledSegments.contains("CPU") { targets["cpu"] = Double(stats.cpuPercent) }
-    if enabledSegments.contains("GPU") { targets["gpu"] = stats.bar.gpu.map(Double.init) }
-    if enabledSegments.contains("Memory"), pressure.total > 0 {
-      targets["ram"] = (Double(pressure.used) * 100 / Double(pressure.total)).rounded()
-    }
-    if enabledSegments.contains("Temperature") {
-      targets["temp"] = stats.bar.temperature.map(Double.init)
-    }
-    if enabledSegments.contains("Network") {
-      targets["down"] = stats.bar.download.map(NetStats.quantized)
-      targets["up"] = stats.bar.upload.map(NetStats.quantized)
-    }
-    if enabledSegments.contains("Sheol") {
-      for (index, count) in sheol.counts.split(separator: "·").enumerated() {
-        targets["count\(index)"] = Double(count)
-      }
-    }
-    numbers.set(targets)
-    renderStatusItem()
-  }
-
-  private func renderStatusItem() {
     guard let button = statusItem?.button else { return }
     func enabled(_ segment: String) -> Bool { enabledSegments.contains(segment) }
-    func integer(_ key: String) -> Int? { numbers.value(key).map { Int($0.rounded()) } }
-    let skull = enabled("Skull")
-    let counts =
-      enabled("Sheol")
-      ? (0..<3).map { String(integer("count\($0)") ?? 0) }.joined(separator: "·") : ""
-    let network: String? =
-      enabled("Network")
-      ? "↓\(numbers.value("down").map(NetStats.text) ?? "—") ↑\(numbers.value("up").map(NetStats.text) ?? "—")"
-      : nil
+    let usedPercent = pressure.hasUsage ? Int((100 * Double(pressure.used) / Double(pressure.total)).rounded()) : nil
     let state = CompactBarState(
-      skull: skull, summoned: skull && appearance == .active,
-      counts: counts, cpu: integer("cpu"), pressure: integer("ram"),
-      level: enabled("Memory") ? pressure.vmPressureLevel : 1,
-      awake: enabled("Awake") && system.isAwake,
+      skull: enabled("Skull"),
+      t3: enabled("T3") ? t3.counts : .hidden,
+      cpu: .init(enabled: enabled("CPU"), value: stats.cpuPercent),
+      gpu: .init(enabled: enabled("GPU"), value: stats.bar.gpu),
+      memory: .init(enabled: enabled("Memory"), value: usedPercent),
+      pressureLevel: enabled("Memory") && pressure.hasPressureLevel
+        ? .init(rawValue: pressure.vmPressureLevel) : nil,
+      temperature: .init(enabled: enabled("Temperature"), value: stats.bar.temperature),
+      awake: enabled("Awake") ? system.isAwake : nil,
       dark: button.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua,
-      scale: backingScale, height: NSStatusBar.system.thickness,
-      gpu: integer("gpu"), temperature: integer("temp"), network: network,
-      freeGiB: enabled("Disk") ? stats.bar.freeGiB.map { (10 * $0).rounded() / 10 } : nil)
+      scale: backingScale, height: NSStatusBar.system.thickness)
+    let descriptions = state.descriptions(awakeStatus: system.awakeStatusText)
+    let tip = (descriptions + ["Click for disk, network and details"]).joined(separator: "\n")
+    if button.toolTip != tip {
+      button.toolTip = tip
+      button.setAccessibilityValue(descriptions.isEmpty ? nil : descriptions.joined(separator: ". "))
+    }
+    skullView?.configure(visible: state.skull, dark: state.dark, scale: state.scale)
     guard state != lastRender else { return }
     lastRender = state
     button.image = CompactBar.image(state)
+    skullView?.align()
   }
 
 }
 
 // MARK: - Terminal and tmux menu section (no status item ownership)
-final class SheolMenuSection: NSObject {
+final class SheolMenuSection: NSObject, NSMenuDelegate {
   private weak var menu: NSMenu?
-  var onChange: (() -> Void)?
-  private(set) var counts = "0·0·0"
   private let samplingQueue = DispatchQueue(label: "com.machinespirit.sheol", qos: .utility)
   private var sampling = false
   private var lastTerminalSample = -Double.infinity
@@ -661,7 +667,6 @@ final class SheolMenuSection: NSObject {
             id: row.id, tty: row.tty, name: old.name, isTmux: row.isTmux, job: old.job,
             procs: old.procs)
         }
-        self.updateTitle()
       }
     }
   }
@@ -680,7 +685,6 @@ final class SheolMenuSection: NSObject {
       let fresh = Self.list(core: self.corePath)
       DispatchQueue.main.async {
         self.spirits = fresh
-        self.updateTitle()
       }
     }
   }
@@ -691,23 +695,9 @@ final class SheolMenuSection: NSObject {
       let terms = Self.listTerminals(core: self.termPath)
       DispatchQueue.main.async {
         self.terminals = terms
-        self.updateTitle()
         // Keep the open rows stable beside destructive controls; refresh on next open.
       }
     }
-  }
-
-  /// The title is three counts: (non-tmux) terminals · live tmux · detached
-  /// tmux. tmux terminals are counted only as tmux — they live in their own
-  /// sections — so the three numbers never double-count the same session.
-  private func updateTitle() {
-    let liveTmux = spirits.filter { !$0.isWandering }.count
-    let deadTmux = spirits.filter { $0.isWandering }.count
-    let terms = terminals.filter { !$0.isTmux }.count
-    let value = "\(terms)·\(liveTmux)·\(deadTmux)"
-    guard counts != value else { return }
-    counts = value
-    onChange?()
   }
 
   private static func list(core: String) -> [Spirit] {
@@ -717,7 +707,7 @@ final class SheolMenuSection: NSObject {
     task.arguments = ["list", "--json"]
     let out = Pipe()
     task.standardOutput = out
-    task.standardError = Pipe()
+    task.standardError = FileHandle.nullDevice
     do {
       try task.run()
       let data = out.fileHandleForReading.readDataToEndOfFile()
@@ -735,7 +725,7 @@ final class SheolMenuSection: NSObject {
     task.arguments = ["list", "--json"]
     let out = Pipe()
     task.standardOutput = out
-    task.standardError = Pipe()
+    task.standardError = FileHandle.nullDevice
     do {
       try task.run()
       let data = out.fileHandleForReading.readDataToEndOfFile()
@@ -858,10 +848,21 @@ final class SheolMenuSection: NSObject {
     menu.addItem(.separator())
   }
 
+  // This section is the delegate only for the Session snapshots submenu.
+  func menuWillOpen(_ menu: NSMenu) {
+    guard let header = menu.items.first else { return }
+    let path = corePath
+    DispatchQueue.global(qos: .utility).async {
+      guard let age = Self.lastSaveAge(core: path) else { return }
+      DispatchQueue.main.async { [weak header] in header?.title = "Snapshot — \(age)" }
+    }
+  }
+
   func appendTools(to menu: NSMenu) {
     let tools = NSMenuItem(title: "Session snapshots", action: nil, keyEquivalent: "")
     let submenu = NSMenu()
     submenu.autoenablesItems = false
+    submenu.delegate = self
     addSurvivalSection(to: submenu)
     tools.submenu = submenu
     menu.addItem(tools)
@@ -870,11 +871,9 @@ final class SheolMenuSection: NSObject {
   /// Snapshot age + 💾 Save · ♻ Restore · ☠ BANISH ALL. Lives at the bottom of the
   /// menu so the destructive nuke is far from the per-session controls.
   private func addSurvivalSection(to menu: NSMenu) {
-    if let age = Self.lastSaveAge(core: corePath) {
-      let hdr = NSMenuItem(title: "Snapshot — \(age)", action: nil, keyEquivalent: "")
-      hdr.isEnabled = false
-      menu.addItem(hdr)
-    }
+    let header = NSMenuItem(title: "Snapshot", action: nil, keyEquivalent: "")
+    header.isEnabled = false
+    menu.addItem(header)
     let save = NSMenuItem(
       title: "💾  Save layout now", action: #selector(saveLayout), keyEquivalent: "")
     save.target = self
@@ -1087,7 +1086,7 @@ final class SheolMenuSection: NSObject {
   }
 
   /// Human "saved Nm ago" for the snapshot header, or nil if sheol-core is
-  /// missing. Cheap (a stat via `last-save`); runs inline like `list` does.
+  /// missing. Resolve the tmux snapshot path on the utility queue.
   private static func lastSaveAge(core: String) -> String? {
     guard FileManager.default.isExecutableFile(atPath: core) else { return nil }
     let task = Process()
@@ -1095,7 +1094,7 @@ final class SheolMenuSection: NSObject {
     task.arguments = ["last-save"]
     let out = Pipe()
     task.standardOutput = out
-    task.standardError = Pipe()
+    task.standardError = FileHandle.nullDevice
     do {
       try task.run()
       let data = out.fileHandleForReading.readDataToEndOfFile()

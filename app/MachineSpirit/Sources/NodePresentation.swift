@@ -9,10 +9,19 @@ extension Node {
     resolvedBoardLabel ?? (children.count == 1 ? "gate" : "group")
   }
 
+  var interactiveCaptureLabel: String? {
+    guard case .command(let command) = action else { return nil }
+    let words = command.split(whereSeparator: \.isWhitespace)
+    if words.contains("~/bin/screenshots/ss-sel-save.sh") { return "Save screenshot" }
+    if words.contains("~/bin/screenshots/ss-sel-copy.sh") { return "Copy screenshot" }
+    return nil
+  }
+
   private var resolvedBoardLabel: String? {
     if let label, !label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
       return label
     }
+    if let interactiveCaptureLabel { return interactiveCaptureLabel }
     if action != nil {
       var unlabeled = self
       unlabeled.label = nil

@@ -114,10 +114,16 @@ private final class CapsDefaults: UserDefaults, @unchecked Sendable {
     precondition(follower.capsOn && follower.panel == nil && follower.mouseMonitorCount == 0)
     defaults.set(true, forKey: "msFX.capsFollower"); pump()
     precondition(follower.panel != nil && follower.mouseMonitorCount == 2)
+    // Distinct samples here represent separate 60 Hz pointer events. The driver
+    // below exercises the production rate limit with a real 120 Hz event stream.
+    func positionBadge(at point: CGPoint) {
+      Thread.sleep(forTimeInterval: 0.020)
+      follower.move(to: point)
+    }
     // Display edges, negative origins, and mixed backing scales.
     for (index, screen) in NSScreen.screens.enumerated() {
       let middle = CGPoint(x: screen.frame.midX, y: screen.frame.midY)
-      follower.move(to: middle)
+      positionBadge(at: middle)
       precondition(abs(follower.panel!.frame.minX - middle.x - 10) <= 1
         && abs(follower.panel!.frame.minY - middle.y + 40) <= 1, "AppKit-rounded pointer offset")
       let glyph = follower.panel!.contentView!.layer!.sublayers![0].sublayers![0]
@@ -125,12 +131,12 @@ private final class CapsDefaults: UserDefaults, @unchecked Sendable {
       for x in [screen.frame.minX + 1, screen.frame.maxX - 1] {
         for y in [screen.frame.minY + 1, screen.frame.maxY - 1] {
           let point = CGPoint(x: x, y: y)
-          follower.move(to: point)
+          positionBadge(at: point)
           precondition(screen.frame.contains(follower.panel!.frame))
           precondition(!follower.panel!.frame.contains(point))
         }
       }
-      follower.move(to: middle); pump()
+      positionBadge(at: middle); pump()
       let capture = Process(); capture.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
       capture.arguments = ["-x", "-l", String(follower.panel!.windowNumber), output + "/caps-follower-\(index).png"]
       try capture.run(); capture.waitUntilExit(); precondition(capture.terminationStatus == 0)
@@ -142,7 +148,7 @@ private final class CapsDefaults: UserDefaults, @unchecked Sendable {
     // Exercise the local path too, including dragging without synthesizing a
     // real button press or delivering a drag to another application.
     for type in [NSEvent.EventType.mouseMoved, .leftMouseDragged] {
-      follower.move(to: CGPoint(x: screen.frame.midX - 100, y: screen.frame.midY))
+      positionBadge(at: CGPoint(x: screen.frame.midX - 100, y: screen.frame.midY))
       let before = follower.panel!.frame.origin
       CGWarpMouseCursorPosition(CGPoint(x: screen.frame.midX, y: mainTop - screen.frame.midY))
       let event = NSEvent.mouseEvent(with: type, location: .zero, modifierFlags: .capsLock,

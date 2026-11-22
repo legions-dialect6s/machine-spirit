@@ -11,11 +11,16 @@ enum Placement: String, CaseIterable, Codable {
     case displayLeft = "display-left", displayRight = "display-right"
     case displayUp = "display-up", displayDown = "display-down"
 
+    case halfUp = "half-up", halfDown = "half-down"
+    case displayNext = "display-next", displayPrevious = "display-previous"
+
     case toggleFullscreen = "toggle-fullscreen"
+
+    var isVerticalHalfStep: Bool { self == .halfUp || self == .halfDown }
 
     var isDisplayTransfer: Bool {
         switch self {
-        case .displayLeft, .displayRight, .displayUp, .displayDown: return true
+        case .displayLeft, .displayRight, .displayUp, .displayDown, .displayNext, .displayPrevious: return true
         default: return false
         }
     }
@@ -23,8 +28,22 @@ enum Placement: String, CaseIterable, Codable {
 
 /// Display frames use AX coordinates (up is negative y). Prefer a neighbor across
 /// the requested edge, then the nearest diagonal if there is no aligned display.
-func destinationDisplay(for mode: Placement, from index: Int, screens: [CGRect]) -> Int? {
+func destinationDisplay(for mode: Placement, from index: Int, screens: [CGRect], xOnly: Bool = false) -> Int? {
     guard screens.indices.contains(index), screens.count > 1, mode.isDisplayTransfer else { return nil }
+
+    if mode == .displayNext || mode == .displayPrevious {
+        // Order by display rows, then left to right within a row. The index
+        // tiebreaker makes the ordering deterministic even for mirrored frames.
+        let ordered = screens.indices.sorted {
+            let a = screens[$0], b = screens[$1]
+            let aRow = xOnly ? 0 : screens.filter { $0.minY >= a.maxY }.count
+            let bRow = xOnly ? 0 : screens.filter { $0.minY >= b.maxY }.count
+            return (aRow, a.minX, a.minY, $0) < (bRow, b.minX, b.minY, $1)
+        }
+        let position = ordered.firstIndex(of: index)!
+        let step = mode == .displayNext ? 1 : ordered.count - 1
+        return ordered[(position + step) % ordered.count]
+    }
 
     let horizontal = mode == .displayLeft || mode == .displayRight
     let positive = mode == .displayRight || mode == .displayDown
@@ -50,6 +69,35 @@ func destinationDisplay(for mode: Placement, from index: Int, screens: [CGRect])
         best = rank
     }
     return best?.index
+}
+
+/// Step through the two halves of each display, crossing only to an
+/// aligned display when the window already fills the outer half.
+func verticalHalfStep(for mode: Placement, window: CGRect, from source: Int,
+                      screens: [CGRect], visible: [CGRect],
+                      confirmedHalf: Placement? = nil) -> (screen: Int, half: Placement, frame: CGRect)? {
+    guard mode.isVerticalHalfStep, screens.indices.contains(source), visible.count == screens.count else { return nil }
+    let down = mode == .halfDown
+    let outer: Placement = down ? .bottom : .top
+    let inner: Placement = down ? .top : .bottom
+    let outerFrame = placementFrame(outer, visibleFrame: visible[source], current: window)
+    let matchesOuter = confirmedHalf == outer || matchesHalfFrame(window, outerFrame)
+    guard matchesOuter else { return (source, outer, outerFrame) }
+
+    let aligned = screens.indices.filter {
+        let a = screens[source], b = screens[$0]
+        return $0 == source || min(a.maxX, b.maxX) > max(a.minX, b.minX)
+    }
+    guard let position = aligned.firstIndex(of: source),
+          let destination = destinationDisplay(for: down ? .displayDown : .displayUp, from: position,
+                                               screens: aligned.map({ screens[$0] })) else { return nil }
+    let index = aligned[destination]
+    return (index, inner, placementFrame(inner, visibleFrame: visible[index], current: window))
+}
+
+func matchesHalfFrame(_ a: CGRect, _ b: CGRect) -> Bool {
+    abs(a.minX - b.minX) <= 3 && abs(a.minY - b.minY) <= 3
+        && abs(a.maxX - b.maxX) <= 3 && abs(a.maxY - b.maxY) <= 3
 }
 
 /// Mouse and visibleFrame are AppKit coordinates; normalized v increases downward.
@@ -200,6 +248,13 @@ struct PlacementState: Codable {
 
     var aimZone: Placement? = nil
     var aimScreen: UInt32? = nil
+    var halfLanding: HalfLanding? = nil
+
+    struct HalfLanding: Codable {
+        let screen: UInt32
+        let frame: CGRect
+        let usable: CGRect
+    }
 
     static var fileURL: URL { FileManager.default.temporaryDirectory.appendingPathComponent("ms-win-place.json") }
 
@@ -210,5 +265,12 @@ struct PlacementState: Codable {
 
     func matches(_ key: String, now: TimeInterval) -> Bool {
         windowKey == key && t <= now && now - t <= 600
+    }
+
+    func confirmedHalf(key: String, screen: UInt32, frame: CGRect, usable: CGRect, now: TimeInterval) -> Placement? {
+        guard matches(key, now: now), let halfLanding, halfLanding.screen == screen,
+              matchesHalfFrame(halfLanding.usable, usable), matchesHalfFrame(halfLanding.frame, frame),
+              let half = Placement(rawValue: last), half == .top || half == .bottom else { return nil }
+        return half
     }
 }

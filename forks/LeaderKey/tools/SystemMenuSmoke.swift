@@ -20,26 +20,66 @@ struct SystemMenuSmoke {
   }
 
   static func main() {
-    if CommandLine.arguments.contains("--awake") {
-      UserDefaults.standard.register(defaults: ["msKeepAwakeDisplay": true])
-      let awake = KeepAwake()
-      awake.start(minutes: -1)
-      print("INDEFINITE: \(assertions())")
-      precondition(!assertions().isEmpty)
-      awake.keepsDisplayOn = false
-      print("SYSTEM ONLY: \(assertions())")
-      awake.stop()
+    if CommandLine.arguments.contains("--awake") || CommandLine.arguments.contains("--persistence") {
+      let suiteName = "com.machinespirit.system-menu-smoke.\(UUID().uuidString)"
+      let suite = UserDefaults(suiteName: suiteName)!
+      defer { UserDefaults.standard.removePersistentDomain(forName: suiteName) }
+      suite.register(defaults: [KeepAwake.DefaultsKey.keepsDisplayOn: true])
+
+      // Verify real IOPMAssertion persistence across relaunch (suspend -> fresh KeepAwake.restore()).
+      let first = KeepAwake(defaults: suite)
+      first.start(minutes: -1)
+      let indefiniteAssertion = assertions()
+      print("INDEFINITE: \(indefiniteAssertion)")
+      precondition(indefiniteAssertion.contains("PreventUserIdleDisplaySleep"))
+      first.keepsDisplayOn = false
+      let systemOnlyAssertion = assertions()
+      print("SYSTEM ONLY: \(systemOnlyAssertion)")
+      precondition(systemOnlyAssertion.contains("PreventUserIdleSystemSleep"))
+      first.suspend()
       precondition(assertions().isEmpty)
-      print("OFF: no machine-spirit assertion")
-      awake.start(minutes: 1)
-      print("TIMED: \(assertions())")
-      let deadline = Date().addingTimeInterval(61)
-      while Date() < deadline {
-        RunLoop.main.run(until: Date().addingTimeInterval(0.5))
-        awake.checkExpiry()
+
+      let relaunched = KeepAwake(defaults: suite)
+      precondition(relaunched.restore())
+      let restoredAssertion = assertions()
+      print("RESTORED INDEFINITE: \(restoredAssertion)")
+      precondition(relaunched.minutes == -1 && restoredAssertion.contains("PreventUserIdleSystemSleep"))
+
+      relaunched.keepsDisplayOn = true
+      relaunched.start(minutes: 15)
+      let originalDeadline = relaunched.deadline!
+      relaunched.suspend()
+      precondition(assertions().isEmpty)
+
+      let relaunchedTimed = KeepAwake(defaults: suite)
+      precondition(relaunchedTimed.restore())
+      let restoredTimedAssertion = assertions()
+      print("RESTORED TIMED: \(restoredTimedAssertion)")
+      precondition(
+        relaunchedTimed.minutes == 15
+          && abs((relaunchedTimed.deadline?.timeIntervalSince1970 ?? 0) - originalDeadline.timeIntervalSince1970) < 0.01
+          && restoredTimedAssertion.contains("PreventUserIdleDisplaySleep"))
+
+      relaunchedTimed.stop()
+      precondition(assertions().isEmpty)
+      let afterStop = KeepAwake(defaults: suite)
+      precondition(!afterStop.restore() && assertions().isEmpty)
+      print("OFF: explicit stop cleared persisted session and released assertion")
+
+      if CommandLine.arguments.contains("--awake") {
+        let timed = KeepAwake(defaults: suite)
+        timed.start(minutes: 1)
+        print("TIMED: \(assertions())")
+        let deadline = Date().addingTimeInterval(61)
+        while Date() < deadline {
+          RunLoop.main.run(until: Date().addingTimeInterval(0.5))
+          timed.checkExpiry()
+        }
+        precondition(timed.minutes == 0 && assertions().isEmpty)
+        let afterExpiry = KeepAwake(defaults: suite)
+        precondition(!afterExpiry.restore())
+        print("EXPIRY: assertion released and persisted session cleared after 60 seconds")
       }
-      precondition(awake.minutes == 0 && assertions().isEmpty)
-      print("EXPIRY: assertion released after 60 seconds")
     } else {
       let screens = NSScreen.screens.map { screen in
         (

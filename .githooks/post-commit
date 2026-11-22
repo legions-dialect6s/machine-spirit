@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -eu
+[[ "$(git config --bool --get machinespirit.pushCheckpoints || true)" == true ]] || exit 0
+[[ "$(git symbolic-ref -q --short HEAD || true)" == main ]] || exit 0
+[[ "$(git log -1 --format='%(trailers:key=Checkpoint,valueonly,unfold)')" == ready ]] || exit 0
+"$(git rev-parse --show-toplevel)/scripts/push-checkpoint.sh" || {
+  echo "Checkpoint is saved locally. After resolving the error, retry scripts/push-checkpoint.sh." >&2
+  exit 1
+}

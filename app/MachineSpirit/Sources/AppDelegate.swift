@@ -1,4 +1,5 @@
 import AppKit
+import AVFoundation
 import SwiftUI
 
 @MainActor
@@ -14,6 +15,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   var openBoardAction: (() -> Void)?
   private(set) var overlay: TypingOverlay?
   let hud = OverlayHUD()
+  private let audioFeedback = ShortcutAudioFeedback()
   let capsFollower: CapsFollower
   private var closeObserver: NSObjectProtocol?
   private var launched = false
@@ -42,6 +44,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       suspensionBehavior: .deliverImmediately)
     center.addObserver(self, selector: #selector(placement(_:)),
       name: Notification.Name("\(prefix).placement"), object: nil, suspensionBehavior: .deliverImmediately)
+    center.addObserver(self, selector: #selector(placementMiss(_:)),
+      name: Notification.Name("\(prefix).placement.miss"), object: nil, suspensionBehavior: .deliverImmediately)
+    center.addObserver(self, selector: #selector(windowFocus(_:)),
+      name: Notification.Name("\(prefix).window.focus"), object: nil, suspensionBehavior: .deliverImmediately)
     overlay = TypingOverlay(state: state, placementPreview: placementPreview)
   }
 
@@ -143,13 +149,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   @objc private func navigation(_ notification: Notification) {
     guard let info = notification.userInfo,
       let navigationState = info["state"] as? String else { return }
-    if navigationState == "hidden" { overlay?.hide(); return }
+    if navigationState == "hidden" { audioFeedback.previousPath = ""; overlay?.hide(); return }
     guard navigationState == "shown" || navigationState == "hold", let path = info["path"] as? String else { return }
+    if navigationState == "shown" { audioFeedback.navigation(path: path) }
     overlay?.show(path: path, screen: info["screen"] as? String, preview: navigationState == "shown" && path == "space", held: navigationState == "hold")
   }
 
   @objc private func feedback(_ notification: Notification) {
     guard let kind = notification.userInfo?["kind"] as? String else { return }
+    if kind == "miss" { audioFeedback.emit(.miss, spoken: "No match") }
     overlay?.feedback(kind: kind, path: notification.userInfo?["path"] as? String)
   }
 
@@ -163,6 +171,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                                 sourceFrame: (info["sourceFrame"] as? String).map(NSRectFromString))
   }
 
+  @objc private func placementMiss(_ notification: Notification) {
+    guard let reason = notification.userInfo?["reason"] as? String else { return }
+    audioFeedback.emit(.miss, spoken: reason)
+    guard UserDefaults(suiteName: "com.machinespirit.leader-key")?.object(forKey: "msGraphOverlayEnabled") as? Bool != false else { return }
+    overlay?.placementPreview.commandMiss(reason: reason)
+  }
+
+  @objc private func windowFocus(_ notification: Notification) {
+    guard let pid = notification.userInfo?["pid"] as? NSNumber,
+          UserDefaults(suiteName: "com.machinespirit.leader-key")?.object(forKey: "msGraphOverlayEnabled") as? Bool != false else { return }
+    overlay?.placementPreview.commandFocus(pid: pid.int32Value, id: (notification.userInfo?["windowID"] as? NSNumber)?.uint32Value)
+  }
+
   @objc private func fired(_ notification: Notification) {
     guard let path = notification.userInfo?["path"] as? String,
       let route = state.route(atPath: path), route.count > 1 else { return }
@@ -173,6 +194,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     state.fireBind(atPath: path)
     let nodes = route.compactMap { state.model?.node(withID: $0) }
     let keyPath = nodes.compactMap(\.key).map { $0 == " " ? "space" : $0 }.joined(separator: "/")
+    let label = nodes.last?.label?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    audioFeedback.emit(.command, spoken: label.isEmpty ? keyPath.replacingOccurrences(of: "/", with: " ") : label)
     state.stats.record(path: keyPath, windowPlacement: nodes.contains(where: StatsStore.isWindowPlacement))
   }
 
@@ -185,5 +208,57 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     state.stats.flush()
     state.saveSidecar()
     state.shutdown()
+  }
+}
+
+/// Optional feedback for leader input only. The quiet default creates no audio objects.
+@MainActor
+private final class ShortcutAudioFeedback {
+  enum Cue { case key, command, miss }
+  var previousPath = ""
+  private var speech: AVSpeechSynthesizer?
+  private var sounds: [String: AVAudioPlayer] = [:]
+  private var lastCue: (kind: Cue, text: String, time: TimeInterval)?
+  private var lastTone: TimeInterval = -.infinity
+
+  func navigation(path: String) {
+    defer { previousPath = path }
+    guard path != previousPath, !path.isEmpty,
+          previousPath.isEmpty || path.hasPrefix(previousPath + "/"),
+          let key = path.split(separator: "/").last else { return }
+    emit(.key, spoken: String(key))
+  }
+
+  func emit(_ cue: Cue, spoken: String) {
+    let mode = UserDefaults.standard.string(forKey: "msFX.audioFeedback")
+    guard mode == "sounds" || mode == "speech" else { return }
+    let now = ProcessInfo.processInfo.systemUptime
+    if mode == "sounds", cue == .key { return }
+    let previous = lastCue
+    lastCue = (cue, spoken, now)
+    if let previous, previous.kind == cue, previous.text == spoken, now - previous.time < 0.32 { return }
+    if mode == "sounds" {
+      if cue == .miss, previous?.kind == .command {
+        sounds["ShortcutTap"]?.stop()
+      } else if now - lastTone < 0.20 { return }
+      let name = cue == .miss ? "ShortcutMiss" : "ShortcutTap"
+      if sounds[name] == nil, let asset = NSDataAsset(name: name) {
+        sounds[name] = try? AVAudioPlayer(data: asset.data)
+      }
+      guard let player = sounds[name], !player.isPlaying else { return }
+      player.numberOfLoops = 0
+      player.currentTime = 0
+      if player.play() { lastTone = now }
+      return
+    }
+    // Repeated navigation or held keys must not restart an utterance mid-syllable.
+    if speech == nil { speech = AVSpeechSynthesizer() }
+    if speech?.isSpeaking == true {
+      guard cue != .key else { return }
+      speech?.stopSpeaking(at: .immediate)
+    }
+    let utterance = AVSpeechUtterance(string: String(spoken.prefix(64)))
+    utterance.rate = 0.55
+    speech?.speak(utterance)
   }
 }

@@ -10,12 +10,18 @@ No full-desktop screenshot was taken. Overlay captures used only graph rectangle
 |---|---:|---|---|
 | [hero.png](img/hero.png) | 1320 × 1060 | Center-anchored `s` navigation branch on a plain dark background. | Tight region capture; no personal text present. |
 | [overlay-corner.png](img/overlay-corner.png) | 1000 × 1240 | The same branch fanning inward from the top-left corner. | Crop starts below the menu bar; the focus circle is intentionally cut at the top. |
-| [menubar.png](img/menubar.png) | 256 × 48 | The single skull/counts/CPU/memory status item. | Exactly the 128 × 24-point AX frame, scaled 2× with `sips`. |
+| [menubar.png](img/menubar.png) | 498 × 48 | The installed status item on the M28U. | Native 2× crop of the 249 × 24-point Accessibility frame. |
 | [menu.png](img/menu.png) | 519 × 472 | Compact system menu, including terminal controls and brightness. | Session names, commands, and ages blurred before copying into the repo. |
 | [clipboard.png](img/clipboard.png) | 1040 × 880 | Production clipboard panel with two synthetic entries. | Copied from `forks/LeaderKey/docs/clipboard-panel.png`; no live clipboard access. |
 | [board.png](img/board.png) | 1000 × 700 | Close-up of the board's root and branches at the existing zoom. | Window-only capture; the optional ledger is closed. No paths or session titles are visible. |
 
 PNG optimization preserves the decoded scanline bytes exactly: lossless DEFLATE recompression plus removal of timestamp, EXIF, and text metadata. Color-profile/pixel-interpretation chunks are retained. Xcode's bundled `pngcrush` was tried, but its reduced output failed visual/decoder checks; those files were replaced from the reviewed originals. The final set totals about 1.13 MiB and every image is at most 1600 pixels wide.
+
+## Two-display workflow replay
+
+[display-half-steps.gif](img/display-half-steps.gif) redraws seven observed WindowServer rectangles from a disposable window on an M28U above a Mac laptop. The CLI fixture checked those rectangles against each display’s usable bounds. Each frame shows the command, display and actual landing half. Repeated no-op samples at the display edge were omitted. Frame duration is editorial. The GIF contains no desktop pixels.
+
+For a timed portfolio video, record both displays with a disposable document. Show the same start and end positions first by dragging and then with Caps and the window shortcuts. Keep both clocks running through the final landing, show the dashed and solid previews at normal speed, and report both times and the number of repetitions. Use a separate close-up for the node graph and menu if their text is too small at two-display scale.
 
 ## Visible-text audit
 
@@ -37,9 +43,8 @@ Lists below transcribe distinct visible strings. Repeated labels and glyphs are 
 
 ### menubar.png
 
-- `1·8·0`, `49%`, `22%`.
-- A skull and an underline are also visible; no clock, neighboring status items, app menus, or identifying text.
-- These are instantaneous counts/readings, not benchmark results.
+- The capture shows the shared skull, one working T3 task out of six open, CPU at 52%, GPU at 45%, RAM used at 80%, warning memory pressure, temperature at 79° and the two-tone keep-awake capsule. The values are instantaneous readings.
+- The crop contains one status item. Neighboring menu items and windows are outside the capture. The saved PNG omits capture text and date metadata.
 
 ### menu.png
 

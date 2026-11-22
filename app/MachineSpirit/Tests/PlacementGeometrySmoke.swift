@@ -5,7 +5,7 @@ import MachineSpiritKit
 
 /// The board and CLI compile the same WindowGeometry.swift.
 @main struct PlacementGeometrySmoke {
-  @MainActor static func main() async {
+  @MainActor static func main() async throws {
     var cases = 0
     let notchedDisplay = CGRect(x: 0, y: 0, width: 1728, height: 1117)
     let notchedFullscreen = CGRect(x: 0, y: 33, width: 1728, height: 1084)
@@ -86,8 +86,22 @@ import MachineSpiritKit
     precondition(LaunchCue(action: .command("~/bin/run-quiet.sh ~/bin/messages-find.sh")) == .focus("com.apple.MobileSMS"))
     let state = AppState()
     let leaf = Node(id: "root/q/q/q", key: "q", action: .command("open -g \"rectangle://execute-action?name=top-left\""))
-    state.model = Node(id: "root", children: [Node(id: "root/q", key: "q", children: [
-      Node(id: "root/q/q", key: "q", children: [leaf])])])
+    let shot = Node(id: "root/s/s/s/s", key: "s",
+                    action: .command("~/bin/run-quiet.sh ~/bin/screenshots/ss-sel-save.sh"))
+    precondition(shot.overlayLabel == "Save screenshot")
+    state.model = Node(id: "root", children: [
+      Node(id: "root/q", key: "q", children: [Node(id: "root/q/q", key: "q", children: [leaf])]),
+      Node(id: "root/s", key: "s", children: [Node(id: "root/s/s", key: "s", children: [
+        Node(id: "root/s/s/s", key: "s", children: [shot])
+      ])])
+    ])
+    for (key, side) in [("a", "left"), ("d", "right")] {
+      let group = "root/" + key
+      let gate = group + "/" + key
+      let leaf = Node(id: gate + "/" + key, key: key,
+                      action: .command("~/bin/ms win rectangle \"rectangle://execute-action?name=\(side)-half\""))
+      state.model?.children.append(Node(id: group, key: key, children: [Node(id: gate, key: key, children: [leaf])]))
+    }
     let delegate = AppDelegate(state: state)
     let prefix = "com.machinespirit.telegraph-test." + UUID().uuidString
     delegate.installOverlayObservers(prefix: prefix, placementPreview: preview)
@@ -97,7 +111,35 @@ import MachineSpiritKit
       DistributedNotificationCenter.default().postNotificationName(Notification.Name(prefix + "." + suffix),
         object: nil, userInfo: payload, deliverImmediately: true)
     }
+    func capturePanel(_ window: NSWindow, environmentKey: String) async throws {
+      guard let capture = ProcessInfo.processInfo.environment[environmentKey] else { return }
+      CATransaction.flush()
+      try await Task.sleep(for: .milliseconds(100))
+      let process = Process()
+      process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+      process.arguments = ["-x", "-l", String(window.windowNumber), capture]
+      try process.run()
+      process.waitUntilExit()
+      precondition(process.terminationStatus == 0, "Could not capture requested fixture panel")
+    }
     defer { DistributedNotificationCenter.default().removeObserver(delegate) }
+    for (key, side) in [("a", Placement.left), ("d", Placement.right)] {
+      let pair = key + "/" + key
+      send("nav", ["state": "shown", "path": key])
+      await wait { preview.sourcePanel?.isVisible == true }
+      precondition(!panel.isVisible, "The first key identifies only the selected window")
+      send("nav", ["state": "shown", "path": pair])
+      await wait { panel.isVisible }
+      let expected = placementFrame(side, visibleFrame: screen.visibleFrame, current: source)
+      precondition(ObservedWindow.matches(preview.target!.frame, expected))
+      send("fired", ["path": pair + "/" + key])
+      send("nav", ["state": "hidden"])
+      await moveFixture(to: expected)
+      await wait { outline.animation(forKey: "landing") != nil }
+      precondition(preview.sourcePanel!.isVisible)
+      await wait { !panel.isVisible }
+      await moveFixture(to: source)
+    }
     send("nav", ["state": "shown", "path": "q/q"])
     await wait { panel.isVisible }
     CATransaction.flush()
@@ -120,7 +162,7 @@ import MachineSpiritKit
     send("fired", ["path": "q/q/q"])
     send("nav", ["state": "hidden"])
     try? await Task.sleep(for: .milliseconds(75))
-    precondition(!origin.isVisible)
+    precondition(origin.isVisible)
     precondition(panel.isVisible && outline.opacity == 1, "Early acknowledgment without an actual move")
     await moveFixture(to: placement.frame)
     if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion { await wait { outline.animation(forKey: "landing") != nil } }
@@ -169,6 +211,72 @@ import MachineSpiritKit
       if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion { await wait { outline.animation(forKey: "landing") != nil } }
       await wait { !panel.isVisible }
     }
+    await moveFixture(to: source)
+    if NSScreen.screens.count > 1 {
+      let intent = PlacementIntent(action: .command("~/bin/run-quiet.sh ~/bin/ms win place display-next"))!
+      preview.arm(intent, path: "f/f/f", fx: fx)
+      await wait { panel.isVisible }
+      let destination = preview.target!.frame
+      let actualScreen = NSScreen.screens.first { $0.visibleFrame.contains(destination) }!
+      precondition(actualScreen != screen && destination != actualScreen.visibleFrame)
+      preview.fire(path: "f/f/f")
+      // A fixed-size window can land with a different size than requested.
+      let clamped = destination.insetBy(dx: 14, dy: 10)
+      await moveFixture(to: clamped)
+      await wait { outline.animation(forKey: "landing") != nil }
+      precondition(ObservedWindow.matches(preview.target!.frame, clamped))
+      await wait { !panel.isVisible }
+    }
+    let halfDown = PlacementIntent(action: .command("~/bin/run-quiet.sh ~/bin/ms win place half-down"))!
+    await moveFixture(to: source)
+    preview.arm(halfDown, path: "x/x/x", fx: fx)
+    await wait { panel.isVisible }
+    let lowerHalf = CGRect(x: screen.visibleFrame.minX, y: screen.visibleFrame.minY,
+                           width: screen.visibleFrame.width, height: screen.visibleFrame.height / 2)
+    precondition(ObservedWindow.matches(preview.target!.frame, lowerHalf))
+    preview.hide()
+
+    let miss = "No display directly below this window"
+    send("placement.miss", ["reason": miss])
+    await wait { preview.errorPanel?.isVisible == true }
+    let errorPanel = preview.errorPanel!
+    let border = errorPanel.contentView!.layer!.sublayers!.first!
+    let message = border.sublayers!.first! as! CATextLayer
+    let textWidth = (miss as NSString).size(withAttributes: [.font: NSFont.monospacedSystemFont(ofSize: 15, weight: .semibold)]).width
+    precondition(message.string as? String == miss && message.bounds.width > textWidth)
+    precondition(message.truncationMode == .none && message.backgroundColor == nil && border.backgroundColor == nil)
+    precondition(NSColor(cgColor: border.borderColor!)!.redComponent == 1)
+    try await capturePanel(errorPanel, environmentKey: "MS_ERROR_CAPTURE")
+    try? await Task.sleep(for: .milliseconds(800))
+    send("placement.miss", ["reason": miss])
+    try? await Task.sleep(for: .milliseconds(750))
+    precondition(preview.errorPanel === errorPanel && errorPanel.isVisible && border.opacity == 1)
+    await wait { !errorPanel.isVisible }
+
+    func findLayer(_ layer: CALayer?, named name: String) -> CALayer? {
+      guard let layer else { return nil }
+      if layer.name == name { return layer }
+      return layer.sublayers?.lazy.compactMap { findLayer($0, named: name) }.first
+    }
+    send("nav", ["state": "shown", "path": "s/s"])
+    await wait { state.overlayNodeID == "root/s/s" }
+    let shotDisc = findLayer(graph.contentView?.layer, named: shot.id)!.sublayers!.first!
+    let previewColor = shotDisc.borderColor
+    send("nav", ["state": "shown", "path": "s/s/s"])
+    await wait { state.overlayNodeID == "root/s/s/s" }
+    precondition(shotDisc.borderColor != previewColor, "Interactive screenshot is highlighted before the final key")
+    if ProcessInfo.processInfo.environment["MS_GRAPH_CAPTURE"] != nil {
+      graph.contentView!.layer!.opacity = 1
+      try await Task.sleep(for: .milliseconds(220))
+      try await capturePanel(graph, environmentKey: "MS_GRAPH_CAPTURE")
+      graph.contentView!.layer!.opacity = 0
+    }
+    send("nav", ["state": "hidden"])
+    await wait { !state.overlayVisible }
+    send("window.focus", ["pid": getpid(), "windowID": id])
+    await wait { panel.isVisible && outline.animation(forKey: "landing") != nil }
+    precondition(ObservedWindow.matches(preview.target!.frame, fixture.frame))
+    await wait { !panel.isVisible }
     preview.prepareLaunch(for: [.freshTerminal])
     try? await Task.sleep(for: .milliseconds(50))
     preview.launch(.freshTerminal, path: "t/t", fx: fx)
@@ -184,6 +292,6 @@ import MachineSpiritKit
     preview.launch(.focus("com.apple.MobileSMS"), path: "m/e", fx: fx)
     await wait { panel.isVisible && outline.animation(forKey: "landing") != nil }
     await wait { !panel.isVisible }
-    print("PASS \(cases) placement cases; real WindowServer fixture, private navigation/fired IPC, DDD source display, arrival, cancellation, replacement, refusal timeout and display transfer when available")
+    print("PASS \(cases) placement cases; real WindowServer fixture, private navigation/fired IPC, DDD source display, arrival, cancellation, replacement, refusal timeout, display transfer when available, half-step, repeated readable error, screenshot route arming and focus")
   }
 }

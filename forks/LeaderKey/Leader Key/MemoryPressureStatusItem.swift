@@ -17,27 +17,33 @@ enum MemoryPressure {
     var availablePercent: Int = 100
     /// kern.memorystatus_vm_pressure_level — 1 normal · 2 warning · 4 critical.
     var vmPressureLevel: Int = 1
-
-    /// The headline: 100 − available. This is *pressure*, not usage — it stays
-    /// low while the machine is healthy even when RAM "usage" looks high.
-    var pressurePercent: Int { max(0, min(100, 100 - availablePercent)) }
+    var hasUsage = false
+    var hasAvailablePercent = false
+    var hasPressureLevel = false
 
     var levelName: String {
+      guard hasPressureLevel else { return "Unavailable" }
       switch vmPressureLevel {
       case 4: return "Critical"
       case 2: return "Warning"
-      default: return "Normal"
+      case 1: return "Normal"
+      default: return "Unavailable"
       }
     }
 
   }
 
-  static func read(details: Bool = true) -> Reading {
+  static func read(barOnly: Bool = false) -> Reading {
     var r = Reading()
-    r.availablePercent = Int(sysctlI32("kern.memorystatus_level") ?? 100)
-    r.vmPressureLevel = Int(sysctlI32("kern.memorystatus_vm_pressure_level") ?? 1)
+    if !barOnly, let available = sysctlI32("kern.memorystatus_level") {
+      r.availablePercent = Int(available)
+      r.hasAvailablePercent = true
+    }
+    if let level = sysctlI32("kern.memorystatus_vm_pressure_level") {
+      r.vmPressureLevel = Int(level)
+      r.hasPressureLevel = true
+    }
 
-    guard details else { return r }
     r.total = sysctlU64("hw.memsize") ?? 0
 
     // VM page counts → byte breakdown (mirrors Activity Monitor's model).
@@ -52,6 +58,7 @@ enum MemoryPressure {
       }
     }
     if kr == KERN_SUCCESS {
+      r.hasUsage = r.total > 0
       let ps = UInt64(vm_kernel_page_size)
       let wired = UInt64(stats.wire_count) * ps
       let compressed = UInt64(stats.compressor_page_count) * ps
@@ -69,6 +76,7 @@ enum MemoryPressure {
         ? r.total - r.used - r.cached : UInt64(stats.free_count) * ps
     }
 
+    guard !barOnly else { return r }
     // Swap.
     var swap = xsw_usage()
     var swapSize = MemoryLayout<xsw_usage>.size

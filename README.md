@@ -1,6 +1,10 @@
 # machine-spirit
 
-A keyboard-driven macOS workspace with a live node-graph launcher, one compact system menu, persistent terminal sessions, and a native CLI/MCP interface for agents.
+Move a Mac window between displays without reaching for the mouse. Caps Lock opens a live shortcut graph. The same window and display geometry is available to scripts and agents through a native Swift CLI and MCP server.
+
+![A test window moves from an external display to a laptop and back using DDD, XXX and WWW](docs/img/display-half-steps.gif)
+
+*Replay of seven window positions recorded from macOS WindowServer on two physical displays. Repeated* `xxx` *moves down by one half-screen and* `www` *moves back up. The diagram holds each position for readability.*
 
 ![MachineSpirit typing overlay: the s branch over a plain dark background](docs/img/hero.png)
 
@@ -10,10 +14,16 @@ A keyboard-driven macOS workspace with a live node-graph launcher, one compact s
 
 - **A launcher you can see as you type.** Caps Lock opens a nested key tree in the owned [Leader Key fork](forks/LeaderKey); a click-through graph follows navigation at the pointer. The optional board lets you inspect, arrange, add, and remove binds. It takes the place of a standalone Leader Key setup while keeping its config format.
 - **One compact menu bar item.** Stats, a terminal/tmux ledger, keep-awake, brightness/DDC, and clipboard history share one home. It covers the everyday roles of **Stats**, **Amphetamine**, **MonitorControl**, and **Pastebot/Maccy**; those remain useful standalone alternatives, with different feature sets and hardware coverage.
-- **A spatial window grid.** Repeated keys mirror window positions: `⇪ q q q` → top-left, `⇪ x x x` → bottom half, `⇪ b b b` → center third. Rectangle supplies the placement engine; an AppleScript animates grow/shrink. This replaces routine dragging and shortcut hunting while leaving floating windows and the mouse available.
+- **A spatial window grid.** Repeated keys mirror window positions: `⇪ q q q` → top-left, `⇪ x x x` → bottom half, `⇪ b b b` → center third. Machine Spirit handles half-steps and display transfers. Rectangle handles other grid shortcuts. This replaces routine dragging and shortcut hunting while leaving floating windows and the mouse available.
 - **sheol, a tmux ledger.** Launch protected terminals, see attached and detached sessions, revive them into new iTerm windows, or deliberately banish them. It replaces forgotten detached sessions and repeated manual `tmux list-sessions` / attach commands. Snapshots restore layouts and supported commands, not running process memory.
 - **A terminal with a greeting.** One summonable iTerm hotkey window, pre-rendered multilingual banners, ASCII art, fastfetch, quotes, and an ANSI-safe typewriter replace a bare terminal startup. Normal panes stay silent.
 - **`ms` for agents and scripts.** A native Swift CLI and stdio MCP server enumerate screens/windows, inspect binds, execute configured leaves, read stats and sheol state, and capture selected regions. It replaces guessed coordinates and duplicated desktop-discovery glue. Clipboard-history reads require explicit opt-in.
+
+## What data gets recorded?
+
+The board’s opt-in shortcut stats store key paths, daily counts and a time-saved estimate locally. Each window action adds four estimated seconds and other shortcuts add 2.5 seconds.
+
+Pulse writes hourly app and window counts, resource readings, tab and duplicate counts, and up to ten hostnames per supported browser to monthly files under `~/Library/Application Support/MachineSpirit/pulse/`. Browser URLs are read temporarily to count exact duplicates. Pulse files are owner-readable and stay on the Mac. There is no Machine Spirit usage-reporting endpoint. When the T3 segment is enabled, the launcher reads task titles and statuses from the local T3 SQLite registry to populate the menu. Website shortcut icons can contact Google’s favicon service with the configured hostname. GitHub separately measures visits and clones of this repository.
 
 ## Architecture
 
@@ -36,7 +46,7 @@ flowchart TD
 
 **MachineSpirit board app** starts as an accessory with no board window or Dock icon. [`AppDelegate.swift`](app/MachineSpirit/Sources/AppDelegate.swift) receives `com.machinespirit.leader.nav` (`state`, `path`, `screen`, all strings) and `com.machinespirit.leader.fired` (`path`). The overlay is a reusable nonactivating panel; `machinespirit://board` opens the separate Canvas-based editor. Closing the board tears down its view tree and sheol polling while the overlay remains available.
 
-**Rectangle** owns window placement through `rectangle://execute-action?name=…`. Its MIT source is vendored as an [owned fork](forks/Rectangle), but **the current installer installs the stock Rectangle cask**, not a custom fork build. Grow/shrink is the separate [`win-lerp.applescript`](bin/win-lerp.applescript) path.
+**Machine Spirit** handles half-screen steps, display transfers and their previews. Other grid bindings use **Rectangle** through `rectangle://execute-action?name=…`. Its MIT source is vendored as an [owned fork](forks/Rectangle), but **the current installer installs the stock Rectangle cask**, not a custom fork build. Grow/shrink is the separate [`win-lerp.applescript`](bin/win-lerp.applescript) path.
 
 **iTerm2 + tmux/sheol** remain independent processes. [`sheol-core`](bin/sheol-core) supplies the session verbs used by the TUI, menu actions, embedded board ledger, and CLI; [`terminals-core`](bin/terminals-core) handles unprotected terminal actions. The closed menu reads tmux's local socket and native Apple Events without launching those helpers.
 
@@ -126,7 +136,7 @@ The tree follows four rules, by escalating "weight" of the action:
 | `⇪ c h r` | Chrome (jump/cycle) | | `⇪ s a` | Safari (jump/cycle) |
 | `⇪ f i` | Finder (jump/cycle) | | `⇪ s i g` | Signal (jump/cycle) |
 | `⇪ d i` | Discord | | `⇪ s e` | System Settings ✕ |
-| `⇪ f a c` / `⇪ f t` | FaceTime ✕ (from Messages: FaceTime the selected chat) | | `⇪ s p` | Spotify |
+| `⇪ f a c` / `⇪ f t` | FaceTime ✕ (only `f t` calls the selected chat from Messages) | | `⇪ s p` | Spotify |
 | `⇪ f i` (keep ⇪ down, tap `i` again) | Gather one more Finder tab per press | | `⇪ t e x` | TextEdit ✕ (closes all; asks if unsaved) |
 | `⇪ g p` | ChatGPT Classic | | `⇪ t e r` | Terminal |
 | `⇪ i t` | iTerm | | `⇪ v l c` | VLC (jump/cycle) |
@@ -134,23 +144,25 @@ The tree follows four rules, by escalating "weight" of the action:
 | `⇪ w h` | WhatsApp | | `⇪ k` | Clipboard history |
 | `⇪ c a l` | Calendar ✕ | | `⇪ c x` | Contacts ✕ |
 | `⇪ m a i l` | Mail ✕ | | `⇪ t 3` | T3 Code |
+| `⇪ f m` | Find My ✕ | | `⇪ b l e` | Blender |
+| `⇪ l s n m` | Little Snitch Network Monitor ✕ | | | |
 
 `⇪ s a` (Safari), `⇪ c h r` (Chrome), and `⇪ f i` (Finder) all run [`bin/app-jump.applescript`](bin/app-jump.applescript) with an app name — the whole-app analogue of `web-jump`, one ladder for every app: **not running → launch; backgrounded → restore its minimized windows and bring it forward (opening a window if none); already frontmost → cycle its windows in order, wrapping**. It rides macOS's native ⌘\` / ⌘N, so the implementation is shared rather than scripted per app; apps must still honor those native shortcuts and expose accessible windows. (Its predecessor, [`bin/browser-window-cycle.applescript`](bin/browser-window-cycle.applescript), cycled only the frontmost browser and stranded minimized windows; it stays in `bin/` unused.)
 
-**✕ = toggle:** [`bin/app-toggle.sh`](bin/app-toggle.sh) — not running → launch + place by the mouse; backgrounded → bring forward; frontmost **and the pointer is over one of its windows** → close it (TextEdit closes every document with the native save prompt, so nothing unsaved is lost); frontmost but pointer elsewhere → next window. Any app launched fresh (application binds and `app-jump`) gets its first window placed with the `⇪ ␣ ␣` mouse logic.
+**✕ marks utilities you can summon and dismiss with the same keys.** The first invocation opens the app or brings it forward. Repeating the shortcut while the app has focus closes it, even when the pointer is on another display. TextEdit asks about unsaved edits. Little Snitch closes its monitor windows and can reopen them on the next invocation. Photoshop and Blender use ordinary application bindings to preserve the working session. The [toggle helper](bin/app-toggle.applescript) handles the shared behavior.
 
 `⇪ v m w` runs [`bin/vmware.applescript`](bin/vmware.applescript) — activate if running, launch if not. (Cycling between individual VM windows isn't cleanly scriptable; use ⌘\` once focused.)
 
 ### Web — focus-or-cycle-or-open
 
-**Hold to collect:** keep `⇪` down after a site bind and spam its last letter (`y`, `.`, `r`, `p`, …): each press moves one more matching tab into a single new window placed by the mouse ([`bin/web-collect.sh`](bin/web-collect.sh)); when the last one lands the overlay pulses **blue**, and further presses cycle through them.
+Site shortcuts open in the browser macOS selects for the URL. Safari and browsers that expose scriptable window and tab controls can focus a matching tab and cycle among matches. If the browser cannot expose a match, the shortcut opens the URL. Set `MS_BROWSER_BUNDLE_ID` in the launcher's environment to select a specific browser.
 
-Every site key runs the same script, [`bin/web-jump.applescript`](bin/web-jump.applescript): if no tab for the site exists it opens one; if one exists it focuses it; if you're **already on it, pressing again cycles** through all matching tabs across every window. Adding a site is one Leader Key entry — `osascript ~/bin/web-jump.applescript <domains> [fallback-url]` — no new script.
+**Hold to collect in Safari.** Keep Caps down after `sa` and tap `a` again to invoke Safari’s **Window → Merge All Windows**. Safari decides which windows can join. After a site shortcut, keep Caps down and repeat its final key to gather one matching tab per press. Other browsers keep their tabs in place. Adding a site takes one Leader Key entry calling `osascript ~/bin/web-jump.applescript <domains> [fallback-url]`. [Browser helper](bin/web-browser.js) · [Safari collector](bin/web-collect.sh)
 
 | Keys | Site | Notes |
 |---|---|---|
 | `⇪ g i t` | GitHub | spells "git" |
-| `⇪ g m` | Gmail in Safari | Open, focus or cycle Gmail tabs. Keep Caps down and tap M again to collect one matching tab per press. |
+| `⇪ g m` | Gmail | Open, focus or cycle Gmail tabs. In Safari, hold Caps and tap M again to collect a matching tab. |
 | `⇪ g o` | Google | |
 | `⇪ g w` | ChatGPT web | matches chatgpt.com + chat.openai.com |
 | `⇪ g r o k` | Grok | spells "grok"; matches grok.com + x.com/i/grok |
@@ -229,12 +241,12 @@ If Caps (F19) is **still physically held** when a bind fires, the fork stays liv
 
 ## Window management
 
-Rectangle does the window math; Leader Key drives it through Rectangle's URL scheme (`open -g "rectangle://execute-action?name=..."`). The bindings form a spatial grid — each key sits on the keyboard where it sends the window on screen:
+Leader Key uses Rectangle for the placement grid and Machine Spirit for display transfers.
 
 ```
-⇪ q q q   top-left        ⇪ w w w   top half        ⇪ e e e   top-right
+⇪ q q q   top-left        ⇪ w w w   step up         ⇪ e e e   top-right
 ⇪ a a a   left half                                 ⇪ d d d   right half
-⇪ z z z   bottom-left     ⇪ x x x   bottom half     ⇪ c c c   bottom-right
+⇪ z z z   bottom-left     ⇪ x x x   step down       ⇪ c c c   bottom-right
 ⇪ v v v   left third      ⇪ b b b   center third    ⇪ n n n   right third
 ⇪ 1 1 1   first third     ⇪ 2 2 2   center third    ⇪ 3 3 3   last third
 ⇪ c s s   center          ⇪ m m m   maximize        ⇪ f f f   next display
@@ -244,14 +256,16 @@ Rectangle does the window math; Leader Key drives it through Rectangle's URL sch
 ⇪ = =     grow            ⇪ - -     shrink          ⇪ q u i t  ⌘Q frontmost app
 ```
 
-- **Destination preview.** With the graph overlay active, the second letter in a quarter or half sequence marks the selected window with a thin dashed stroke. A solid green outline previews the destination. The third letter runs Rectangle. For directional transfers the first arrow shows the new frame and the display names, and the second moves the window. When Rectangle uses private repeat history, the solid outline appears at the observed landing. Escape clears a pending preview.
+- **Step between halves.** From a right-half window (`ddd`), `xxx` fills the bottom half of the current display. Repeat to reach the top half of the display directly below. Another repeat fills its bottom half. `www` walks the same route upward. A display must overlap horizontally to count as directly above or below.
+- **Screenshot cue.** At `sss`, the graph highlights the pending screenshot action in amber. The fourth `s` starts selection.
+- **Destination preview.** With the graph overlay active, the first letter of a repeated placement chord marks the selected window with a short animated dashed stroke. The second adds a solid green destination border. Both stay visible through the move. The third letter requests placement. Before a display move, the penultimate key previews the proposed window bounds and names both displays. The final key moves the window, then the outline follows its settled bounds. A red outlined message explains a missing destination. Repeating the command restarts its reading time. For horizontal halves, the board follows the window to its actual landing, including across-monitor repeats. Escape clears a pending preview.
 - **Triple letters** for placement to reduce accidental placement; the two resize keys are **double-taps** because they're pressed repeatedly. (Notes moved to `⇪ n o` when `n` became the right-third group.)
 - **Thirds two ways**: the spatial letters `v`/`b`/`n` (left/center/right) and the numeric row `1`/`2`/`3` (first/center/last) both drive Rectangle's thirds — pick whichever your hand reaches for.
 - **Two centers**: `⇪ c s s` is Rectangle's own center action; `⇪ c e n` runs [`bin/center-window.applescript`](bin/center-window.applescript), which centers the frontmost window on *whichever display it currently sits on* (multi-monitor aware) without resizing it.
 - **`⇪ a m m m` / `⇪ m m m`** use [`ms win place`](tools/ms/README.md) (90% inset / exact visible frame — **maximize stops above the Dock**), so they share geometry with the `⇪ ␣ ␣` ladder.
 - **`⇪ ␣ ␣`** places the window on the pointer’s display. In the center, repeat the chord to alternate between a 90% inset and the whole usable frame. At an edge or corner, repeat within 1.5 seconds to grow from the selected half or quarter. Keeping Caps down and tapping Space walks the existing ladder through native fullscreen.
 - **`⇪ ␣ M`** toggles the focused window’s native fullscreen state. Tap Caps, then Space, then M. Repeat to leave fullscreen. A subsequent grid or display-move command waits for the window to leave its fullscreen Space before placing it.
-- The green outline previews almost-maximize, maximize and directional moves. On arrival the stroke expands a few points and fades. The new iTerm window from `⇪ T T` and the Messages window from `⇪ M E` show their outline when their actual bounds are available. Reduce Motion uses a fade.
+- The green outline previews almost-maximize, maximize and directional moves. On arrival the stroke expands a few points and fades. Window switches through the launcher or `ms focus` briefly outline the focused window. New iTerm and Messages windows show their outline when their bounds are available. Reduce Motion uses a fade.
 - **Grow/shrink bypass Rectangle**: [`bin/win-lerp.applescript`](bin/win-lerp.applescript) animates the frontmost window ±120 px over 22 smoothstep-eased frames — centered as it scales, with a primary-origin left/top clamp and a 300×200 floor so shrink-spam can't crush a window. This helper interpolates the resize; its clamp is not fully multi-monitor-aware (negative-origin displays are a limitation).
 - **`⇪ f f f` / `⇪ g g g`** send the window to the next / previous display; hold `⇪` and spam `f` or `g` to keep going in the **first** direction.
 - Rectangle's *native* larger/smaller step is bumped to 100 px by [`scripts/macos-defaults.sh`](scripts/macos-defaults.sh) for when it's triggered outside Leader Key.
@@ -277,41 +291,21 @@ What the fork adds over stock:
 
 ## Menu bar
 
-**Compact bar (Stats-style):** tiny labels above each value — `TERM · TMUX · SHEOL` counts, then `CPU · GPU · RAM · TEMP · NET` (NET = live ↓/↑ throughput from interface counters, so Little Snitch Network Monitor's menu bar isn't needed for a glance). Values turn amber/red only when extreme (CPU/GPU ≥ 70/90 %, RAM pressure warn/critical, TEMP ≥ 80/95 °C). The machine-spirit counts glide to new values (one 400 ms, 30 fps tween that stops when settled); stats resample every second and snap, so the bar stays ~1 % CPU idle. The terminals dropdown is sectioned iTerm2 · Terminal · tmux living · sheol, and the iTerm **hotkey window** row has no ✕ — it focuses but can't be killed from here.
+The skull follows the graph’s summon, typing, error and dismissal events. **T3** shows working tasks over open tasks in the local T3 environment. The denominator includes top-level, unsettled, unsnoozed tasks. The numerator counts their latest preparing, starting or running runs, excluding pending input and approvals. Select a named task in **T3 tasks** to open that thread in the desktop app. If the local server or its v2 task projections are unavailable, the bar shows a dash. Plain terminals, attached tmux sessions and detached sessions remain available in the terminal menu.
 
-![The single status item at twice its logical size](docs/img/menubar.png)
+**CPU%**, **GPU%** and **RAM%** show utilization. **MPRS** reports the kernel memory pressure level as **OK**, **WARN** or **CRIT**. A missing reading shows a dash. The small horizontal capsule fills in two tones while keep-awake is active. Each metric has a fixed slot. Choose fields under **Leader Key → Menu bar**.
 
-![Compact system menu; session text blurred](docs/img/menu.png)
+![Machine Spirit’s compact menu bar on a three-display Mac](docs/img/menubar.png)
 
-*Live menu capture. Session names, commands, and ages are blurred; the controls and aggregate statistics are unchanged.*
+Open **Stats** for network throughput and available storage. **Disk** includes the startup data volume and writable drives mounted under `/Volumes`. **Sample Network Activity by Process** ranks a one-second sample by bytes transferred. **Open Little Snitch Network Monitor** opens connection details when installed.
 
-The fork owns **one** status item. Its image packs these segments with 4-point
-spacing: the skull (green while summoned), `t·l·d` (non-tmux terminals, attached
-tmux sessions, detached tmux sessions), CPU %, memory pressure %, and a small dot
-when keep-awake is active. Digits are monospaced; the three-pixel underline below
-memory pressure uses the existing normal/warning/critical level color. Normal
-rendering adopts the menu-bar foreground; the green skull and warning colors
-remain visible in light and dark appearances. Unchanged rendered content causes
-no image/title setter calls.
+![Compact system menu with session text blurred](docs/img/menu.png)
 
-**Leader Key → Menu bar** lets you choose the visible segments. Turn on **Disk**
-to show free startup space in the existing bar. It refreshes at most every 30
-seconds and turns amber below 10 GiB or red below 5 GiB. **Stats → Disk** shows
-capacity for the startup data volume and writable drives mounted under
-`/Volumes`. **Sample Network Activity by Process** ranks a one-second local
-sample by total bytes transferred. **Open Little Snitch Network Monitor** opens
-the connection and rule interface when installed. With every segment off, a
-small dot keeps the menu reachable.
+*Earlier menu capture. Session names, commands and ages are blurred.*
 
-Click an app in the audio menu to bring it forward. For Safari, Chrome and
-Brave, Machine Spirit looks for the browser’s native mute-tab button when you
-click. A single exposed audible tab is selected and its window raised. Hidden
-tab bars, missing Accessibility access and multiple audible matches can leave
-the browser on its current tab. English audio indicators have been tested.
+Open **Now Playing** to start audio discovery and meters. Closing its submenu releases the capture session. Click an audible app to bring it forward. For a registered web handler, Machine Spirit checks the native tab strip for a single audible tab. A browser that exposes the “Mute tab” control can also select that tab and raise its window. Hidden tab strips, multiple matches, other indicator languages and missing Accessibility permission can leave the browser on the current tab.
 
-The top-level menu fits within roughly **600 points without scrolling**:
-**one-line stats summary → Terminals & tmux → Brightness → Keep awake → Clipboard
-history… ⌘⇧V → Leader Key → Quit**. The summary uses monospaced digits for CPU,
+The top-level menu includes Stats, T3 tasks, terminals and tmux, brightness, keep-awake, clipboard history and Now Playing. The stats summary uses monospaced digits for CPU,
 GPU, RAM used %, hottest sensor, download/upload MB/s and battery charge.
 Its submenu contains the seven Stats rows below, each retaining its own details submenu.
 
@@ -331,8 +325,7 @@ Banish All panel, using the existing helpers. There are no blank spacer items.
 
 - **CPU:** total usage, per-core usage and the top five processes (100% per core).
 - **GPU:** utilisation and available renderer/tiler/memory details.
-- **Memory:** used, app, wired, compressed, cached, free and swap; pressure is
-  `100 − kern.memorystatus_level`, distinct from RAM usage.
+- **Memory** includes used, app, wired, compressed, cached, free and swap. The kernel supplies its available-memory percentage and its normal, warning or critical pressure level independently.
 - **Network ↓/↑:** primary-interface download/upload rates and byte totals.
 - **Disk:** Data-volume free/total space and aggregate physical-disk read/write rates.
 - **Battery:** charge %, power/charging state, time estimate, cycles and health.
@@ -340,18 +333,14 @@ Banish All panel, using the existing helpers. There are no blank spacer items.
   Apple Silicon uses HID sensors, with read-only SMC fallback for known M4 CPU/GPU
   keys. Missing sensors explicitly say **Unavailable**; no guessed SoC reading.
 
-One **2-second timer, 0.5-second tolerance**, drives the bar's CPU, memory pressure
-and sheol sampling. tmux is read over its local socket without attaching a client
-or launching a process; native iTerm Apple Events and other-terminal discovery
-are throttled to 46 seconds. Menu actions keep using `sheol-core`/`terminals-core`.
+One **2-second timer, 0.5-second tolerance**, drives the bar’s sampling. The T3 task ratio refreshes off the main thread at most once per four seconds through a read-only snapshot of the local v2 task registry. Opening the menu requests a fresh snapshot. Background terminal discovery runs at most once per 46 seconds. Machine Spirit reads tmux through its local socket. Menu actions keep using `sheol-core`/`terminals-core`.
 Terminal rows refresh on opening and preserve the existing stable-row behavior
 while a menu is tracking. An unrecognised tmux protocol keeps cached counts.
 The clipboard change counter and keep-awake deadline share this same heartbeat.
 
 Summary statistics run **only while the main menu is open**, at 1 second on a
 serial background queue, updating rows in place. Per-core and top-process sampling
-runs only while the Stats submenu is open. Closing the main menu stops the timer
-and releases the sensor readers. Network/disk baselines reset on each open, interface change,
+runs only while the Stats submenu is open. Closing the main menu stops its timer and releases its detail readers. Enabled GPU and temperature columns keep a separate two-second sampler. Network/disk baselines reset on each open, interface change,
 or counter reset. A single `ps` call supplies top processes while Stats is open;
 the closed-menu sampling path has no subprocesses. Stats.app remains independent;
 you can quit it after comparing the readings you use. Reader references and MIT
@@ -360,7 +349,7 @@ attribution are recorded in [FORK-NOTES](forks/FORK-NOTES.md).
 **Keep awake** is one row showing off, indefinitely, or time remaining; its submenu
 offers Off, Indefinitely, 15 minutes, and 1/2/4/8 hours. **Keep display
 on too** defaults on; turn it off to allow display sleep while keeping the system
-awake. **Keep awake at launch** defaults off. Expiry uses the shared heartbeat
+awake. Relaunching restores an active session. Timed sessions use their original deadline. Choosing **Off** clears the saved session. **Keep awake at launch** starts an indefinite session when there is no active session to restore and defaults off. Expiry uses the shared heartbeat
 (with up to one tick of delay); remaining time updates while the menu is open.
 
 **Brightness** has one inline slider that always sets all displays together.
@@ -535,6 +524,8 @@ sheol is the first piece of a terminal necromancer theme for machine-spirit. the
 
 ## MachineSpirit.app — the board and typing overlay
 
+**Shortcut audio.** In the board’s **Graphics & feedback** section, choose quiet sounds for command dispatch and errors, or speech for matched keys and commands. Sound is off by default. The two tones play once and last under a tenth of a second. Fast typing skips letters while speech is busy. Commands and errors can interrupt a letter.
+
 **Typing overlay game-feel (all behind `OverlayFX` knobs, `msFX.*` defaults):** a green skull at the root and as the cursor; each matched letter pops in big and springs down with a faint shockwave ring; a miss flashes the whole overlay red and pulses the current letter; `⌫` retracts one level (at the root the skull pulses); hold-mode completions pulse blue; closing plays a reverse collapse at half the opening's duration. Nodes are clickable (it navigates the fork via `msleaderkey://navigate`), hovering any node lights its route and dims the rest, and non-root nodes stay inside the visible frame (clear of the menu bar and Dock). Optional curved traces (`msFX.curvedTraces`), 1× displays get matched `contentsScale` + edge antialiasing. Zero work while idle — all motion is Core Animation.
 
 **Local stats (opt-in, off by default):** `msStatsEnabled` counts fired binds into `~/Library/Application Support/MachineSpirit/stats.json` (day-level counts + key paths only, never finer timestamps), with an estimated time saved; shown in the board with reset/disable. Nothing leaves the machine.
@@ -611,16 +602,18 @@ with installed on-device languages on macOS 26+, copies the result and shows a
 HUD. Unavailable translation explicitly falls back to OCR text.
 
 `ms pulse collect` appends a private monthly JSONL usage snapshot.
-`ms pulse report [--hours N]` summarizes it. The hourly LaunchAgent is optional
-on a fresh install. Its template lives at `config/pulse/com.machinespirit.pulse.plist`.
-After ten minutes of inactivity, the next hourly sample also records duplicate-tab
-counts and Finder window-gathering suggestions. **Stats → Latest Idle Review**
-shows the latest such sample from the last 24 hours. All cleanup decisions
-remain manual.
+`ms pulse report [--hours N]` summarizes it. On a fresh Mac, set `MS_INSTALL_PULSE=1` to enable hourly collection during installation. Reinstalling preserves an existing Pulse installation. To unload it on this Mac, run `launchctl bootout "gui/$(id -u)/com.machinespirit.pulse"`. Remove its installed plist from `~/Library/LaunchAgents/` to keep it disabled at login.
+Run `ms pulse disk` for a current read-only disk review. It reports available space, the review threshold (10% of capacity up to 30 GiB), and the number of entries in the Codex pending crash queue when available. After ten minutes of inactivity, the next hourly sample also records disk, duplicate-tab and Finder window-gathering suggestions. **Stats → Latest Idle Review** shows the latest such sample from the past 24 hours. All cleanup decisions remain manual.
+
+For a seven-day cleanup preview, run `ms pulse disk --crash-preview`. It reports eligible diagnostic pairs, their allocated bytes and skipped entries.
+
+Run `ms pulse disk --explain` for a local explanation of measured disk changes and the enrolled project's cleanup estimate. The output identifies whether Apple Foundation Models or the deterministic fallback produced the summary.
+
+You can also track selected external drives. Pulse checks each drive's identity, records its available space hourly and suggests a review below 10% free. Set up the drive list using the [Pulse CLI guide](tools/ms/README.md).
 `MS_PULSE_DIR` supports isolated verification. Window counts are CGWindowList
 estimates; exact minimized counts are unavailable without AX. The warmed
 collector can meet 400 ms wall/100 ms CPU, but cold/load outliers remain.
-MCP adds read-only `audio_list` and `pulse_report`.
+MCP exposes read-only `audio_list`, `pulse_report` and `pulse_disk`.
 
 Press **⌘ Esc** to move keyboard focus out of an editable field. The launcher
 asks Accessibility for a focusable non-editable item in the same window or web
@@ -631,7 +624,7 @@ The shortcut is configurable in General settings.
 `blur-field.sh`. It reveals search when needed and verifies focus before
 returning success. Use `⇪ m e` to open conversation search.
 
-**Installer gap:** `install.sh` currently copies `bin/ms` into `~/bin` along with other helpers, but the wrapper locates `tools/ms` relative to the repository. Use `./bin/ms` from the checkout, or a symlink to that wrapper, rather than the copied standalone file. Prebuild before connecting an MCP client. [Complete command reference, registration, privacy limits, and verification](tools/ms/README.md).
+The installer prebuilds the release CLI and symlinks `~/bin/ms` to its repo wrapper. [Complete command reference, registration, privacy limits, and verification](tools/ms/README.md).
 
 ## Busy-pane shield (opt-in, default off)
 

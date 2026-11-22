@@ -6,7 +6,7 @@ private let fullscreenAttribute = "AXFullScreen"
 
 @MainActor
 private func availableScreens() throws -> [NSScreen] {
-    let screens = NSScreen.screens
+    let screens = desktopScreens()
     guard !screens.isEmpty else { throw Failure("no screens available; a graphical macOS session is required") }
     return screens
 }
@@ -17,6 +17,8 @@ func mouse() throws -> Output {
     let point = NSEvent.mouseLocation
     let screen = screens.first { $0.frame.contains(point) } ?? NSScreen.main ?? screens[0]
     return Output(json: ["x": point.x, "y": point.y, "screen": screenID(screen),
+                         "coordinateSystem": "AppKit global points, primary bottom-left, y up",
+                         "cgX": point.x, "cgY": screens[0].frame.maxY - point.y,
                          "frame": frameJSON(screen.frame), "visibleFrame": frameJSON(screen.visibleFrame)],
                   text: "\(point.x),\(point.y) screen=\(screenID(screen))")
 }
@@ -58,7 +60,7 @@ private func targetWindow(_ app: AXUIElement, rectangle: Bool = false) throws ->
             return standard
         }
     }
-    throw Failure("app has no accessible focused, main or standard window", exitCode: 11)
+    throw Failure("No accessible window to move", exitCode: 11)
 }
 
 /// Read each window's attributes in ONE AX round trip (especially important for tile-all).
@@ -129,6 +131,41 @@ private func setFrame(_ element: AXUIElement, _ frame: CGRect) throws {
     guard first == .success, resized == .success, last == .success else {
         throw Failure("window refused frame (AX position/size/position errors \(first.rawValue)/\(resized.rawValue)/\(last.rawValue))")
     }
+}
+
+private func setHalfFrame(_ element: AXUIElement, from current: CGRect, to target: CGRect,
+                          within visible: CGRect) throws -> CGRect {
+    // AppKit may constrain a resize to the display that owns most of the
+    // window after the first position write. Shrink before moving so a tall
+    // window cannot straddle the seam and acquire the neighbor's constraints.
+    var compact = CGSize(width: min(current.width, target.width), height: min(current.height, target.height))
+    if compact != current.size, let size = AXValueCreate(.cgSize, &compact) {
+        try? setAX(element, kAXSizeAttribute, size)
+    }
+    try setFrame(element, target)
+    guard let first = axFrame(element) else { throw Failure("cannot verify the window's half placement") }
+    if matchesHalfFrame(first, target) { return first }
+
+    // A resize right on a display seam can still be constrained by the
+    // neighboring display. Fit once inside the destination, then set the origin.
+    var origin = visible.origin
+    var targetOrigin = target.origin
+    var targetSize = target.size
+    if let inside = AXValueCreate(.cgPoint, &origin),
+       let size = AXValueCreate(.cgSize, &targetSize) {
+        try? setAX(element, kAXPositionAttribute, inside)
+        try? setAX(element, kAXSizeAttribute, size)
+        if let fitted = axFrame(element) {
+            // A minimum height can exceed the requested half. Keep the
+            // window inside the usable bounds by letting it grow inward.
+            targetOrigin.y = min(targetOrigin.y, max(visible.minY, visible.maxY - fitted.height))
+        }
+        if let final = AXValueCreate(.cgPoint, &targetOrigin) {
+            try setAX(element, kAXPositionAttribute, final)
+        }
+    }
+    guard let landed = axFrame(element) else { throw Failure("cannot verify the window's half placement") }
+    return landed
 }
 
 private func setFullscreen(_ fullscreen: Bool, on element: AXUIElement, before: CGRect) throws -> CGRect {
@@ -252,12 +289,52 @@ private func applyPlacement(_ requested: Placement, to app: NSRunningApplication
         return Output(json: ["status": "requested", "fullscreen": !snapshot.fullscreen],
                       text: snapshot.fullscreen ? "Leaving fullscreen" : "Entering fullscreen")
     }
-    if requested.isDisplayTransfer {
-        guard let index = destinationDisplay(for: requested, from: source, screens: screenFrames) else {
-            return Output(json: ["status": "unchanged", "mode": requested.rawValue,
-                                 "pid": app.processIdentifier, "screen": screenID(screens[source])],
-                          text: "No display in that direction")
+    if requested.isVerticalHalfStep {
+        let visible = screens.map { flipScreenRect($0.visibleFrame, primaryTop: primaryTop) }
+        let pid = app.processIdentifier
+        let windowID = snapshot.cgID(pid: pid, windows: (try? windowList(allSpaces: false)) ?? [])
+        let key = windowID.map { "\(pid):\($0)" }
+        let confirmedHalf = key.flatMap {
+            PlacementState.read()?.confirmedHalf(key: $0, screen: screenID(screens[source]), frame: currentFrame,
+                                                 usable: visible[source], now: Date().timeIntervalSince1970)
         }
+        guard let step = verticalHalfStep(for: requested, window: currentFrame, from: source,
+                                          screens: screenFrames, visible: visible, confirmedHalf: confirmedHalf) else {
+            let direction = requested == .halfDown ? "below" : "above"
+            throw Failure("No display directly \(direction) this window", exitCode: 11)
+        }
+        let before = snapshot.fullscreen
+            ? try setFullscreen(false, on: snapshot.element, before: currentFrame) : currentFrame
+        let destination = screenID(screens[step.screen])
+        let screen = NSScreen.screens.first { screenID($0) == destination } ?? screens[step.screen]
+        let usable = flipScreenRect(screen.visibleFrame, primaryTop: primaryTop)
+        let target = placementFrame(step.half, visibleFrame: usable, current: before)
+        let landed = try setHalfFrame(snapshot.element, from: before, to: target, within: usable)
+        let constrained = !matchesHalfFrame(landed, target)
+        if constrained {
+            let anchoredY = min(target.minY, max(usable.minY, usable.maxY - landed.height))
+            guard !matchesHalfFrame(landed, before), overlapScreen(landed, screens: screenFrames) == step.screen,
+                  abs(landed.minX - target.minX) <= 3, abs(landed.minY - anchoredY) <= 3 else {
+                throw Failure("window did not reach the \(step.half.rawValue) half on the selected display")
+            }
+        }
+        try? FileManager.default.removeItem(at: PlacementState.fileURL)
+        if constrained, let key {
+            try? savePlacementState(PlacementState(windowKey: key, last: step.half.rawValue, fromFullscreen: false,
+                t: Date().timeIntervalSince1970, halfLanding: .init(screen: destination, frame: landed, usable: usable)))
+        }
+        announce(landed, mode: step.half, windowID: windowID)
+        return Output(json: ["status": "requested", "mode": requested.rawValue, "half": step.half.rawValue,
+                             "pid": pid, "screen": destination, "frame": frameJSON(target),
+                             "observedFrame": frameJSON(landed), "constrained": constrained],
+                      text: "Placed \(step.half.rawValue) half on display \(destination)\(constrained ? " (window constrained)" : "")")
+    }
+    if requested.isDisplayTransfer {
+        let xOnly = UserDefaults(suiteName: "com.knollsoft.Rectangle")?.bool(forKey: "screensOrderedByX") ?? false
+        guard let index = destinationDisplay(for: requested, from: source, screens: screenFrames, xOnly: xOnly) else {
+            throw Failure("No destination display in that direction", exitCode: 11)
+        }
+        let windowID = snapshot.cgID(pid: app.processIdentifier, windows: (try? windowList(allSpaces: false)) ?? [])
         let windowFrame = snapshot.fullscreen
             ? try setFullscreen(false, on: snapshot.element, before: currentFrame) : currentFrame
         let refreshed = NSScreen.screens
@@ -266,13 +343,24 @@ private func applyPlacement(_ requested: Placement, to app: NSRunningApplication
         let target = transferredFrame(windowFrame,
             from: flipScreenRect(sourceScreen.visibleFrame, primaryTop: primaryTop),
             to: flipScreenRect(destination.visibleFrame, primaryTop: primaryTop))
-        announce(target, mode: requested)
-        try setFrame(snapshot.element, target)
-        // Moving displays breaks the fullscreen ladder. No window ID enumeration
-        // or arrival waits are needed for a directional transfer.
+        announce(target, mode: requested, windowID: windowID)
+        let landedFrame: CGRect
+        do {
+            try setFrame(snapshot.element, target)
+            landedFrame = target
+        } catch {
+            // Fixed-size utilities can accept the move while refusing AXSize.
+            // A confirmed landing still fulfills a display transfer.
+            guard let actual = axFrame(snapshot.element),
+                  screenFrames[index].intersects(actual),
+                  overlapScreen(actual, screens: screenFrames) == index else { throw error }
+            landedFrame = actual
+            announce(actual, mode: requested, windowID: windowID)
+        }
+        // Moving displays breaks the fullscreen ladder. Arrival observation stays in the board.
         try? FileManager.default.removeItem(at: PlacementState.fileURL)
         return Output(json: ["status": "requested", "mode": requested.rawValue, "pid": app.processIdentifier,
-                             "screen": screenID(screens[index]), "frame": frameJSON(target)],
+                             "screen": screenID(screens[index]), "frame": frameJSON(landedFrame)],
                       text: "Moved toward display \(screenID(screens[index]))")
     }
     let point = NSEvent.mouseLocation
@@ -359,6 +447,7 @@ private func cycleWindow(appName: String?) throws -> Output {
     let result = AXUIElementPerformAction(next.1.element, kAXRaiseAction as CFString)
     guard result == .success else { throw Failure("AXRaise failed (AX error \(result.rawValue))") }
     guard app.activate(options: []) else { throw Failure("window raised but macOS refused app activation") }
+    announceWindowFocus(pid: app.processIdentifier, id: next.0)
     return Output(json: ["pid": app.processIdentifier, "windowId": next.0, "status": "requested"],
                   text: "Raised window \(next.0) of \(app.localizedName ?? "app")")
 }
@@ -435,9 +524,21 @@ func win(_ args: [String]) throws -> Output {
         guard verb == "cycle" || parsed.options.isEmpty else { throw Failure("--app is only supported by win place and win cycle") }
         mode = nil
     }
-    guard AXIsProcessTrusted() else { throw Failure("Accessibility not granted to the calling process") }
+    guard verb == "place" || AXIsProcessTrusted() else { throw Failure("Accessibility not granted to the calling process") }
     switch verb {
-    case "place": return try placeWindow(mode!, appName: parsed.options["--app"])
+    case "place":
+        do {
+            guard AXIsProcessTrusted() else { throw Failure("Accessibility not granted to the calling process") }
+            return try placeWindow(mode!, appName: parsed.options["--app"])
+        } catch {
+            if let mode, mode.isDisplayTransfer || mode.isVerticalHalfStep {
+                let reason = (error as? Failure)?.message ?? "Display move unavailable"
+                DistributedNotificationCenter.default().postNotificationName(
+                    Notification.Name("com.machinespirit.leader.placement.miss"), object: nil,
+                    userInfo: ["reason": reason], deliverImmediately: true)
+            }
+            throw error
+        }
     case "tile-all": return try tileAllWindows()
     case "hide-all": return hideAllWindows()
     default: return try cycleWindow(appName: parsed.options["--app"])

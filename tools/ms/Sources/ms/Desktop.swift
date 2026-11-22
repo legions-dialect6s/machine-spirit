@@ -15,11 +15,19 @@ func screenID(_ screen: NSScreen) -> CGDirectDisplayID {
 }
 
 @MainActor
+func desktopScreens() -> [NSScreen] {
+    // AppKit must initialize before NSScreen reflects secondary menu bars.
+    _ = NSApplication.shared
+    return NSScreen.screens
+}
+
+@MainActor
 func screens() -> Output {
     // AppKit is bottom-left based; CGWindow and screencapture use top-left global points.
-    let desktopTop = NSScreen.screens.first?.frame.maxY ?? 0
+    let displays = desktopScreens()
+    let desktopTop = displays.first?.frame.maxY ?? 0
     var lines: [String] = []
-    let rows: [[String: Any]] = NSScreen.screens.map { screen in
+    let rows: [[String: Any]] = displays.map { screen in
         let id = screenID(screen)
         let rect = CGDisplayBounds(id)
         let visible = screen.visibleFrame
@@ -82,18 +90,21 @@ func windows(_ args: [String]) throws -> Output {
     let parsed = try Arguments(args, values: ["--app"], switches: ["--all-spaces", "--all-layers"])
     try parsed.count(0)
     let allSpaces = parsed.flags.contains("--all-spaces")
+    let displays = NSScreen.screens.map { screen in
+        let id = screenID(screen)
+        return (id, CGDisplayBounds(id))
+    }
     let list = try windowList(allSpaces: allSpaces).filter { window in
         guard parsed.flags.contains("--all-layers") || window.layer == 0 else { return false }
-        guard let app = parsed.options["--app"] else { return true }
+        guard let app = parsed.options["--app"], !app.isEmpty else { return true }
         let bundle = NSRunningApplication(processIdentifier: window.pid)?.bundleIdentifier ?? ""
         return window.app.localizedCaseInsensitiveContains(app) || bundle.caseInsensitiveCompare(app) == .orderedSame
     }
     let rows: [[String: Any]] = list.map { window in
         var display: CGDirectDisplayID?
         var largestArea: CGFloat = 0
-        for screen in NSScreen.screens {
-            let id = screenID(screen)
-            let overlap = CGDisplayBounds(id).intersection(window.frame)
+        for (id, bounds) in displays {
+            let overlap = bounds.intersection(window.frame)
             let area = overlap.isNull ? 0 : overlap.width * overlap.height
             if area > largestArea { display = id; largestArea = area }
         }
@@ -131,6 +142,14 @@ func axFrame(_ element: AXUIElement) -> CGRect? {
 
 func sameFrame(_ a: CGRect, _ b: CGRect) -> Bool {
     abs(a.minX - b.minX) <= 2 && abs(a.minY - b.minY) <= 2 && abs(a.width - b.width) <= 2 && abs(a.height - b.height) <= 2
+}
+
+func announceWindowFocus(pid: pid_t, id: UInt32?) {
+    var info: [String: Any] = ["pid": pid]
+    if let id { info["windowID"] = id }
+    DistributedNotificationCenter.default().postNotificationName(
+        Notification.Name("com.machinespirit.leader.window.focus"), object: nil,
+        userInfo: info, deliverImmediately: true)
 }
 
 @MainActor
@@ -179,6 +198,7 @@ func focus(_ args: [String]) throws -> Output {
         app = found
         guard app.activate(options: [.activateAllWindows]) else { throw Failure("macOS refused app activation") }
     }
+    announceWindowFocus(pid: app.processIdentifier, id: focusedWindow)
     return Output(json: ["app": app.localizedName ?? "", "pid": app.processIdentifier,
                          "windowId": focusedWindow as Any? ?? NSNull(), "activated": true],
                   text: "Activated \(app.localizedName ?? target)\(focusedWindow.map { " window \($0)" } ?? "")")

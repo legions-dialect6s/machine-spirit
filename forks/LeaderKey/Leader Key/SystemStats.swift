@@ -14,6 +14,7 @@ final class CPUUsageReader {
   private(set) var cores: [Double] = []
 
   func sample(includeCores: Bool = false) {
+    hasDelta = false
     var count: mach_msg_type_number_t = 0
     var cpus: natural_t = 0
     var info: processor_info_array_t?
@@ -70,7 +71,7 @@ final class SystemStats {
 
     var compactSummary: String {
       let label =
-        ["Memory": "MEM", "Temperatures": "TEMP", "Network ↓/↑": "NET", "Battery": "BAT"][name]
+        ["Memory": "MEM", "Temperatures": "TEMP", "Network ↓/↑": "NET", "Disk": "FREE", "Battery": "BAT"][name]
         ?? name
       return compact ?? "\(label) —"
     }
@@ -85,15 +86,12 @@ final class SystemStats {
   private(set) var isOpen = false
   private(set) var detailedSamples = 0
   var onUpdate: (([Row]) -> Void)?
-  var cpuPercent: Int { cpu.cpuPercent }
+  var cpuPercent: Int? { cpu.hasDelta ? cpu.cpuPercent : nil }
   func sampleCPU() { cpu.sample() }
 
   struct BarReading {
     var gpu: Int?
     var temperature: Int?
-    var download: Double?
-    var upload: Double?
-    var freeGiB: Double?
   }
   private(set) var bar = BarReading()
   var onBarUpdate: (() -> Void)?
@@ -101,14 +99,11 @@ final class SystemStats {
   private var barHasReaders = false
   private var barGeneration = 0
   private var barSensors: HIDTemperatures?
-  private var barNetwork = NetStats()
-  private var lastCapacityRead = -Double.infinity
-  private var capacityGiB: Double?
 
   /// Called only by the existing 2s heartbeat. Sensor I/O never blocks AppKit.
-  func sampleBar(gpu: Bool, temperature: Bool, network: Bool, disk: Bool = false) {
+  func sampleBar(gpu: Bool, temperature: Bool) {
     guard !barInFlight else { return }
-    guard gpu || temperature || network || disk else {
+    guard gpu || temperature else {
       if barHasReaders { stopBar() }
       return
     }
@@ -117,29 +112,12 @@ final class SystemStats {
     let current = barGeneration
     queue.async {
       var reading = BarReading()
-      if disk {
-        let now = ProcessInfo.processInfo.systemUptime
-        if now - self.lastCapacityRead >= 30 {
-          var fs = statfs()
-          self.capacityGiB = statfs("/System/Volumes/Data", &fs) == 0
-            ? Double(fs.f_bavail) * Double(fs.f_bsize) / 1_073_741_824 : nil
-          self.lastCapacityRead = now
-        }
-        reading.freeGiB = self.capacityGiB
-      }
       if gpu { reading.gpu = Self.gpuPercent() }
       if temperature {
         if self.barSensors == nil { self.barSensors = HIDTemperatures() }
         reading.temperature = self.barSensors?.cpuTemperature().map { Int($0.rounded()) }
       } else {
         self.barSensors = nil
-      }
-      if network {
-        let rates = self.barNetwork.sample()
-        reading.download = rates?.down
-        reading.upload = rates?.up
-      } else {
-        self.barNetwork = NetStats()
       }
       DispatchQueue.main.async {
         self.barInFlight = false
@@ -155,7 +133,6 @@ final class SystemStats {
     barGeneration += 1
     queue.async {
       self.barSensors = nil
-      self.barNetwork = NetStats()
     }
   }
 
@@ -170,7 +147,7 @@ final class SystemStats {
     return values.max()
   }
 
-  // Worker-confined readers. Allocate/reset only on open, retain no sensor clients when closed.
+  // Menu detail readers are released on close. The compact bar owns its own sampler.
   private var details: DetailReader?
 
   func open() {
@@ -253,7 +230,8 @@ final class SystemStats {
           + ["Top processes (100% = one core)"] + top : ["Measuring per-core and process CPU…"]
       let memory = MemoryPressure.read()
       let memoryDetails = [
-        "Pressure: \(memory.pressurePercent)% · \(memory.levelName)",
+        "Memory pressure: \(memory.levelName)",
+        "Kernel available: \(memory.hasAvailablePercent ? "\(memory.availablePercent)%" : "Unavailable")",
         "Used: \(Self.bytes(memory.used)) / \(Self.bytes(memory.total))",
         "App: \(Self.bytes(memory.app))", "Wired: \(Self.bytes(memory.wired))",
         "Compressed: \(Self.bytes(memory.compressed))", "Cached: \(Self.bytes(memory.cached))",
@@ -267,9 +245,9 @@ final class SystemStats {
         gpu(),
         Row(
           name: "Memory",
-          summary: "\(Self.bytes(memory.used)) used · \(memory.pressurePercent)% pressure",
+          summary: "\(Self.bytes(memory.used)) used · \(memory.levelName.lowercased()) pressure",
           details: memoryDetails,
-          compact: memory.total > 0
+          compact: memory.hasUsage
             ? "MEM \(Int((Double(memory.used) * 100 / Double(memory.total)).rounded()))%" : "MEM —"),
         network(), disk(includeDetails: includeDetails), battery(), sensors.sample(),
       ]
@@ -406,7 +384,8 @@ final class SystemStats {
             : "Data volume unavailable",
         ] + (includeDetails ? volumeDetails() : []) + [
           "All physical disks read: \(rates.0)", "All physical disks write: \(rates.1)",
-        ])
+        ],
+        compact: spaceOK ? "FREE \(Self.bytes(free))" : nil)
     }
 
     private func battery() -> Row {
@@ -521,13 +500,17 @@ private final class HIDTemperatures {
   typealias Event = @convention(c) (CFTypeRef, Int64, Int32, Int64) -> Unmanaged<CFTypeRef>?
   typealias Value = @convention(c) (CFTypeRef, Int32) -> Double
   private let smc = SMCTemperatures()
+  private var hidInitialized = false
   private var library: UnsafeMutableRawPointer?
   private var client: CFTypeRef?
   private var services: [CFTypeRef] = []
   private var property: Property?
   private var event: Event?
   private var value: Value?
-  init() {
+  init() {}
+  private func ensureHIDLoaded() {
+    guard !hidInitialized else { return }
+    hidInitialized = true
     #if arch(arm64)
       library = dlopen("/System/Library/Frameworks/IOKit.framework/IOKit", RTLD_LAZY)
       guard let library else { return }
@@ -548,6 +531,7 @@ private final class HIDTemperatures {
     #endif
   }
   private func hidReadings() -> [(String, Double)] {
+    ensureHIDLoaded()
     var readings: [(String, Double)] = []
     if let property, let event, let value {
       for service in services {
@@ -607,9 +591,8 @@ private final class HIDTemperatures {
   }
 }
 
-/// Total interface traffic, including VPN tunnels as requested. A tunneled byte
-/// can also appear on en*: this is interface throughput, not unique internet traffic.
-struct NetStats {
+/// On-demand per-process network delta parsing from `nettop -L 2`.
+enum NetStats {
   /// nettop's first block is lifetime totals. Only the second block is the requested delta.
   static func busyProcesses(_ csv: String) -> [String]? {
     let header = ",bytes_in,bytes_out,"
@@ -631,70 +614,5 @@ struct NetStats {
     return ranked.prefix(8).map {
       "\($0.name)   ↓ \(SystemStats.DetailReader.bytes($0.down))   ↑ \(SystemStats.DetailReader.bytes($0.up))"
     }
-  }
-
-  struct Counter {
-    let down: UInt64
-    let up: UInt64
-  }
-  private var previous: [String: Counter] = [:]
-  private var previousTime: TimeInterval?
-
-  mutating func update(_ counters: [String: Counter], at now: TimeInterval) -> (
-    down: Double, up: Double
-  )? {
-    defer {
-      previous = counters
-      previousTime = now
-    }
-    guard let time = previousTime, now > time else { return nil }
-    var down = 0.0
-    var up = 0.0
-    for (name, counter) in counters {
-      // New, removed, or reset interfaces re-prime independently, never spike.
-      guard let old = previous[name], counter.down >= old.down, counter.up >= old.up else {
-        continue
-      }
-      down += Double(counter.down - old.down)
-      up += Double(counter.up - old.up)
-    }
-    return (down / (now - time), up / (now - time))
-  }
-
-  mutating func sample() -> (down: Double, up: Double)? {
-    var interfaces: UnsafeMutablePointer<ifaddrs>?
-    guard getifaddrs(&interfaces) == 0 else {
-      previous = [:]
-      previousTime = nil
-      return nil
-    }
-    defer { freeifaddrs(interfaces) }
-    var counters: [String: Counter] = [:]
-    var cursor = interfaces
-    while let entry = cursor {
-      defer { cursor = entry.pointee.ifa_next }
-      let name = String(cString: entry.pointee.ifa_name)
-      guard name.hasPrefix("en") || name.hasPrefix("utun"),
-        entry.pointee.ifa_addr?.pointee.sa_family == UInt8(AF_LINK),
-        let raw = entry.pointee.ifa_data
-      else { continue }
-      let data = raw.assumingMemoryBound(to: if_data.self).pointee
-      counters[name] = Counter(down: UInt64(data.ifi_ibytes), up: UInt64(data.ifi_obytes))
-    }
-    return update(counters, at: ProcessInfo.processInfo.systemUptime)
-  }
-
-  /// Decimal B/s, K, M, G. Quantization prevents invisible changes starting a tween.
-  static func quantized(_ bytes: Double) -> Double {
-    let bytes = max(0, bytes.isFinite ? bytes : 0)
-    let unit = bytes >= 1e9 ? 1e9 : bytes >= 1e6 ? 1e6 : bytes >= 1e3 ? 1e3 : 1
-    let precision = unit > 1 && bytes / unit < 10 ? unit / 10 : unit
-    return (bytes / precision).rounded() * precision
-  }
-  static func text(_ bytes: Double) -> String {
-    let bytes = quantized(bytes)
-    let unit = bytes >= 1e9 ? 1e9 : bytes >= 1e6 ? 1e6 : bytes >= 1e3 ? 1e3 : 1
-    let suffix = unit == 1e9 ? "G" : unit == 1e6 ? "M" : unit == 1e3 ? "K" : "B/s"
-    return String(format: unit > 1 && bytes / unit < 10 ? "%.1f%@" : "%.0f%@", bytes / unit, suffix)
   }
 }

@@ -66,7 +66,11 @@ enum IconStore {
       tokens.count > scriptIndex + 1
     else { return nil }
     let domain = tokens[scriptIndex + 1].components(separatedBy: ",")[0]
-    return domain.components(separatedBy: "/")[0]
+    guard let site = URLComponents(string: domain.contains("://") ? domain : "https://" + domain),
+      ["http", "https"].contains(site.scheme?.lowercased() ?? ""),
+      let host = site.host, !host.isEmpty
+    else { return nil }
+    return host
   }
 
   /// nil while a favicon is still in flight (the fetch bumps iconEpoch so
@@ -87,9 +91,13 @@ enum IconStore {
   private static var faviconFetches: Set<String> = []
 
   private static func fetchFavicon(_ domain: String, key: String, state: AppState?) {
-    guard !faviconFetches.contains(key),
-      let url = URL(string: "https://www.google.com/s2/favicons?domain=\(domain)&sz=64")
-    else { return }
+    guard !faviconFetches.contains(key) else { return }
+    var request = URLComponents()
+    request.scheme = "https"
+    request.host = "www.google.com"
+    request.path = "/s2/favicons"
+    request.queryItems = [URLQueryItem(name: "domain", value: domain), URLQueryItem(name: "sz", value: "64")]
+    guard let url = request.url else { return }
     faviconFetches.insert(key)
     Task {
       guard let (data, _) = try? await URLSession.shared.data(from: url),

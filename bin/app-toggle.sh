@@ -1,5 +1,5 @@
 #!/bin/zsh
-# Open/restore/cycle/close an app according to pointer position. Native unsaved
+# Open or restore a utility, then close it when invoked while frontmost. Native unsaved
 # document confirmation is deliberately retained (especially for TextEdit).
 emulate -L zsh
 [[ $# -eq 1 || ( $# -eq 3 && $2 == --close && ( $3 == quit || $3 == windows ) ) ]] || exit 11

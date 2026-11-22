@@ -7,6 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		BA3400000000000000000006 /* OverlayFX.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA3400000000000000000005 /* OverlayFX.swift */; };
+		BA3400000000000000000004 /* SkullMark.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA3400000000000000000003 /* SkullMark.swift */; };
+		BA3400000000000000000002 /* StatusSkullView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA3400000000000000000001 /* StatusSkullView.swift */; };
 		A0D10000000000000000000A /* NowPlayingSmoke.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0D100000000000000000009; };
 		A0D100000000000000000006 /* NowPlayingMeter.c in Sources */ = {isa = PBXBuildFile; fileRef = A0D100000000000000000005; };
 		A0D100000000000000000004 /* NowPlayingMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0D100000000000000000003; };
@@ -15,6 +18,7 @@
 		BA3300000000000000000032 /* SMC.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA3300000000000000000031; };
 		BA3300000000000000000022 /* SheolReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA3300000000000000000021; };
 		BA3300000000000000000012 /* CompactBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA3300000000000000000011; };
+		BC9100000000000000000012 /* T3TaskMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC9100000000000000000011; };
 		BA3300000000000000000002 /* SystemStats.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA3300000000000000000001; };
 		115AA5BF2DA521C600C17E18 /* ActionIcon.swift in Sources */ = {isa = PBXBuildFile; fileRef = 115AA5BE2DA521C200C17E18 /* ActionIcon.swift */; };
 		115AA5C22DA546D500C17E18 /* SymbolPicker in Frameworks */ = {isa = PBXBuildFile; productRef = 115AA5C12DA546D500C17E18 /* SymbolPicker */; };
@@ -32,6 +36,7 @@
 		427C17F22BD311B500955B98 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 427C17F12BD311B500955B98 /* Preview Assets.xcassets */; };
 		427C17FD2BD311B500955B98 /* UserConfigTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 427C17FC2BD311B500955B98 /* UserConfigTests.swift */; };
 		FADE00020000000000000002 /* ConfigFileMonitorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FADE00010000000000000001 /* ConfigFileMonitorTests.swift */; };
+		FADE00040000000000000004 /* KeepAwakeAndBarTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FADE00030000000000000003 /* KeepAwakeAndBarTests.swift */; };
 		427C18172BD311ED00955B98 /* KeyboardShortcuts in Frameworks */ = {isa = PBXBuildFile; productRef = 427C18162BD311ED00955B98 /* KeyboardShortcuts */; };
 		427C181A2BD3123C00955B98 /* Defaults in Frameworks */ = {isa = PBXBuildFile; productRef = 427C18192BD3123C00955B98 /* Defaults */; };
 		427C181C2BD314B500955B98 /* Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 427C181B2BD314B500955B98 /* Constants.swift */; };
@@ -55,7 +60,6 @@
 		42B21FBC2D67566100F4A2C7 /* Alerts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42B21FBB2D67566100F4A2C7 /* Alerts.swift */; };
 		42CCB5A32DAD257700356FC0 /* Kingfisher in Frameworks */ = {isa = PBXBuildFile; productRef = FBCA04D82D9F02F700271163 /* Kingfisher */; };
 		42DFCD722D5B7D48002EA111 /* Events.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42DFCD712D5B7D46002EA111 /* Events.swift */; };
-		42E70A572C823FF200FCF902 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 42E70A562C823FF200FCF902 /* Sparkle */; };
 		42F4CDC92D458FF700D0DD76 /* MainMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42F4CDC82D458FF700D0DD76 /* MainMenu.swift */; };
 		42F4CDCD2D45B13600D0DD76 /* KeyButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42F4CDCC2D45B13600D0DD76 /* KeyButton.swift */; };
 		42F4CDCF2D46E2B300D0DD76 /* Cheatsheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42F4CDCE2D46E2B300D0DD76 /* Cheatsheet.swift */; };
@@ -85,6 +89,9 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		BA3400000000000000000005 /* OverlayFX.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = OverlayFX.swift; path = ../../app/MachineSpirit/Sources/OverlayFX.swift; sourceTree = "SOURCE_ROOT"; };
+		BA3400000000000000000003 /* SkullMark.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SkullMark.swift; path = ../../app/MachineSpirit/Sources/SkullMark.swift; sourceTree = "SOURCE_ROOT"; };
+		BA3400000000000000000001 /* StatusSkullView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = StatusSkullView.swift; path = StatusSkullView.swift; sourceTree = "<group>"; };
 		A0D10000000000000000000B /* NowPlayingInfo.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = NowPlayingInfo.plist; sourceTree = "<group>"; };
 		A0D100000000000000000009 /* NowPlayingSmoke.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NowPlayingSmoke.swift; sourceTree = "<group>"; };
 		A0D100000000000000000007 /* NowPlayingMeter.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = NowPlayingMeter.h; sourceTree = "<group>"; };
@@ -95,6 +102,7 @@
 		BA3300000000000000000031 /* SMC.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SMC.swift; sourceTree = "<group>"; };
 		BA3300000000000000000021 /* SheolReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SheolReader.swift; sourceTree = "<group>"; };
 		BA3300000000000000000011 /* CompactBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompactBar.swift; sourceTree = "<group>"; };
+		BC9100000000000000000011 /* T3TaskMenu.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = T3TaskMenu.swift; sourceTree = "<group>"; };
 		BA3300000000000000000001 /* SystemStats.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemStats.swift; sourceTree = "<group>"; };
 		115AA5BE2DA521C200C17E18 /* ActionIcon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionIcon.swift; sourceTree = "<group>"; };
 		130196C52D73B3DC0093148B /* Breadcrumbs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Breadcrumbs.swift; sourceTree = "<group>"; };
@@ -115,6 +123,7 @@
 		427C17F82BD311B500955B98 /* Leader KeyTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Leader KeyTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		427C17FC2BD311B500955B98 /* UserConfigTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserConfigTests.swift; sourceTree = "<group>"; };
 		FADE00010000000000000001 /* ConfigFileMonitorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigFileMonitorTests.swift; sourceTree = "<group>"; };
+		FADE00030000000000000003 /* KeepAwakeAndBarTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeepAwakeAndBarTests.swift; sourceTree = "<group>"; };
 		427C181B2BD314B500955B98 /* Constants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Constants.swift; sourceTree = "<group>"; };
 		427C181F2BD31C3D00955B98 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		73192AF63CAF425397D7C0D2 /* URLSchemeHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = URLSchemeHandler.swift; sourceTree = "<group>"; };
@@ -158,7 +167,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				42CCB5A32DAD257700356FC0 /* Kingfisher in Frameworks */,
-				42E70A572C823FF200FCF902 /* Sparkle in Frameworks */,
 				427C18232BD31DF100955B98 /* Settings in Frameworks */,
 				115AA5C22DA546D500C17E18 /* SymbolPicker in Frameworks */,
 				427C181A2BD3123C00955B98 /* Defaults in Frameworks */,
@@ -235,11 +243,15 @@
 				427C18252BD31E2E00955B98 /* MainWindow.swift */,
 				427C18532BD6E59300955B98 /* NSWindow+Animations.swift */,
 				427C182C2BD31F9500955B98 /* Settings.swift */,
+				BA3400000000000000000001 /* StatusSkullView.swift */,
+				BA3400000000000000000003 /* SkullMark.swift */,
+				BA3400000000000000000005 /* OverlayFX.swift */,
 				427C18262BD31E2E00955B98 /* StatusItem.swift */,
 				A1B2C3D40000000000000001 /* MemoryPressureStatusItem.swift */,
 				BA3300000000000000000031 /* SMC.swift */,
 				BA3300000000000000000021 /* SheolReader.swift */,
 				BA3300000000000000000011 /* CompactBar.swift */,
+				BC9100000000000000000011 /* T3TaskMenu.swift */,
 				A0D100000000000000000009 /* NowPlayingSmoke.swift */,
 				A0D10000000000000000000B /* NowPlayingInfo.plist */,
 				A0D100000000000000000007 /* NowPlayingMeter.h */,
@@ -282,6 +294,7 @@
 				EC5CEBC4C47B4C5DB2258814 /* URLSchemeTests.swift */,
 				427C17FC2BD311B500955B98 /* UserConfigTests.swift */,
 				FADE00010000000000000001 /* ConfigFileMonitorTests.swift */,
+				FADE00030000000000000003 /* KeepAwakeAndBarTests.swift */,
 			);
 			path = "Leader KeyTests";
 			sourceTree = "<group>";
@@ -344,7 +357,6 @@
 				427C18192BD3123C00955B98 /* Defaults */,
 				427C18222BD31DF100955B98 /* Settings */,
 				4279AFEC2C6A175500952A83 /* LaunchAtLogin */,
-				42E70A562C823FF200FCF902 /* Sparkle */,
 				115AA5C12DA546D500C17E18 /* SymbolPicker */,
 				FBCA04D82D9F02F700271163 /* Kingfisher */,
 			);
@@ -402,7 +414,6 @@
 				427C18152BD311EC00955B98 /* XCRemoteSwiftPackageReference "KeyboardShortcuts" */,
 				427C18182BD3123C00955B98 /* XCRemoteSwiftPackageReference "Defaults" */,
 				427C18212BD31DF100955B98 /* XCRemoteSwiftPackageReference "Settings" */,
-				4279AFE92C6A070300952A83 /* XCRemoteSwiftPackageReference "Sparkle" */,
 				4279AFEB2C6A175500952A83 /* XCRemoteSwiftPackageReference "LaunchAtLogin-Modern" */,
 				4236321C2D6799B900878D92 /* XCRemoteSwiftPackageReference "SwiftFormatPlugins" */,
 				115AA5C02DA5463700C17E18 /* XCRemoteSwiftPackageReference "SymbolPicker" */,
@@ -510,11 +521,15 @@
 				427C18202BD31C3D00955B98 /* AppDelegate.swift in Sources */,
 				73192AF63CAF425397D7C0D1 /* URLSchemeHandler.swift in Sources */,
 				427C18502BD6652500955B98 /* Util.swift in Sources */,
+				BA3400000000000000000002 /* StatusSkullView.swift in Sources */,
+				BA3400000000000000000004 /* SkullMark.swift in Sources */,
+				BA3400000000000000000006 /* OverlayFX.swift in Sources */,
 				427C182A2BD31E2E00955B98 /* StatusItem.swift in Sources */,
 				A1B2C3D40000000000000002 /* MemoryPressureStatusItem.swift in Sources */,
 				BA3300000000000000000032 /* SMC.swift in Sources */,
 				BA3300000000000000000022 /* SheolReader.swift in Sources */,
 				BA3300000000000000000012 /* CompactBar.swift in Sources */,
+				BC9100000000000000000012 /* T3TaskMenu.swift in Sources */,
 				A0D10000000000000000000A /* NowPlayingSmoke.swift in Sources */,
 				A0D100000000000000000006 /* NowPlayingMeter.c in Sources */,
 				A0D100000000000000000004 /* NowPlayingMenu.swift in Sources */,
@@ -540,6 +555,7 @@
 				EC5CEBC4C47B4C5DB2258813 /* URLSchemeTests.swift in Sources */,
 				427C17FD2BD311B500955B98 /* UserConfigTests.swift in Sources */,
 				FADE00020000000000000002 /* ConfigFileMonitorTests.swift in Sources */,
+				FADE00040000000000000004 /* KeepAwakeAndBarTests.swift in Sources */,
 				4284834C2E813212009D7EEF /* KeyboardLayoutTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -713,6 +729,8 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				MARKETING_VERSION = 1.17.3;
+				MS_LEADER_SCHEME = msleaderkey;
+				MS_LEGACY_SCHEME = leaderkey;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.machinespirit.leader-key";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -750,6 +768,8 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				MARKETING_VERSION = 1.17.3;
+				MS_LEADER_SCHEME = msleaderkey;
+				MS_LEGACY_SCHEME = leaderkey;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.machinespirit.leader-key";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -842,14 +862,6 @@
 				minimumVersion = 1.1.1;
 			};
 		};
-		4279AFE92C6A070300952A83 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/sparkle-project/Sparkle";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 2.6.4;
-			};
-		};
 		4279AFEB2C6A175500952A83 /* XCRemoteSwiftPackageReference "LaunchAtLogin-Modern" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/sindresorhus/LaunchAtLogin-Modern";
@@ -922,11 +934,6 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 427C18212BD31DF100955B98 /* XCRemoteSwiftPackageReference "Settings" */;
 			productName = Settings;
-		};
-		42E70A562C823FF200FCF902 /* Sparkle */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 4279AFE92C6A070300952A83 /* XCRemoteSwiftPackageReference "Sparkle" */;
-			productName = Sparkle;
 		};
 		FBCA04D82D9F02F700271163 /* Kingfisher */ = {
 			isa = XCSwiftPackageProductDependency;

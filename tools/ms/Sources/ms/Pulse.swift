@@ -102,6 +102,7 @@ struct PulseSnapshot: Codable {
     let tmuxSessions: Int?
     let notes: [String]
     var idleReview: [String]? = nil
+    var externalVolumes: [PulseVolumeReading]? = nil
 }
 
 func idleReview(after seconds: TimeInterval, browsers: [PulseBrowser], apps: [PulseApp]) -> [String]? {
@@ -132,22 +133,78 @@ func pulseBrowser(_ name: String, urls: [String]) -> PulseBrowser {
                         duplicateTabs: valid.count - Set(valid).count, topDomains: Array(top.prefix(10)))
 }
 
-private func browserScript(_ bundle: String) -> String {
-    // Bulk property access: two Apple events per browser rather than one per tab.
-    """
-    with timeout of 3 seconds
-      if application id "\(bundle)" is not running then return "NOT_RUNNING"
-      tell application id "\(bundle)"
-        set tabLists to URL of every tab of every window
-      end tell
-      set flatURLs to {}
-      repeat with windowURLs in tabLists
-        set flatURLs to flatURLs & contents of windowURLs
-      end repeat
-      set AppleScript's text item delimiters to linefeed
-      return (count flatURLs) as text & linefeed & (flatURLs as text)
-    end timeout
-    """
+// JXA resolves each browser's own tab terminology. The output is an in-memory
+// transport only; Pulse stores counts and domains after parsing it.
+private let pulseBrowserScript = """
+function run(args) {
+    const browser = Application(args[0]);
+    if (!browser.running()) return JSON.stringify({ status: "not running" });
+    try {
+        const urls = browser.windows().flatMap(window => {
+            const tabs = window.tabs.url();
+            if (!Array.isArray(tabs)) throw new Error("missing tab list");
+            return tabs.map(url => typeof url === "string" ? url : "");
+        });
+        return JSON.stringify({ status: "ok", urls: urls });
+    } catch (_) {
+        return JSON.stringify({ status: "tab automation unavailable" });
+    }
+}
+"""
+
+private struct PulseBrowserResult: Decodable {
+    let status: String
+    let urls: [String]?
+}
+
+private struct PulseBrowserTarget {
+    let name: String
+    let bundleID: String
+    let running: Bool
+    let exposesTabs: Bool
+}
+
+func pulseHasTabTerms(_ dictionary: XMLDocument) -> Bool {
+    let tabURL = "/dictionary/suite/class[@name='tab']/property[@name='URL']"
+    let windowTabs = "/dictionary/suite/*[(self::class and @name='window') or (self::class-extension and @extends='window')]/element[@type='tab']"
+    return (try? dictionary.nodes(forXPath: tabURL).isEmpty) == false &&
+           (try? dictionary.nodes(forXPath: windowTabs).isEmpty) == false
+}
+
+private func pulseHasTabTerms(_ bundle: Bundle?) -> Bool {
+    guard let bundle,
+          let filename = bundle.object(forInfoDictionaryKey: "OSAScriptingDefinition") as? String,
+          let resources = bundle.resourceURL,
+          let data = try? Data(contentsOf: resources.appendingPathComponent(filename)),
+          let dictionary = try? XMLDocument(data: data, options: [.nodeLoadExternalEntitiesNever]) else { return false }
+    return pulseHasTabTerms(dictionary)
+}
+
+@MainActor
+private func pulseBrowserTargets(running: [NSRunningApplication]) -> [PulseBrowserTarget] {
+    let workspace = NSWorkspace.shared
+    let probe = URL(string: "https://example.com")!
+    let defaultURL = workspace.urlForApplication(toOpen: probe)
+    let overrideID = ProcessInfo.processInfo.environment["MS_BROWSER_BUNDLE_ID"]
+    let preferredURL = overrideID.flatMap(workspace.urlForApplication(withBundleIdentifier:)) ?? defaultURL
+    let preferred = preferredURL.flatMap { Bundle(url: $0) }
+    let registered = Set(workspace.urlsForApplications(toOpen: probe).compactMap { Bundle(url: $0)?.bundleIdentifier })
+    let targets = running.compactMap { app -> PulseBrowserTarget? in
+        guard let bundleID = app.bundleIdentifier,
+              registered.contains(bundleID) || preferred?.bundleIdentifier == bundleID else { return nil }
+        let bundle = app.bundleURL.flatMap { Bundle(url: $0) }
+        let name = bundle?.object(forInfoDictionaryKey: "CFBundleName") as? String
+        let exposesTabs = pulseHasTabTerms(bundle)
+        guard exposesTabs || preferred?.bundleIdentifier == bundleID else { return nil }
+        return PulseBrowserTarget(name: name ?? app.localizedName ?? bundleID, bundleID: bundleID,
+                                  running: true, exposesTabs: exposesTabs)
+    }
+    var uniqueTargets = Dictionary(targets.map { ($0.bundleID, $0) }, uniquingKeysWith: { first, _ in first })
+    if let preferred, let bundleID = preferred.bundleIdentifier, uniqueTargets[bundleID] == nil {
+        let name = preferred.object(forInfoDictionaryKey: "CFBundleName") as? String ?? bundleID
+        uniqueTargets[bundleID] = PulseBrowserTarget(name: name, bundleID: bundleID, running: false, exposesTabs: false)
+    }
+    return uniqueTargets.values.sorted { ($0.name, $0.bundleID) < ($1.name, $1.bundleID) }
 }
 
 var pulseDirectory: URL {
@@ -161,23 +218,13 @@ var pulseDirectory: URL {
 func collectPulse() throws -> PulseSnapshot {
     let started = ProcessInfo.processInfo.systemUptime
     let running = NSWorkspace.shared.runningApplications
-    let browserNames = [("Safari", "com.apple.Safari"), ("Chrome", "com.google.Chrome")]
-    let activeBrowsers = browserNames.filter { _, bundle in running.contains { $0.bundleIdentifier == bundle } }
-    // One osascript amortizes interpreter startup across both browsers.
-    let handlers = activeBrowsers.enumerated().map { index, browser in
-        "on collect\(index)()\n" + browserScript(browser.1) + "\nend collect\(index)"
-    }.joined(separator: "\n")
-    let calls = activeBrowsers.enumerated().map { index, browser in
-        """
-        try
-          set resultText to my collect\(index)()
-        on error
-          set resultText to "UNAVAILABLE"
-        end try
-        set combined to combined & "MS_BROWSER_\(browser.0)" & linefeed & resultText & linefeed
-        """
-    }.joined(separator: "\n")
-    let browserChild = activeBrowsers.isEmpty ? nil : PulseChild("/usr/bin/osascript", ["-e", handlers + "\nset combined to \"\"\n" + calls + "\nreturn combined"])
+    let browserTargets = pulseBrowserTargets(running: running)
+    let browserChildren = browserTargets.reduce(into: [String: PulseChild]()) { children, target in
+        guard target.running, target.exposesTabs else { return }
+        children[target.bundleID] = PulseChild("/usr/bin/osascript", [
+            "-l", "JavaScript", "-e", pulseBrowserScript, target.bundleID
+        ])
+    }
     let tmuxPath = (ProcessInfo.processInfo.environment["PATH"] ?? "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin")
         .split(separator: ":").map { String($0) + "/tmux" }.first { FileManager.default.isExecutableFile(atPath: $0) }
     let tmux = tmuxPath.map { PulseChild($0, ["list-sessions", "-F", "#{session_id}"], includeErrors: true) }
@@ -189,8 +236,6 @@ func collectPulse() throws -> PulseSnapshot {
     let pressure = levelOK ? ([1: "normal", 2: "warning", 4: "critical"][Int(level)] ?? "unknown") : "unavailable"
     var swap = xsw_usage(), swapSize = MemoryLayout<xsw_usage>.size
     let swapOK = sysctlbyname("vm.swapusage", &swap, &swapSize, nil, 0) == 0
-    var disk = statfs()
-    let diskOK = statfs("/", &disk) == 0
     var battery: Double?
     if let info = IOPSCopyPowerSourcesInfo()?.takeRetainedValue(),
        let sources = IOPSCopyPowerSourcesList(info)?.takeRetainedValue() as? [CFTypeRef] {
@@ -228,17 +273,21 @@ func collectPulse() throws -> PulseSnapshot {
         return PulseApp(name: app.localizedName ?? "?", bundleId: app.bundleIdentifier, pid: app.processIdentifier,
                         standardWindowsEstimate: owned.count, offScreenWindows: owned.filter { !$0.onScreen }.count)
     }.sorted { $0.name == $1.name ? $0.pid < $1.pid : $0.name < $1.name }
-    PulseChild.finish((browserChild.map { [$0] } ?? []) + (tmux.map { [$0] } ?? []), deadline: started + 3)
-    let browsers = browserNames.map { info -> PulseBrowser in
-        guard activeBrowsers.contains(where: { $0.1 == info.1 }), let child = browserChild else { return PulseBrowser(name: info.0, status: "not running") }
-        guard let output = child.output else { return PulseBrowser(name: info.0, status: child.failure ?? "automation unavailable") }
-        let allLines = output.components(separatedBy: "\n")
-        guard let marker = allLines.firstIndex(of: "MS_BROWSER_" + info.0) else { return PulseBrowser(name: info.0, status: "invalid response") }
-        let lines = Array(allLines.dropFirst(marker + 1))
-        guard let first = lines.first, let count = Int(first), count >= 0, lines.count >= count + 1 else {
-            return PulseBrowser(name: info.0, status: "unavailable (browser closed or invalid response)")
+    PulseChild.finish(Array(browserChildren.values) + (tmux.map { [$0] } ?? []), deadline: started + 3)
+    let browsers = browserTargets.map { target -> PulseBrowser in
+        guard let child = browserChildren[target.bundleID] else {
+            return PulseBrowser(name: target.name, status: target.running ? "no scriptable tab API" : "not running")
         }
-        return pulseBrowser(info.0, urls: Array(lines.dropFirst().prefix(count)))
+        guard let output = child.output else {
+            return PulseBrowser(name: target.name, status: child.failure ?? "automation unavailable")
+        }
+        guard let response = try? JSONDecoder().decode(PulseBrowserResult.self, from: Data(output.utf8)) else {
+            return PulseBrowser(name: target.name, status: "invalid response")
+        }
+        guard let urls = response.urls, response.status == "ok" else {
+            return PulseBrowser(name: target.name, status: response.status)
+        }
+        return pulseBrowser(target.name, urls: urls)
     }
     var sessions: Int?
     if let tmux {
@@ -263,13 +312,17 @@ func collectPulse() throws -> PulseSnapshot {
     // CoreGraphics defines kCGAnyInputEventType as UINT32_MAX in C.
     let anyInput = CGEventType(rawValue: UInt32.max)!
     let idleSeconds = CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: anyInput)
+    var review = idleReview(after: idleSeconds, browsers: browsers, apps: appRows)
+    let disk = PulseDiskReview.read(checkQueue: review != nil)
+    review?.append(contentsOf: disk.suggestions)
+    if let error = disk.volumeReadError { notes.append(error) }
     return PulseSnapshot(timestamp: date.ISO8601Format(), uptimeSeconds: ProcessInfo.processInfo.systemUptime,
                          loadAverages: load, memoryPressure: pressure, swapUsedBytes: swapOK ? swap.xsu_used : nil,
-                         freeDiskBytes: diskOK ? UInt64(disk.f_bavail) * UInt64(disk.f_bsize) : nil,
+                         freeDiskBytes: disk.freeBytes,
                          batteryPercent: battery, batteryCycles: cycles, batteryHealth: health, thermalState: thermal,
                          frontmostApp: NSWorkspace.shared.frontmostApplication?.localizedName, regularAppCount: regular.count,
                          apps: appRows, browsers: browsers, tmuxSessions: sessions, notes: notes,
-                         idleReview: idleReview(after: idleSeconds, browsers: browsers, apps: appRows))
+                         idleReview: review, externalVolumes: disk.externalVolumes.isEmpty ? nil : disk.externalVolumes)
 }
 
 func appendPulse(_ snapshot: PulseSnapshot, directory: URL) throws -> URL {
@@ -310,7 +363,8 @@ func pulseSummary(_ snapshots: [PulseSnapshot], hours: Int, skipped: Int = 0) ->
     }
     let frontRows = front.sorted { $0.value == $1.value ? $0.key < $1.key : $0.value > $1.value }
     var browserRows: [[String: Any]] = []
-    for name in ["Safari", "Chrome"] {
+    let browserNames = Set(rows.flatMap { $0.browsers.map(\.name) }).sorted()
+    for name in browserNames {
         let samples = rows.compactMap { $0.browsers.first { $0.name == name && $0.status == "ok" } }
         let tabs = samples.compactMap(\.tabs), duplicates = samples.compactMap(\.duplicateTabs)
         browserRows.append(["name": name, "tabs": metric(tabs.map { Double($0) }), "duplicateTabs": metric(duplicates.map { Double($0) }),
@@ -320,7 +374,12 @@ func pulseSummary(_ snapshots: [PulseSnapshot], hours: Int, skipped: Int = 0) ->
     }
     let swapValues = rows.compactMap(\.swapUsedBytes)
     let growth = swapValues.count > 1 ? Double(swapValues.last!) - Double(swapValues.first!) : nil
-    let minimumDisk = rows.compactMap(\.freeDiskBytes).min()
+    let diskSamples = rows.compactMap { row in row.freeDiskBytes.map { (time: row.timestamp, bytes: $0) } }
+    let minimumDisk = diskSamples.map(\.bytes).min()
+    var diskChange: Double?
+    if let first = diskSamples.first, let last = diskSamples.last, first.time != last.time {
+        diskChange = Double(last.bytes) - Double(first.bytes)
+    }
     var notes = ["Hourly samples describe observations, not time spent. Missing browser samples are excluded, never counted as zero.",
                  "Window counts are CGWindowList estimates; minimized counts are unavailable without AX."]
     if rows.count < 2 { notes.append("Fewer than two samples: trends are not established.") }
@@ -341,6 +400,12 @@ func pulseSummary(_ snapshots: [PulseSnapshot], hours: Int, skipped: Int = 0) ->
     lines.append("Load (5m): \(display(load5)); load (15m): \(display(load15))")
     lines.append("Battery %: \(display(metric(rows.compactMap(\.batteryPercent))))")
     lines.append("Minimum free disk: " + (minimumDisk.map { String(format: "%.2f GiB", Double($0) / 1_073_741_824) } ?? "n/a"))
+    if let latest = diskSamples.last {
+        lines.append("Latest free disk: \(PulseDiskReview.gib(latest.bytes)) at \(latest.time)")
+    }
+    if let diskChange {
+        lines.append(String(format: "Free disk change across samples: %+.1f GiB", diskChange / Double(PulseDiskReview.gibibyte)))
+    }
     lines.append("Window pile-up (peak): " + pile.sorted { $0.value == $1.value ? $0.key < $1.key : $0.value > $1.value }.prefix(10).map { "\($0.key) \($0.value)" }.joined(separator: ", "))
     var latestReview: [String: Any]?
     if let row = rows.last(where: { $0.idleReview != nil }), let suggestions = row.idleReview {
@@ -348,10 +413,21 @@ func pulseSummary(_ snapshots: [PulseSnapshot], hours: Int, skipped: Int = 0) ->
         lines.append("Idle review at \(row.timestamp)")
         lines += suggestions.isEmpty ? ["No suggestions in that sample."] : suggestions
     }
+    let volumes = pulseVolumeHistory(rows)
+    for volume in volumes {
+        let latest = (volume["freeBytes"] as? UInt64).map { PulseDiskReview.gib($0) + " free" } ?? (volume["status"] as? String ?? "unavailable")
+        let delta = (volume["freeDiskChangeBytes"] as? Double).map { String(format: " (%+.1f GiB across measured samples)", $0 / Double(PulseDiskReview.gibibyte)) } ?? ""
+        lines.append("\(volume["name"] ?? ""): \(latest)\(delta)")
+    }
+    if let error = rows.last?.notes.first(where: { $0.contains("volumes.json") }) { notes.append(error) }
     lines += notes.map { "Note: \($0)" }
     return Output(json: ["hours": hours, "samples": rows.count, "load1m": load, "load5m": load5, "load15m": load15, "swapUsedBytes": swap, "regularApps": appCount,
                          "standardWindowsEstimate": windowCount, "batteryPercent": metric(rows.compactMap(\.batteryPercent)),
                          "tmuxSessions": metric(rows.compactMap { $0.tmuxSessions.map { Double($0) } }),
+                         "externalVolumes": volumes,
+                         "latestFreeDiskBytes": diskSamples.last?.bytes as Any? ?? NSNull(),
+                         "latestFreeDiskAt": diskSamples.last?.time as Any? ?? NSNull(),
+                         "freeDiskChangeBytes": diskChange as Any? ?? NSNull(),
                          "minimumFreeDiskBytes": minimumDisk as Any? ?? NSNull(), "swapGrowthBytes": growth as Any? ?? NSNull(),
                          "frontmostApps": frontRows.map { ["name": $0.key, "samples": $0.value] as [String: Any] },
                          "windowPeaksByApp": pile, "memoryPressureSamples": pressure, "thermalSamples": thermal,
@@ -380,13 +456,40 @@ func readPulse(directory: URL, hours: Int, now: Date = Date()) throws -> Output 
     return pulseSummary(rows, hours: hours, skipped: skipped)
 }
 
-@MainActor
-func pulse(_ args: [String]) throws -> Output {
-    let parsed = try Arguments(args, values: ["--hours"])
+private func pulseArguments(_ args: [String]) throws -> Arguments {
+    let parsed = try Arguments(args, values: ["--hours"], switches: ["--crash-preview", "--explain"])
     let verb = parsed.positionals.first ?? "report"
-    guard parsed.positionals.count <= 1, ["collect", "report"].contains(verb) else { throw Failure("usage: ms pulse [collect|report [--hours N]]") }
+    guard parsed.positionals.count <= 1, ["collect", "disk", "report"].contains(verb) else { throw Failure("usage: ms pulse [collect|disk [--crash-preview|--explain]|report [--hours N]]") }
+    guard verb == "report" || parsed.options.isEmpty else { throw Failure("--hours is only supported by pulse report") }
+    guard verb == "disk" || parsed.flags.isEmpty else { throw Failure("preview and explanation flags require pulse disk") }
+    guard parsed.flags.count <= 1 else { throw Failure("choose either --crash-preview or --explain") }
+    return parsed
+}
+
+@MainActor
+func pulseCLI(_ args: [String]) async throws -> Output {
+    let parsed = try pulseArguments(args)
+    if parsed.flags.contains("--explain") {
+        let reading = PulseProjectReading()
+        return await reading.explained()
+    }
+    return try pulse(parsed)
+}
+
+@MainActor
+func pulse(_ args: [String]) throws -> Output { try pulse(pulseArguments(args)) }
+
+@MainActor
+private func pulse(_ parsed: Arguments) throws -> Output {
+    let verb = parsed.positionals.first ?? "report"
+    guard !parsed.flags.contains("--explain") else { throw Failure("use ms pulse disk --explain on the command line") }
+    if verb == "disk" {
+        if parsed.flags.contains("--crash-preview") {
+            return try CrashQueuePreview.read(at: PulseDiskReview.crashQueue).output
+        }
+        return PulseProjectReading().output
+    }
     if verb == "collect" {
-        guard parsed.options.isEmpty else { throw Failure("--hours is only supported by pulse report") }
         let row = try collectPulse()
         _ = try appendPulse(row, directory: pulseDirectory)
         let data = try JSONEncoder().encode(row)

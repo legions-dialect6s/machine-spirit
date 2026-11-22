@@ -9,6 +9,9 @@ import MachineSpiritKit
   @MainActor static func main() {
     _ = NSApplication.shared
     NSApp.setActivationPolicy(.accessory)
+    precondition(IconStore.webJumpDomain(in: "web-jump example.com/folder?token=value") == "example.com")
+    precondition(IconStore.webJumpDomain(in: "web-jump https://user:pass@example.com/folder") == "example.com")
+    precondition(IconStore.webJumpDomain(in: "web-jump file:///private/path") == nil)
     let root = Node(id: "root", children: [
       Node(id: "root/a", key: "a", children: [Node(id: "root/a/x", key: "x",
         label: "A long explicit label 👨‍👩‍👧‍👦 with more text", action: .application(path: "/Applications/Example.app"))]),

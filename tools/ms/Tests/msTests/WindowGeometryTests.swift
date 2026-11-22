@@ -191,3 +191,72 @@ import Testing
     #expect(aimedPlacement(zone: .tl, current: nil, fullscreen: true, previous: last,
                           key: "7:8", screen: 4, now: 21) == .max)
 }
+
+@Test func displayCyclesFollowPhysicalOrderAndWrap() {
+    let laptop = CGRect(x: 0, y: 0, width: 1728, height: 1117)
+    let left = CGRect(x: -2560, y: -974, width: 2560, height: 1440)
+    let above = CGRect(x: 0, y: -1080, width: 1920, height: 1080)
+    let screens = [laptop, left, above]
+    #expect(destinationDisplay(for: .displayNext, from: 0, screens: screens) == 2)
+    #expect(destinationDisplay(for: .displayNext, from: 1, screens: screens) == 0)
+    #expect(destinationDisplay(for: .displayNext, from: 2, screens: screens) == 1)
+    #expect(destinationDisplay(for: .displayPrevious, from: 0, screens: screens) == 1)
+    #expect(destinationDisplay(for: .displayPrevious, from: 1, screens: screens) == 2)
+    #expect(destinationDisplay(for: .displayNext, from: 0, screens: [laptop]) == nil)
+    #expect(destinationDisplay(for: .displayPrevious, from: 0, screens: [laptop]) == nil)
+    #expect(destinationDisplay(for: .displayUp, from: 0, screens: screens) == 2)
+    #expect(destinationDisplay(for: .displayDown, from: 2, screens: screens) == 0)
+}
+
+@Test func verticalHalfStepsEnterOppositeHalfAndRequireAnAlignedDisplay() throws {
+    let source = CGRect(x: 0, y: 0, width: 1200, height: 900)
+    let above = CGRect(x: 100, y: -750, width: 1000, height: 750)
+    let below = CGRect(x: -400, y: 910, width: 1400, height: 850)
+    let diagonal = CGRect(x: 1200, y: 900, width: 1200, height: 900)
+    let screens = [source, above, below, diagonal]
+    let available = screens.map { $0.insetBy(dx: 10, dy: 20) }
+    let ddd = placementFrame(.right, visibleFrame: available[0], current: source)
+
+    for (mode, localHalf, arrivalHalf, neighbor): (Placement, Placement, Placement, Int) in [
+        (.halfDown, .bottom, .top, 2), (.halfUp, .top, .bottom, 1)
+    ] {
+        let first = try #require(verticalHalfStep(for: mode, window: ddd, from: 0, screens: screens, visible: available))
+        #expect(first.screen == 0 && first.half == localHalf)
+        #expect(first.frame == placementFrame(localHalf, visibleFrame: available[0], current: ddd))
+        let crossing = try #require(verticalHalfStep(for: mode, window: first.frame.offsetBy(dx: 1, dy: -1), from: 0,
+                                                       screens: screens, visible: available))
+        #expect(crossing.screen == neighbor && crossing.half == arrivalHalf)
+        #expect(crossing.frame == placementFrame(arrivalHalf, visibleFrame: available[neighbor], current: first.frame))
+        let final = try #require(verticalHalfStep(for: mode, window: crossing.frame, from: neighbor, screens: screens, visible: available))
+        #expect(final.screen == neighbor && final.half == localHalf)
+        #expect(verticalHalfStep(for: mode, window: final.frame, from: neighbor, screens: screens, visible: available) == nil)
+        #expect(verticalHalfStep(for: mode, window: first.frame, from: 0, screens: [source, diagonal],
+                                 visible: [available[0], available[3]]) == nil)
+    }
+}
+
+@Test func constrainedHalfRequiresConfirmedWindowDisplayAndUnchangedBounds() throws {
+    let upper = CGRect(x: 0, y: -1080, width: 1920, height: 1080)
+    let lower = CGRect(x: 0, y: 0, width: 1728, height: 1117)
+    let visible = [upper.insetBy(dx: 0, dy: 15), lower.insetBy(dx: 0, dy: 33)]
+    let constrained = CGRect(x: 0, y: -540, width: 1728, height: 597)
+    let previous = PlacementState(windowKey: "42:123", last: "bottom", fromFullscreen: false, t: 100,
+                                  halfLanding: .init(screen: 3, frame: constrained, usable: visible[0]))
+    let restored = try JSONDecoder().decode(PlacementState.self, from: JSONEncoder().encode(previous))
+    let reference = restored.confirmedHalf(key: "42:123", screen: 3, frame: constrained, usable: visible[0], now: 101)
+    #expect(reference == .bottom)
+    #expect(restored.confirmedHalf(key: "42:124", screen: 3, frame: constrained, usable: visible[0], now: 101) == nil)
+    #expect(restored.confirmedHalf(key: "42:123", screen: 2, frame: constrained, usable: visible[0], now: 101) == nil)
+    #expect(restored.confirmedHalf(key: "42:123", screen: 3, frame: constrained.offsetBy(dx: 4, dy: 0), usable: visible[0], now: 101) == nil)
+    #expect(restored.confirmedHalf(key: "42:123", screen: 3, frame: constrained, usable: upper, now: 101) == nil)
+    #expect(restored.confirmedHalf(key: "42:123", screen: 3, frame: constrained, usable: visible[0], now: 701) == nil)
+
+    let initial = try #require(verticalHalfStep(for: .halfDown, window: constrained, from: 0,
+                                                screens: [upper, lower], visible: visible))
+    #expect(initial.screen == 0 && initial.half == .bottom)
+    let crossed = try #require(verticalHalfStep(for: .halfDown, window: constrained, from: 0,
+                                                screens: [upper, lower], visible: visible, confirmedHalf: reference))
+    #expect(crossed.screen == 1 && crossed.half == .top)
+    #expect(verticalHalfStep(for: .halfDown, window: constrained, from: 0, screens: [upper],
+                             visible: [visible[0]], confirmedHalf: reference) == nil)
+}

@@ -7,8 +7,10 @@ final class SystemMenuSection: NSObject {
   private weak var syncItem: NSMenuItem?
   private weak var keysItem: NSMenuItem?
   var onChange: (() -> Void)?
-  var isAwake: Bool { awake.minutes != 0 }
-  private let awake = KeepAwake()
+  var isAwake: Bool { awake.isActive }
+  var awakeStatusText: String { awake.statusSummary() }
+  let awake: KeepAwake
+  private let defaults: UserDefaults
   private let brightness = BrightnessController()
   private var masterRow: BrightnessMenuRow?
   private var rows: [CGDirectDisplayID: BrightnessMenuRow] = [:]
@@ -21,32 +23,44 @@ final class SystemMenuSection: NSObject {
   var clearClipboard: (() -> Void)?
   var overlayChanged: (() -> Void)?
 
-  static func registerDefaults() {
-    UserDefaults.standard.register(defaults: [
+  init(awake: KeepAwake = KeepAwake(), defaults: UserDefaults = .standard) {
+    self.awake = awake
+    self.defaults = defaults
+    super.init()
+  }
+
+  static func registerDefaults(in defaults: UserDefaults = .standard) {
+    defaults.register(defaults: [
       "msKeepAwakeDisplay": true, "msKeepAwakeAtLaunch": false,
       "msBrightnessKeysEnabled": true, "msGraphOverlayEnabled": true,
       "msLaunchBoardAtLogin": true, "msBrightnessSync": true,
     ])
   }
 
+  func restoreAwakeSession() {
+    if !awake.restore() && defaults.bool(forKey: "msKeepAwakeAtLaunch") {
+      awake.start(minutes: -1)
+    }
+  }
+
   func enable() {
-    Self.registerDefaults()
+    Self.registerDefaults(in: defaults)
     awake.onChange = { [weak self] in
       self?.updateAwake()
       self?.onChange?()
     }
     brightness.onChange = { [weak self] in self?.updateDisplays() }
     brightness.start()
-    if UserDefaults.standard.bool(forKey: "msKeepAwakeAtLaunch") { awake.start(minutes: -1) }
+    restoreAwakeSession()
   }
 
   func disable() {
-    awake.stop()
+    awake.suspend()
     brightness.stop()
   }
   func checkExpiry() {
     awake.checkExpiry()
-    updateAwake()
+    if awakeItem != nil || awake.isActive { updateAwake() }
   }
 
   func menuWillOpen() {
@@ -109,7 +123,7 @@ final class SystemMenuSection: NSObject {
       checked: awake.keepsDisplayOn)
     _ = add(
       "Keep awake at launch", action: #selector(toggleLaunch(_:)), to: menu,
-      checked: UserDefaults.standard.bool(forKey: "msKeepAwakeAtLaunch"))
+      checked: defaults.bool(forKey: "msKeepAwakeAtLaunch"))
   }
 
   private func buildDisplays() {
@@ -154,21 +168,12 @@ final class SystemMenuSection: NSObject {
   }
 
   private func updateAwake() {
-    let state: String
-    if let deadline = awake.deadline {
-      let minutes = max(0, Int(ceil(deadline.timeIntervalSinceNow / 60)))
-      state = minutes >= 60
-        ? "\(minutes / 60)h" + (minutes % 60 == 0 ? "" : " \(minutes % 60)m") + " left"
-        : "\(minutes)m left"
-    } else {
-      state = isAwake ? "indefinitely" : "off"
-    }
-    awakeItem?.title = "Keep awake: " + state
+    awakeItem?.title = "Keep awake: " + awake.statusSummary()
+    let remaining = awake.remainingMinutes()
     for (minutes, title) in durations {
       sessionItems[minutes]?.state = awake.minutes == minutes ? .on : .off
       var label = title
-      if minutes == awake.minutes, let deadline = awake.deadline {
-        let remaining = max(0, Int(ceil(deadline.timeIntervalSinceNow / 60)))
+      if minutes == awake.minutes, let remaining {
         label += " (\(remaining) min remaining)"
       }
       sessionItems[minutes]?.title = label
@@ -216,8 +221,8 @@ final class SystemMenuSection: NSObject {
     overlayChanged?()
   }
   private func toggleDefault(_ key: String, item: NSMenuItem) {
-    let value = !UserDefaults.standard.bool(forKey: key)
-    UserDefaults.standard.set(value, forKey: key)
+    let value = !defaults.bool(forKey: key)
+    defaults.set(value, forKey: key)
     item.state = value ? .on : .off
   }
   @objc private func openClipboard() { showClipboard?() }

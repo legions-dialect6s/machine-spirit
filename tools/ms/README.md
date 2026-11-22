@@ -45,7 +45,7 @@ arguments, e.g. `ms run --dry-run -- -/-`. `ms --help` lists syntax.
 | `capslock [on\|off\|toggle\|status]` | Real IOKit Caps Lock state; defaults to status. Changes verify the state and request the caps HUD. |
 | `audio [list\|tile]` | CoreAudio active output apps/processes (14.4+); tile their standard windows on the mouse screen. |
 | `translate-area [--to LANG]` | Interactive area capture, accurate Vision OCR, installed on-device translation, copy and text HUD. |
-| `pulse [collect\|report [--hours N]]` | Append one local usage sample or summarize the last N hours (default 24). |
+| `pulse [collect\|disk [--crash-preview\|--explain]\|report [--hours N]]` | Collect an hourly sample, review disk space and the enrolled project's preview, explain the reading locally, or preview old Codex diagnostics. |
 | `stats` | CPU busy % over 250ms, memory-pressure estimate %, kernel pressure level, swap used/total bytes, battery % or null, uptime seconds. |
 | `screenshot [--screen ID\|--window ID\|--rect x,y,w,h] [--out PATH]` | Silent PNG; defaults to the main screen and a temporary file. Text prints its path; JSON adds pixel dimensions. |
 | `clipboard [list [-n 20]\|get INDEX]` | Read-only history. Disabled unless `MS_ALLOW_CLIPBOARD=1`. Indices are zero-based, in persisted archive order. |
@@ -104,6 +104,8 @@ intersection with the current window:
 | `toggle-fullscreen` | Toggle the focused window’s native fullscreen state |
 | `aim` | Follow the pointer. In the center, alternate between `amm` and `max`. A quick repeat in the same edge zone grows the same window. |
 | `display-left`, `display-right`, `display-up`, `display-down` | Move to a physical neighbor, keeping the relative window bounds. Prefer an aligned monitor and stop at the desktop edge. |
+| `half-up`, `half-down` | Fill the requested half of the current display. From that half, step to the adjacent half on the display directly above or below. |
+| `display-next`, `display-previous` | Move to the next or previous display in display order, wrapping when there is more than one display. |
 
 `step` classifies all four current edges with tolerance `max(12pt, 2% of the
 screen's usable dimension)`. Quarters grow to the containing left/right half;
@@ -195,7 +197,10 @@ it still copies the result and requests the HUD. No-text images exit 11.
 ```sh
 bin/ms pulse collect --json
 bin/ms pulse report --hours 48
-# Isolated verification, with no access to the default Library directory:
+bin/ms pulse disk --json
+bin/ms pulse disk --explain --json
+bin/ms pulse disk --crash-preview --json
+# Isolate the Pulse log directory for verification:
 MS_PULSE_DIR="$TMPDIR/ms-pulse-test" bin/ms pulse collect
 MS_PULSE_DIR="$TMPDIR/ms-pulse-test" bin/ms pulse report --json
 ```
@@ -209,7 +214,7 @@ collect and report. Logs persist until the owner removes them; no retention or
 background work is hidden in the CLI.
 
 A sample includes uptime, load averages (1/5/15 minutes), kernel memory pressure,
-swap used, free disk on `/`, battery percentage/cycles/health when available,
+swap used, free space on the startup Data volume, battery percentage/cycles/health when available,
 thermal state, frontmost app, regular app count and per-app window estimates.
 **CGWindowList does not expose AX standard-window subroles or minimized state.**
 `standardWindowsEstimate` counts layer-zero windows at least 120×80;
@@ -220,14 +225,75 @@ Battery health can be an explicitly labeled raw/design-capacity estimate.
 If the input session has been idle for ten minutes, the collector can add an
 `idleReview` array of suggestions from the same tab and window observations.
 The `latestIdleReview` report field contains the timestamp and suggestions for
-the newest qualifying sample, or null. Older logs remain readable.
+the newest qualifying sample, or null. Older logs remain readable. Idle reviews also
+suggest reviewing disk usage when available space is below 10% of the Data volume
+capacity, capped at 30 GiB. At 1,000 or more entries in Codex’s pending Crashpad
+queue, the review calls out the backlog. The count includes sidecar metadata.
+A filesystem directory attribute supplies the count without listing reports or
+reading their contents. A missing directory or unavailable attribute yields null.
 
-Running Safari and Chrome are queried in bulk through one `osascript`, with a
-three-second Apple-event timeout and a shared three-second subprocess deadline.
-A browser absent from the running-app snapshot is skipped; each script checks
-again before addressing it. No browser is deliberately launched. Failed,
-closed, timed-out or denied Automation queries have a status and unknown counts,
-not zero. Only total tabs, ten leading HTTP(S) hostnames and duplicate counts are
+`pulse disk` checks both measurements immediately without appending a snapshot.
+`pulse report` includes the latest measured free space with its timestamp and
+the signed change between the earliest and latest measured samples. Changes
+require two distinct timestamps. Disk review is read-only.
+
+To track external drives, add an array to `volumes.json` inside the private Pulse log
+directory. Each entry needs an exact name from `/Volumes` and its filesystem
+UUID. For example, `[{"name":"Media","volumeUUID":"01234567-89AB-CDEF-0123-456789ABCDEF"}]`.
+You can find the real UUID with `diskutil info "/Volumes/Media"`. The default
+list is empty. Keep local drive names and identifiers out of the public repo.
+
+`pulse disk --json` includes `externalVolumes`, one status for each configured
+drive and, when mounted and verified, fresh `freeBytes` and `capacityBytes`.
+Each external drive's `reviewThresholdBytes` is 10% of its capacity.
+Falling below that amount adds a disk-space suggestion to the idle review.
+Hourly samples read cached space counters from the kernel mount table since
+fresh queries can wake a drive or take seconds. Each read requires an exact
+local mount and a matching filesystem UUID. Missing, substituted and
+unverifiable mounts have explicit statuses and no space figures. Filesystem
+caches can delay the appearance of new writes in hourly reports.
+
+`pulse report --json` groups external history by UUID. For each drive it gives
+the last recorded mount status, the last measured amount and timestamp, measured
+and unavailable sample counts, and the signed change across measured timestamps.
+A disconnected drive has no free-space value for that sample. Older snapshots
+remain readable.
+
+**Project preview.** Choose one volume for the preview. Its provider identifier accepts 1–64 lowercase ASCII letters, digits, underscores or hyphens. For example, add `"projectProvider": "example-project"` to the project's
+existing UUID entry in `volumes.json`. The on-demand disk command reads
+`project-previews/example-project.json` under `${MS_PULSE_DIR:-~/Library/Application Support/MachineSpirit/pulse}`.
+Use the internal Data volume and a real directory path without symlink components.
+The producer publishes an owner-only 0600 file by atomic rename in its 0700
+directory. Pulse validates the mounted UUID, provider, schema, byte totals and
+UTC timestamp. The maximum age is 15 minutes and the clock-skew allowance is
+60 seconds. Missing, stale or invalid estimates appear as `status: unavailable`
+with a null byte count. A fresh successful preview can report zero. The hourly
+collector only samples volume metadata. The producer owns all project scans and writes.
+
+**Explain a reading.** `ms pulse disk --explain` compares fresh disk counters
+with the latest complete hourly disk sample available in the past 24 hours.
+JSON output includes `diskChanges.since` and the signed changes in free bytes.
+The model receives measured facts about the startup and project drives, plus
+the preview status, eligible total and category count. Apple Foundation Models
+can select which grounded observation leads the explanation. The CLI renders
+the amounts itself. Elevated or unknown memory pressure, a low startup disk
+with more swap used than space free, or an unavailable model produces the
+deterministic explanation. JSON reports its `source` and `reason`. The session
+exists only for this invocation and has no tools. Cleanup receipt ingestion
+remains pending until an executor produces verified receipts.
+
+`pulse disk --crash-preview` explicitly inspects direct entries in the Codex
+pending crash queue. It pairs lowercase UUID `.dmp` files with their
+`_sidecar.json` files and counts allocated bytes when both modification times
+predate the seven-day cutoff. The oldest and newest pair dates refer to each
+pair’s more recently modified file. Output separates recent pairs, unpaired
+files, unrecognized entries and unsafe or replaced pairs. The scan refuses
+symlink paths and uses directory-relative metadata lookups for regular files
+owned by the current user with one hard link. A directory change during the scan
+requires a fresh preview. APFS sharing and snapshots can affect the free space
+a later cleanup would return. Only the explicit command enumerates the queue.
+
+Pulse discovers running HTTPS handlers with scriptable window, tab and URL properties. The preferred browser comes from Launch Services or `MS_BROWSER_BUNDLE_ID`. Queries share a three-second subprocess deadline. Unavailable or unsupported APIs produce an explicit status and unknown counts. Only total tabs, ten leading HTTP(S) hostnames and duplicate counts are
 stored: full URLs, titles and URL query strings are discarded. Duplicates are
 extra copies of identical nonempty URLs within each browser, not across browsers.
 `tmux list-sessions` counts sessions if tmux is on PATH; a missing server counts
@@ -251,15 +317,12 @@ The first separate-process implementation consumed 140 ms CPU and was replaced
 with the shared interpreter. Re-measure after deployment, especially under a
 LaunchAgent's Automation identity.
 
-`config/pulse/com.machinespirit.pulse.plist` is an **uninstalled template**:
-StartInterval 3600, Background, Nice 10 and LowPriorityIO. The installer owner
-must expand `__HOME__`, ensure `~/bin/ms` points to the prebuilt repo wrapper,
-and handle Automation consent before loading it. No LaunchAgent is installed by
-this change. Pulse contains private usage metadata: keep logs outside the repo.
+On a fresh Mac, run `MS_INSTALL_PULSE=1 ./install.sh` from the repository root to enable hourly collection. The installer prebuilds the CLI and installs the LaunchAgent with StartInterval 3600, Background, Nice 10 and LowPriorityIO. Reinstalling preserves an existing Pulse installation. Keep the local logs outside the repository. See the [privacy and uninstall details](../../README.md#what-data-gets-recorded).
 
 | MCP tool | Arguments | Behavior |
 | --- | --- | --- |
 | `audio_list` | none | Read-only audio app/process JSON. |
+| `pulse_disk` | none | Current read-only disk review and cleanup suggestions. |
 | `pulse_report` | optional integer `hours` (1–8760, default 24) | Read-only summary from the selected pulse directory. |
 
 Collect, Caps Lock, translation and audio tiling are not exposed through MCP.
@@ -334,7 +397,7 @@ For the installer owner to merge: build the release target and expose the wrappe
 on PATH. If installing at `~/bin/ms`, **symlink the repo wrapper**, rather than
 copying it away from its package. Prebuild before registration to avoid a client's
 startup timeout on the first compile. The core CLI/MCP needs no LaunchAgent, app registration or daemon. Hourly pulse
-collection has the optional uninstalled template described above.
+collection uses the optional LaunchAgent described above.
 
 Replace `<repo>` with the absolute checkout path, keeping quotes if it contains
 spaces. Exact Claude Code registration:

@@ -39,12 +39,13 @@ mkdir -p "$HOME/bin"
 while IFS= read -r -d '' f; do
   rel="${f#"$REPO_ROOT/bin/"}"
   mkdir -p "$HOME/bin/$(dirname "$rel")"
-  cp "$f" "$HOME/bin/$rel"
-  chmod +x "$HOME/bin/$rel"
+  [[ "$rel" == ms ]] && continue
+  cp -p "$f" "$HOME/bin/$rel"
   echo "    installed bin/$rel"
-done < <(find "$REPO_ROOT/bin" -type f -print0)
+done < <(find "$REPO_ROOT/bin" -name __pycache__ -prune -o -type f ! -name .DS_Store ! -name '*.pyc' -print0)
 # `ms` resolves the repo from its own location (it builds/execs tools/ms), so
 # it must be a symlink back into the repo, not a copy.
+swift build -c release --package-path "$REPO_ROOT/tools/ms"
 ln -sf "$REPO_ROOT/bin/ms" "$HOME/bin/ms" && echo "    linked bin/ms -> repo"
 
 # Busy-pane shield (OPT-IN, off by default): symlink the iTerm2 API daemon into
@@ -110,11 +111,12 @@ if [[ -f "$TMUX_CONF_SRC" ]]; then
 fi
 
 # Pulse — an hourly, local-only usage snapshot (`ms pulse collect`, ~0.1s CPU
-# per run, background QoS) feeding `ms pulse report`. Opt-out: set
+# per run, background QoS) feeding `ms pulse report`. New installs opt in with
+# MS_INSTALL_PULSE=1; existing installations keep their choice. Skip setup with
 # MS_NO_PULSE=1 before install, or `launchctl bootout gui/$UID/com.machinespirit.pulse`.
 PULSE_SRC="$REPO_ROOT/config/pulse/com.machinespirit.pulse.plist"
 PULSE_DEST="$HOME/Library/LaunchAgents/com.machinespirit.pulse.plist"
-if [[ -f "$PULSE_SRC" && -z "${MS_NO_PULSE:-}" ]]; then
+if [[ -f "$PULSE_SRC" && -z "${MS_NO_PULSE:-}" && ( "${MS_INSTALL_PULSE:-}" == 1 || -f "$PULSE_DEST" ) ]]; then
   mkdir -p "$(dirname "$PULSE_DEST")"
   sed "s|__HOME__|$HOME|g" "$PULSE_SRC" > "$PULSE_DEST"
   launchctl bootout "gui/$(id -u)/com.machinespirit.pulse" 2>/dev/null || true
@@ -177,8 +179,8 @@ CNF
         -P ms-temp -A >/dev/null 2>&1
       rm -rf "$W"
     fi
-    codesign --force --deep -s "$CERT_CN" "$FORK_APP" >/dev/null 2>&1 \
-      && echo "    signed fork with stable local identity (TCC grants survive rebuilds)"
+    codesign --force --deep -s "$CERT_CN" "$FORK_APP"
+    echo "    signed fork with stable local identity (TCC grants survive rebuilds)"
     mkdir -p "$(dirname "$AGENT_DEST")"
     sed "s|__HOME__|$HOME|g" "$AGENT_SRC" > "$AGENT_DEST"
     launchctl bootout "gui/$(id -u)/$AGENT_LABEL" 2>/dev/null || true

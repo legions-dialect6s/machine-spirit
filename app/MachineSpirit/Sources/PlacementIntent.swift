@@ -4,7 +4,7 @@ import MachineSpiritKit
 
 /// Resolve only the next configured action. A group with competing actions gives no cue.
 enum PlacementIntent: Equatable {
-  case mouse, aim, sized(Placement), rectangle(Placement), arrow(Placement), cycle(next: Bool)
+  case mouse, aim, sized(Placement), rectangle(Placement), arrow(Placement), halfStep(Placement), cycle(next: Bool)
 
   var usesRectangle: Bool {
     switch self {
@@ -35,12 +35,14 @@ enum PlacementIntent: Equatable {
     case .smart: self = .mouse
     case .aim: self = .aim
     case .amm, .max: self = .sized(mode)
-    case .displayLeft, .displayRight, .displayUp, .displayDown: self = .arrow(mode)
+    case .halfUp, .halfDown: self = .halfStep(mode)
+    case .displayLeft, .displayRight, .displayUp, .displayDown, .displayNext, .displayPrevious: self = .arrow(mode)
     default: return nil
     }
   }
 
   @MainActor func destination(window: CGRect, screens: [NSScreen],
+                              windowKey: String? = nil, repeatedHorizontal: Bool = false,
                               cursor: CGPoint = NSEvent.mouseLocation) -> (SmartPlacement, NSScreen)? {
     guard let top = screens.first?.frame.maxY else { return nil }
     let frames = screens.map { flipScreenRect($0.frame, primaryTop: top) }
@@ -58,12 +60,29 @@ enum PlacementIntent: Equatable {
       let label = screenLabel(mode.previewLabel, on: screen, showDisplay: cursorScreen.map { $0 != source } ?? false)
       return (.init(frame: flipScreenRect(frame, primaryTop: top), label: label), screen)
     case .arrow(let direction):
-      guard let index = destinationDisplay(for: direction, from: source, screens: frames) else { return nil }
+      let xOnly = prefs?.bool(forKey: "screensOrderedByX") ?? false
+      guard let index = destinationDisplay(for: direction, from: source, screens: frames, xOnly: xOnly) else { return nil }
       let from = flipScreenRect(screens[source].visibleFrame, primaryTop: top)
       let to = flipScreenRect(screens[index].visibleFrame, primaryTop: top)
       let frame = transferredFrame(window, from: from, to: to)
       return (.init(frame: flipScreenRect(frame, primaryTop: top),
                     label: transferLabel(from: screens[source], to: screens[index])), screens[index])
+    case .halfStep(let mode):
+      let visible = screens.map { flipScreenRect($0.visibleFrame, primaryTop: top) }
+      let displayID = (screens[source].deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value
+      let confirmedHalf: Placement? = if let windowKey, let displayID {
+        PlacementState.read()?.confirmedHalf(key: windowKey, screen: displayID, frame: window,
+                                             usable: visible[source], now: Date().timeIntervalSince1970)
+      } else { nil }
+      guard let step = verticalHalfStep(for: mode, window: window, from: source, screens: frames, visible: visible,
+                                        confirmedHalf: confirmedHalf) else { return nil }
+      let screen = screens[step.screen]
+      let label = if step.screen != source {
+        "\(step.half.previewLabel) · \(transferLabel(from: screens[source], to: screen))"
+      } else {
+        screenLabel(step.half.previewLabel, on: screen, showDisplay: cursorScreen.map { $0 != source } ?? false)
+      }
+      return (.init(frame: flipScreenRect(step.frame, primaryTop: top), label: label), screen)
     case .rectangle, .cycle:
       if prefs?.bool(forKey: "useCursorScreenDetection") == true { source = cursorScreen ?? 0 }
       else {
@@ -95,7 +114,19 @@ enum PlacementIntent: Equatable {
     let bounds = flipScreenRect(screen.visibleFrame, primaryTop: top)
     let frame = placementFrame(slot, visibleFrame: bounds, current: window)
     // A repeated Rectangle action can cycle to a different display or size based on private history.
-    guard !ObservedWindow.matches(window, frame) else { return nil }
+    if ObservedWindow.matches(window, frame) {
+      guard slot == .left || slot == .right else { return nil }
+      if repeatedHorizontal && prefs?.integer(forKey: "subsequentExecutionMode") == 1,
+         ordered.count > 1, let i = ordered.firstIndex(of: screen) {
+        let delta = slot == .right ? 1 : ordered.count - 1
+        let destination = ordered[(i + delta) % ordered.count]
+        let opposite: Placement = slot == .right ? .left : .right
+        let newFrame = placementFrame(opposite, visibleFrame: destination.visibleFrame, current: .zero)
+        return (.init(frame: newFrame, label: (opposite == .left ? "left half" : "right half") + " · " +
+                      transferLabel(from: screen, to: destination)), destination)
+      }
+      if repeatedHorizontal { return nil }
+    }
     let labels: [Placement: String] = [.tl: "top-left quarter", .tr: "top-right quarter",
       .bl: "bottom-left quarter", .br: "bottom-right quarter", .left: "left half",
       .right: "right half", .top: "top half", .bottom: "bottom half"]
@@ -125,21 +156,29 @@ enum PlacementIntent: Equatable {
 }
 
 enum LaunchCue: Equatable {
-  case freshTerminal, focus(String)
-  var bundleID: String {
+  case freshTerminal, focus(String), existingApplication(String), folder, switchedWindow
+  var bundleID: String? {
     switch self {
     case .freshTerminal: "com.googlecode.iterm2"
     case .focus(let id): id
+    case .existingApplication(let path):
+      Bundle(url: URL(fileURLWithPath: (path as NSString).expandingTildeInPath))?.bundleIdentifier
+    case .folder: "com.apple.finder"
+    case .switchedWindow: nil
     }
   }
   init?(action: ActionPayload?) {
     switch action {
     case .application(let path) where path.hasSuffix("/Terminal.app"): self = .focus("com.apple.Terminal")
+    case .application(let path): self = .existingApplication(path)
+    case .folder: self = .folder
     case .command(let cmd):
       if cmd.hasSuffix("~/bin/tmux-launch.sh") || cmd.contains("tell application \"iTerm\" to create window with default profile") {
         self = .freshTerminal
       } else if cmd.hasSuffix("~/bin/messages-find.sh") { self = .focus("com.apple.MobileSMS") }
       else if cmd.hasSuffix("~/bin/iterm-front.applescript") { self = .focus("com.googlecode.iterm2") }
+      else if ["app-jump.applescript", "app-toggle.sh", "browser-window-cycle.applescript",
+               "web-jump.applescript"].contains(where: { cmd.contains("~/bin/" + $0) }) { self = .switchedWindow }
       else { return nil }
     default: return nil
     }

@@ -19,6 +19,34 @@ Status legend: 🧭 north-star direction · 🔒 firm decision · 🌱 shapes wo
 
 **Cheap observations.** The hourly Pulse collector already knows duplicate URL counts and approximate Finder window counts. A ten-minute idle sample can generate a suggestion with that information alone. Before acting, identify the current windows or tabs again. Two tabs with the same URL can hold different drafts, scroll positions or active sessions. Start with gathering Finder windows. Keep pinned tabs, audio, uploads, forms and running jobs out of automatic closure. A regular app with zero windows is insufficient evidence to quit it. For harder choices, an on-device model could phrase a question from the counts and app names. Give it selected text or a screenshot only when the user attaches one. [Apple Foundation Models](https://developer.apple.com/documentation/foundationmodels/systemlanguagemodel)
 
+**Disk review, November 22.** Run `ms pulse disk` for a current reading. The existing hourly Pulse job adds suggestions to Latest Idle Review after ten minutes without input. It reads filesystem metadata for free space and the count of entries in the pending crash queue. Run `ms pulse disk --crash-preview` to count complete diagnostic pairs older than seven days, measure their allocated bytes and see which entries were skipped. Only this on-demand preview enumerates the queue.
+
+**Next cleanup milestone.** Keep the existing hourly sampling and ten-minute idle gate. Show one local review at the next return from idle, suppress duplicate reviews, and let the owner gather windows or approve a specific file list. Start with a change receipt for one approved operation. Phone delivery can then retry that receipt independently. `ms pulse disk` and the read-only MCP tool `pulse_disk` expose the same measurements.
+
+**November 22 performance handoff.** The installed launcher and board passed the horizontal preview check on two half placements. For the next profiling session, measure cold `ms win place` against a warm process while retaining AppKit's usable display bounds. Time top-level menu construction with the Karabiner helpers deferred. Profile board pan/drag before changing its per-edge obstacle scan. Agents can use the persistent MCP server, filter windows by app, and use the mouse result's `cgX`/`cgY` with screenshot rectangles.
+
+**Phone receipts, proposed.** Bind a future rule to one machine, one directory, a file type, a retention window and a verified owner destination. Start with an explicit one-time cleanup. Record the actual counts removed, bytes allocated to those files, free space before and after, skipped items and errors. Persist a receipt ID locally before attempting delivery. A failed text stays queued with that ID. Retrying delivery must never rerun the cleanup. Store the transport acceptance separately from any delivery acknowledgment. Short receipts can use a fixed template. An on-device model can explain a pattern from aggregate observations on demand. Numbers, paths eligible for removal and the decision to execute come from code and owner policy.
+
+**Project-owned drives.** Pulse reads capacity and growth by filesystem UUID. The project owns retention, leases, worktree state, symlinks, backup checks and every write on its managed drive. Generic cleanup rules must also exclude targets reached indirectly through symlinks or mount points on that drive. A local model can explain measured deltas and project-provided reasons. Machine Spirit owns receipts for actions it performs under owner-approved OS rules. Project previews appear as estimates in a review.
+
+**Project preview v1.** The on-demand reader accepts a project-owned atomic snapshot at `project-previews/example-project.json` under the Pulse directory. The enrolled volume's local `projectProvider` field binds the reader to that UUID. `ms pulse disk` checks the envelope below and displays a fresh aggregate or an explicit unknown. `--explain` adds a resource-gated local explanation. The hourly collector samples metadata. A new filesystem UUID requires explicit enrollment. [Reader and explanation contract](tools/ms/README.md#pulse-snapshots-and-reports)
+
+```json
+{
+  "schemaVersion": 1,
+  "providerId": "example-project",
+  "volumeUUID": "01234567-89AB-CDEF-0123-456789ABCDEF",
+  "generatedAt": "2026-11-22T12:00:00Z",
+  "status": "ok",
+  "reclaimableBytes": 4096,
+  "categories": [
+    {"id": "merged-packages", "label": "Merged build packages", "bytes": 4096, "itemCount": 1, "safeReason": "Owning branch merged; lease check passed."}
+  ]
+}
+```
+
+For `ok`, use nonnegative integer counts and bytes. Each eligible item belongs to one category, category IDs are unique, and the total equals the sum of category bytes. Bytes estimate allocated storage eligible under current policy; shared extents and snapshots can reduce the space actually released. A successful empty scan returns zero and an empty list. For `blocked` or `unavailable`, include a short `reason`, set the total to `null` and return an empty list. The payload carries aggregate data only. The project rechecks eligibility immediately before any separately authorized action.
+
 **Appearance.** Reuse the board’s click-through, nonactivating panel. A short reaction when a review becomes ready is enough. Pause rendering when it settles. A small interchangeable local sprite pack lets the existing offline VTuber work inform the movement while keeping client assets out of the installer.
 
 **Ownership.** Make the first acceptance test a restore to a second Mac. The owner should be able to export encrypted preferences and memory, recover them with their own key, see which device authorized a rule, and revoke that device for future actions. Use a signed sequence of action receipts to record what an adapter observed, what the model suggested and what the user authorized. Those signatures establish provenance. The model’s interpretation can still be wrong. Inference and the pet should be replaceable without losing that history.

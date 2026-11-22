@@ -44,10 +44,11 @@ func toolSpecs(allowClipboard: Bool) -> [ToolSpec] {
     }
     var result = [
         ToolSpec(name: "audio_list", description: "List CoreAudio processes with active output streams (macOS 14.4+). App/process level only, not browser tabs or a measurement of audible sound."),
+        ToolSpec(name: "pulse_disk", description: "Read current free space, disk reserve and local cleanup suggestions. Does not delete files or run a cleanup."),
         ToolSpec(name: "pulse_report", description: "Summarize local hourly Mac usage snapshots. Read-only. Sampling is not time-spent tracking; window counts are estimates and missing browser samples remain unknown.", properties: ["hours": integer("Look back this many hours (default 24).", min: 1, max: 8760)]),
         ToolSpec(name: "screens", description: "List display IDs, names, global frames, usable frames, scale, refresh rate (null if unknown/variable), main and built-in flags. Use before positioning or capturing windows. All geometry is in global points with primary display top-left origin and downward y. No special permission."),
         ToolSpec(name: "apps", description: "List running regular GUI apps with name, bundleId, pid, frontmost and hidden flags. Use to discover an exact target for focus. No special permission."),
-        ToolSpec(name: "mouse", description: "Mouse x,y and containing screen ID, frame and visibleFrame in AppKit global points (bottom-left origin, y up). No special permission."),
+        ToolSpec(name: "mouse", description: "Mouse x,y and containing screen ID, frame and visibleFrame in AppKit global points (bottom-left origin, y up). cgX,cgY use top-left coordinates for screenshot rects. No special permission."),
         ToolSpec(name: "win_place", description: "Place the focused window (main/standard fallback). smart uses the mouse screen and edge/corner zones; step advances quarter, half, almost-maximize, maximize, fullscreen. Cardinal display modes move to a physical neighbor and stop at desktop edges. Other modes use the window's current screen. Uses visibleFrame to avoid Dock/menu bar. Requires Accessibility. Returns requested geometry; apps may clamp sizes.", properties: [
             "mode": ["type": "string", "enum": Placement.allCases.map(\.rawValue)],
             "app": string("Exact running app name or bundle ID; defaults to frontmost.")], required: ["mode"], readOnly: false),
@@ -92,6 +93,7 @@ func toolArguments(_ name: String, _ args: [String: Any]) throws -> [String] {
     }
     switch name {
     case "audio_list": result = ["list"]
+    case "pulse_disk": result = ["disk"]
     case "pulse_report": result = ["report"] + (value("hours").map { ["--hours", $0] } ?? [])
     case "win_place": result = ["place"] + result + ["--", value("mode")!]
     case "win_tile_all": result = ["tile-all"]
@@ -168,7 +170,7 @@ final class MCPServer {
                 if params["arguments"] != nil && !(params["arguments"] is [String: Any]) { throw Failure("arguments must be an object") }
                 let args = params["arguments"] as? [String: Any] ?? [:]
                 try spec.validate(args)
-                let commandName = ["audio_list": "audio", "pulse_report": "pulse", "win_place": "win", "win_tile_all": "win", "win_cycle": "win"][name] ?? name
+                let commandName = ["audio_list": "audio", "pulse_report": "pulse", "pulse_disk": "pulse", "win_place": "win", "win_tile_all": "win", "win_cycle": "win"][name] ?? name
                 let output = try command(commandName, toolArguments(name, args))
                 var content: [[String: Any]] = [["type": "text", "text": try jsonString(output.json)]]
                 if let path = output.imagePath { content.append(try screenshotImage(path)) }

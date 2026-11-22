@@ -2,17 +2,12 @@ import Cocoa
 import Defaults
 import KeyboardShortcuts
 import Settings
-import Sparkle
 import SwiftUI
-import UserNotifications
 import os.log
 
-let updateLocationIdentifier = "UpdateCheck"
 
 @NSApplicationMain
 class AppDelegate: NSObject, NSApplicationDelegate,
-  SPUStandardUserDriverDelegate,
-  UNUserNotificationCenterDelegate,
   NSWindowDelegate
 {
   var controller: Controller!
@@ -32,7 +27,6 @@ class AppDelegate: NSObject, NSApplicationDelegate,
   let configMonitor = ConfigFileMonitor()
 
   var state: UserState!
-  @IBOutlet var updaterController: SPUStandardUpdaterController!
 
   lazy var settingsWindowController = SettingsWindowController(
     panes: [
@@ -57,8 +51,13 @@ class AppDelegate: NSObject, NSApplicationDelegate,
       ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] != "1"
     else { return }
     guard !isRunningTests() else { return }
+    // macOS can reopen a leftover XCTest host through Launch Services.
+    // It must never register the daily driver’s hotkeys, menu item or power assertion.
+    if Bundle.main.bundleIdentifier?.hasPrefix("com.machinespirit.testing.") == true {
+      NSApp.terminate(nil)
+      return
+    }
 
-    UNUserNotificationCenter.current().delegate = self
 
     NSApp.mainMenu = MainMenu()
 
@@ -93,9 +92,6 @@ class AppDelegate: NSObject, NSApplicationDelegate,
     }
     statusItem.handleRevealConfig = {
       NSWorkspace.shared.activateFileViewerSelecting([self.config.url])
-    }
-    statusItem.handleCheckForUpdates = {
-      self.updaterController.checkForUpdates(nil)
     }
 
     Task {
@@ -339,64 +335,6 @@ class AppDelegate: NSObject, NSApplicationDelegate,
     controller?.hide()
   }
 
-  // MARK: - Sparkle Gentle Reminders
-
-  @objc var supportsGentleScheduledUpdateReminders: Bool {
-    return true
-  }
-
-  func standardUserDriverWillHandleShowingUpdate(
-    _ handleShowingUpdate: Bool, forUpdate update: SUAppcastItem,
-    state: SPUUserUpdateState
-  ) {
-    // Do not change activation policy here; Settings drives visibility
-
-    if !state.userInitiated {
-      NSApp.dockTile.badgeLabel = "1"
-
-      requestNotificationsAuthorizationIfNeeded { granted in
-        guard granted else { return }
-        let content = UNMutableNotificationContent()
-        content.title = "Leader Key Update Available"
-        content.body = "Version \(update.displayVersionString) is now available"
-
-        let request = UNNotificationRequest(
-          identifier: updateLocationIdentifier, content: content,
-          trigger: nil)
-        UNUserNotificationCenter.current().add(request)
-      }
-    }
-  }
-
-  func standardUserDriverDidReceiveUserAttention(
-    forUpdate update: SUAppcastItem
-  ) {
-    NSApp.dockTile.badgeLabel = ""
-
-    UNUserNotificationCenter.current().removeDeliveredNotifications(
-      withIdentifiers: [
-        updateLocationIdentifier
-      ])
-  }
-
-  func standardUserDriverWillFinishUpdateSession() {}
-
-  // MARK: - UNUserNotificationCenter Delegate
-
-  func userNotificationCenter(
-    _ center: UNUserNotificationCenter,
-    didReceive response: UNNotificationResponse,
-    withCompletionHandler completionHandler: @escaping () -> Void
-  ) {
-    if response.notification.request.identifier
-      == updateLocationIdentifier
-      && response.actionIdentifier == UNNotificationDefaultActionIdentifier
-    {
-      updaterController.checkForUpdates(nil)
-    }
-    completionHandler()
-  }
-
   func isRunningTests() -> Bool {
     let environment = ProcessInfo.processInfo.environment
     guard environment["XCTestSessionIdentifier"] != nil else { return false }
@@ -480,26 +418,7 @@ class AppDelegate: NSObject, NSApplicationDelegate,
     NSApp.setActivationPolicy(.accessory)
   }
 
-  private func requestNotificationsAuthorizationIfNeeded(
-    completion: @escaping (Bool) -> Void
-  ) {
-    UNUserNotificationCenter.current().getNotificationSettings { settings in
-      switch settings.authorizationStatus {
-      case .notDetermined:
-        UNUserNotificationCenter.current().requestAuthorization(options: [
-          .alert, .badge, .sound,
-        ]) { granted, _ in
-          DispatchQueue.main.async { completion(granted) }
-        }
-      case .authorized, .provisional, .ephemeral:
-        DispatchQueue.main.async { completion(true) }
-      case .denied:
-        DispatchQueue.main.async { completion(false) }
-      @unknown default:
-        DispatchQueue.main.async { completion(false) }
-      }
-    }
-  }
+
 }
 
 /// Move keyboard focus within the active surface without sending a key or activating a control.
