@@ -15,6 +15,7 @@ struct CompactBarState: Equatable {
   var gpu: Int? = nil
   var temperature: Int? = nil
   var network: String? = nil
+  var freeGiB: Double? = nil
 }
 
 enum CompactBar {
@@ -59,6 +60,9 @@ enum CompactBar {
       cell("TEMP", "\(temperature)°", color(temperature, warm: 80, hot: 95))
     }
     if let network = state.network { cell("NET", network, foreground, minimum: 94) }
+    if let available = state.freeGiB {
+      cell("FREE", String(format: "%.1fG", available), available < 5 ? Self.hot : (available < 10 ? Self.warm : foreground))
+    }
     let skullWidth: CGFloat = state.skull ? 21 : 0
     let width = max(
       4,

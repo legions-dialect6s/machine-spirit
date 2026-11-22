@@ -93,6 +93,7 @@ final class SystemStats {
     var temperature: Int?
     var download: Double?
     var upload: Double?
+    var freeGiB: Double?
   }
   private(set) var bar = BarReading()
   var onBarUpdate: (() -> Void)?
@@ -101,11 +102,13 @@ final class SystemStats {
   private var barGeneration = 0
   private var barSensors: HIDTemperatures?
   private var barNetwork = NetStats()
+  private var lastCapacityRead = -Double.infinity
+  private var capacityGiB: Double?
 
   /// Called only by the existing 2s heartbeat. Sensor I/O never blocks AppKit.
-  func sampleBar(gpu: Bool, temperature: Bool, network: Bool) {
+  func sampleBar(gpu: Bool, temperature: Bool, network: Bool, disk: Bool = false) {
     guard !barInFlight else { return }
-    guard gpu || temperature || network else {
+    guard gpu || temperature || network || disk else {
       if barHasReaders { stopBar() }
       return
     }
@@ -114,6 +117,16 @@ final class SystemStats {
     let current = barGeneration
     queue.async {
       var reading = BarReading()
+      if disk {
+        let now = ProcessInfo.processInfo.systemUptime
+        if now - self.lastCapacityRead >= 30 {
+          var fs = statfs()
+          self.capacityGiB = statfs("/System/Volumes/Data", &fs) == 0
+            ? Double(fs.f_bavail) * Double(fs.f_bsize) / 1_073_741_824 : nil
+          self.lastCapacityRead = now
+        }
+        reading.freeGiB = self.capacityGiB
+      }
       if gpu { reading.gpu = Self.gpuPercent() }
       if temperature {
         if self.barSensors == nil { self.barSensors = HIDTemperatures() }
@@ -258,7 +271,7 @@ final class SystemStats {
           details: memoryDetails,
           compact: memory.total > 0
             ? "MEM \(Int((Double(memory.used) * 100 / Double(memory.total)).rounded()))%" : "MEM —"),
-        network(), disk(), battery(), sensors.sample(),
+        network(), disk(includeDetails: includeDetails), battery(), sensors.sample(),
       ]
     }
 
@@ -340,7 +353,28 @@ final class SystemStats {
         name: "Network ↓/↑", summary: "Unavailable", details: ["No byte counters for \(primary)"])
     }
 
-    private func disk() -> Row {
+    // MNT_NOWAIT reads the kernel mount table without waking sleeping disks or contacting file servers.
+    private func volumeDetails() -> [String] {
+      let count = getfsstat(nil, 0, MNT_NOWAIT)
+      guard count > 0 else { return [] }
+      var mounts = Array(repeating: statfs(), count: Int(count) + 4)
+      let bytes = Int32(mounts.count * MemoryLayout<statfs>.stride)
+      let used = getfsstat(&mounts, bytes, MNT_NOWAIT)
+      guard used > 0 else { return [] }
+      return mounts.prefix(Int(used)).compactMap { value -> String? in
+        var fs = value
+        let path = withUnsafeBytes(of: &fs.f_mntonname) { raw in
+          String(decoding: raw.prefix(while: { $0 != 0 }), as: UTF8.self)
+        }
+        guard path.hasPrefix("/Volumes/"), !path.dropFirst(9).contains("/"),
+              fs.f_flags & UInt32(MNT_RDONLY) == 0, fs.f_blocks > 0 else { return nil }
+        let free = UInt64(fs.f_bavail) * UInt64(fs.f_bsize)
+        let total = UInt64(fs.f_blocks) * UInt64(fs.f_bsize)
+        return "\(path.dropFirst(9)): \(Self.bytes(free)) free / \(Self.bytes(total))"
+      }.sorted()
+    }
+
+    private func disk(includeDetails: Bool) -> Row {
       var filesystem = statfs()
       let spaceOK =
         statfs("/System/Volumes/Data", &filesystem) == 0 || statfs("/", &filesystem) == 0
@@ -370,6 +404,7 @@ final class SystemStats {
           spaceOK
             ? "Data volume: \(Self.bytes(free)) free / \(Self.bytes(total))"
             : "Data volume unavailable",
+        ] + (includeDetails ? volumeDetails() : []) + [
           "All physical disks read: \(rates.0)", "All physical disks write: \(rates.1)",
         ])
     }
@@ -575,6 +610,29 @@ private final class HIDTemperatures {
 /// Total interface traffic, including VPN tunnels as requested. A tunneled byte
 /// can also appear on en*: this is interface throughput, not unique internet traffic.
 struct NetStats {
+  /// nettop's first block is lifetime totals. Only the second block is the requested delta.
+  static func busyProcesses(_ csv: String) -> [String]? {
+    let header = ",bytes_in,bytes_out,"
+    let lines = csv.split(whereSeparator: \.isNewline)
+    let headers = lines.indices.filter { lines[$0] == header }
+    guard headers.count == 2 else { return nil }
+    var samples: [(name: String, down: UInt64, up: UInt64)] = []
+    for line in lines.dropFirst(headers[1] + 1) {
+      let fields = line.split(separator: ",", omittingEmptySubsequences: false)
+      guard fields.count >= 4, fields.last == "",
+            let down = UInt64(fields[fields.count - 3]), let up = UInt64(fields[fields.count - 2]),
+            down > 0 || up > 0 else { continue }
+      samples.append((fields.dropLast(3).joined(separator: ","), down, up))
+    }
+    let ranked = samples.sorted {
+      let a = Double($0.down) + Double($0.up), b = Double($1.down) + Double($1.up)
+      return a == b ? $0.name < $1.name : a > b
+    }
+    return ranked.prefix(8).map {
+      "\($0.name)   ↓ \(SystemStats.DetailReader.bytes($0.down))   ↑ \(SystemStats.DetailReader.bytes($0.up))"
+    }
+  }
+
   struct Counter {
     let down: UInt64
     let up: UInt64

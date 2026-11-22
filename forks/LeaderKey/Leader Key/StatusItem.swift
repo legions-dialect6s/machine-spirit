@@ -30,7 +30,7 @@ class StatusItem: NSObject, NSMenuDelegate {
   private var appearanceObservation: NSKeyValueObservation?
   var heartbeat: (() -> Void)?
   private let segments = [
-    "Skull", "Sheol", "CPU", "GPU", "Memory", "Temperature", "Network", "Awake",
+    "Skull", "Sheol", "CPU", "GPU", "Memory", "Temperature", "Network", "Disk", "Awake",
   ]
   private var enabledSegments = Set<String>()
   private var backingScale: CGFloat = 2
@@ -65,7 +65,7 @@ class StatusItem: NSObject, NSMenuDelegate {
 
   func enable() {
     guard statusItem == nil else { return }
-    for segment in segments { UserDefaults.standard.register(defaults: ["msBar" + segment: true]) }
+    for segment in segments { UserDefaults.standard.register(defaults: ["msBar" + segment: segment != "Disk"]) }
     refreshPreferences()
     refreshScale()
     let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -128,7 +128,7 @@ class StatusItem: NSObject, NSMenuDelegate {
     stats.sampleBar(
       gpu: enabledSegments.contains("GPU"),
       temperature: enabledSegments.contains("Temperature"),
-      network: enabledSegments.contains("Network"))
+      network: enabledSegments.contains("Network"), disk: enabledSegments.contains("Disk"))
     heartbeat?()
     system.checkExpiry()
     updateStatusItemAppearance()
@@ -173,6 +173,12 @@ class StatusItem: NSObject, NSMenuDelegate {
       statsRows[name] = row
       statistics.addItem(row)
     }
+    statistics.addItem(.separator())
+    statistics.addItem(actionItem("Sample Network Activity by Process…", #selector(sampleNetworkProcesses)))
+    if NSWorkspace.shared.urlForApplication(withBundleIdentifier: "at.obdev.littlesnitch.networkmonitor") != nil {
+      statistics.addItem(actionItem("Open Little Snitch Network Monitor…", #selector(openNetworkMonitor)))
+    }
+    statistics.addItem(actionItem("Latest Idle Review…", #selector(showIdleReview)))
     sheol.append(to: menu)
     system.append(to: menu)
     menu.addItem(.separator())
@@ -272,6 +278,46 @@ class StatusItem: NSObject, NSMenuDelegate {
   @objc func reloadConfig() { handleReloadConfig?() }
   @objc func revealConfigFile() { handleRevealConfig?() }
   @objc func checkForUpdates() { handleCheckForUpdates?() }
+
+  @objc private func openNetworkMonitor() {
+    if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "at.obdev.littlesnitch.networkmonitor") {
+      NSWorkspace.shared.open(url)
+    }
+  }
+
+  @objc private func sampleNetworkProcesses() {
+    CommandRunner.run("/usr/bin/nettop -P -n -x -d -L 2 -s 1 -J bytes_in,bytes_out", on: .global(qos: .utility)) { result in
+      let rows = result.status == 0 ? NetStats.busyProcesses(result.output) : nil
+      let message = rows.map { $0.isEmpty ? "No traffic in this sample." : $0.joined(separator: "\n") }
+      self.showReport("Network traffic in the last second", message ?? "The network sample was unavailable.")
+    }
+  }
+
+  @objc private func showIdleReview() {
+    CommandRunner.run("\"$HOME/bin/ms\" pulse report --hours 24 --json", on: .global(qos: .utility)) { result in
+      guard result.status == 0,
+            let report = (try? JSONSerialization.jsonObject(with: Data(result.output.utf8))) as? [String: Any] else {
+        self.showReport("Idle review unavailable", "Check that the ms command is installed in ~/bin.")
+        return
+      }
+      guard let review = report["latestIdleReview"] as? [String: Any],
+            let time = review["timestamp"] as? String, let date = ISO8601DateFormatter().date(from: time),
+            let suggestions = review["suggestions"] as? [String] else {
+        self.showReport("No idle review yet", "The hourly Pulse check needs ten minutes of inactivity. This view covers the last 24 hours.")
+        return
+      }
+      self.showReport("Idle review · " + date.formatted(date: .abbreviated, time: .shortened),
+                      suggestions.isEmpty ? "No suggestions in that sample." : suggestions.joined(separator: "\n\n"))
+    }
+  }
+
+  private func showReport(_ title: String, _ message: String) {
+    let alert = NSAlert()
+    alert.messageText = title
+    alert.informativeText = message
+    NSApp.activate(ignoringOtherApps: true)
+    alert.runModal()
+  }
 
   // MARK: - Rectangle actions
 
@@ -486,7 +532,8 @@ class StatusItem: NSObject, NSMenuDelegate {
       awake: enabled("Awake") && system.isAwake,
       dark: button.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua,
       scale: backingScale, height: NSStatusBar.system.thickness,
-      gpu: integer("gpu"), temperature: integer("temp"), network: network)
+      gpu: integer("gpu"), temperature: integer("temp"), network: network,
+      freeGiB: enabled("Disk") ? stats.bar.freeGiB.map { (10 * $0).rounded() / 10 } : nil)
     guard state != lastRender else { return }
     lastRender = state
     button.image = CompactBar.image(state)

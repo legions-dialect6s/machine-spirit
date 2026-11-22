@@ -15,6 +15,11 @@ struct StatsSmoke {
     let next = Reader.Counter(identity: "en0", down: 1124, up: 2248, time: 2)
     precondition(Reader.rates(next, first).0 == "1 KB/s")
     print("PASS rate baseline/reset/interface change")
+    let network = ",bytes_in,bytes_out,\nlifetime.1,9999,8000,\n,bytes_in,bytes_out,\nidle.1,0,0,\nsmall.2,20,0,\nlarge.3,10,100,\n"
+    let ranked = NetStats.busyProcesses(network)
+    precondition(ranked?.count == 2 && ranked?.first?.hasPrefix("large.3") == true)
+    precondition(NetStats.busyProcesses(",bytes_in,bytes_out,\nlifetime.1,9999,8000,") == nil)
+    print("PASS network process sample excludes lifetime counters")
     let stats = SystemStats()
     var updates = 0
     stats.onUpdate = { rows in
@@ -32,6 +37,7 @@ struct StatsSmoke {
     RunLoop.main.run(until: Date().addingTimeInterval(1.2))
     precondition(stats.detailedSamples == 0)
     stats.open()
+    stats.setDetailsVisible(true)
     RunLoop.main.run(until: Date().addingTimeInterval(3.5))
     precondition(updates >= 2)
     stats.close()

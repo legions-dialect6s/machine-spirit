@@ -1,16 +1,106 @@
 import Cocoa
 
-/// Future browser-extension seam. Only a companion extension can supply audible
-/// tab identity/title/domain and an activation token. Nest those rows under the
-/// owning browser here; CoreAudio process IDs are NOT tab IDs. No fake tab rows.
-struct NowPlayingBrowserTab {
-  let id: String
-  let title: String
-  let domain: String
-  let activate: () -> Void
-}
-protocol NowPlayingBrowserTabProvider: AnyObject {
-  func audibleTabs(for bundleIdentifier: String) -> [NowPlayingBrowserTab]
+enum NowPlayingBrowserFocus {
+  private static let supportedBundles: Set<String> = [
+    "com.apple.Safari", "com.google.Chrome", "com.brave.Browser", "com.microsoft.edgemac",
+    "org.chromium.Chromium",
+  ]
+
+  static func supports(_ bundleIdentifier: String?) -> Bool {
+    bundleIdentifier.map { supportedBundles.contains($0) } ?? false
+  }
+
+  /// Safari and Chromium expose a native "Mute tab" button under audible tabs.
+  /// A page controls its title, so a title ending in "Audio playing" is insufficient.
+  /// Inspect only browser chrome and leave the current selection on ambiguity.
+  static func focusAudibleTab(in root: AXUIElement, shouldFocus: () -> Bool) -> Bool {
+    let deadline = ProcessInfo.processInfo.systemUptime + 0.5
+    var remaining = 512
+    var match: (tab: AXUIElement, window: AXUIElement)?
+    do {
+      func prepare(_ element: AXUIElement) throws {
+        let secondsLeft = deadline - ProcessInfo.processInfo.systemUptime
+        guard remaining > 0, secondsLeft > 0 else { throw ScanError.incomplete }
+        remaining -= 1
+        AXUIElementSetMessagingTimeout(element, Float(min(0.05, secondsLeft)))
+      }
+      func hasAudioIndicator(_ tab: AXUIElement) throws -> Bool {
+        for child in try attribute(tab, kAXChildrenAttribute) as [AXUIElement]? ?? [] {
+          try prepare(child)
+          guard try attribute(child, kAXRoleAttribute) as String? == kAXButtonRole else {
+            continue
+          }
+          let title: String? = try attribute(child, kAXTitleAttribute)
+          let description: String? = try attribute(child, kAXDescriptionAttribute)
+          if title?.caseInsensitiveCompare("Mute tab") == .orderedSame
+            || description?.caseInsensitiveCompare("Mute tab") == .orderedSame
+          {
+            return true
+          }
+        }
+        return false
+      }
+      func inspect(_ element: AXUIElement, window: AXUIElement, inTabStrip: Bool) throws {
+        try prepare(element)
+        let role: String? = try attribute(element, kAXRoleAttribute)
+        switch role {
+        case "AXOpaqueProviderGroup":
+          // Safari exposes its tab bar as an opaque list beside the document.
+          let identifier: String? = try attribute(element, kAXIdentifierAttribute)
+          guard identifier?.hasPrefix("TabBar?") == true else { return }
+          for child in try attribute(element, kAXChildrenAttribute) as [AXUIElement]? ?? [] {
+            try inspect(child, window: window, inTabStrip: true)
+          }
+        case kAXTabGroupRole, kAXGroupRole, kAXWindowRole, kAXSplitGroupRole, kAXScrollAreaRole:
+          let isTabStrip = inTabStrip || role == kAXTabGroupRole
+          for child in try attribute(element, kAXChildrenAttribute) as [AXUIElement]? ?? [] {
+            try inspect(child, window: window, inTabStrip: isTabStrip)
+          }
+        case kAXRadioButtonRole where inTabStrip:
+          guard try attribute(element, kAXSubroleAttribute) as String? == "AXTabButton",
+            try hasAudioIndicator(element)
+          else {
+            return
+          }
+          guard match == nil else { throw ScanError.ambiguous }
+          match = (element, window)
+        default:
+          break
+        }
+      }
+      try prepare(root)
+      let role: String? = try attribute(root, kAXRoleAttribute)
+      let windows: [AXUIElement] =
+        role == kAXWindowRole ? [root] : try attribute(root, kAXWindowsAttribute) ?? []
+      for window in windows {
+        try inspect(window, window: window, inTabStrip: false)
+      }
+      guard let match else { return false }
+      try prepare(match.tab)
+      guard try hasAudioIndicator(match.tab), shouldFocus(),
+        AXUIElementPerformAction(match.tab, kAXPressAction as CFString) == .success
+      else {
+        return false
+      }
+      if shouldFocus() {
+        AXUIElementPerformAction(match.window, kAXRaiseAction as CFString)
+      }
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  private enum ScanError: Error { case incomplete, ambiguous }
+
+  private static func attribute<T>(_ element: AXUIElement, _ name: String) throws -> T? {
+    var value: CFTypeRef?
+    switch AXUIElementCopyAttributeValue(element, name as CFString, &value) {
+    case .success: return value as? T
+    case .noValue, .attributeUnsupported: return nil
+    default: throw ScanError.incomplete
+    }
+  }
 }
 
 final class NowPlayingMenuSection: NSObject {
@@ -24,6 +114,8 @@ final class NowPlayingMenuSection: NSObject {
   private var items: [NSMenuItem] = []
   private var rowViews: [NowPlayingRowView] = []
   private let queue = DispatchQueue(label: "com.machinespirit.now-playing", qos: .utility)
+  private let browserFocusQueue = DispatchQueue(
+    label: "com.machinespirit.now-playing.browser-focus", qos: .userInitiated)
   private let capturePolicy = NowPlayingCapturePolicy()
   private var session: NowPlayingAudioSession?
   private var processTimer: Timer?
@@ -177,6 +269,14 @@ final class NowPlayingMenuSection: NSObject {
       return
     }
     app.activate(options: [])
+    guard NowPlayingBrowserFocus.supports(app.bundleIdentifier), AXIsProcessTrusted() else { return }
+    browserFocusQueue.async {
+      guard !app.isTerminated else { return }
+      let pid = app.processIdentifier
+      _ = NowPlayingBrowserFocus.focusAudibleTab(in: AXUIElementCreateApplication(pid)) {
+        !app.isTerminated && NSWorkspace.shared.frontmostApplication?.processIdentifier == pid
+      }
+    }
   }
   var timersAreNil: Bool { processTimer == nil && meterTimer == nil }
   var sessionIsNil: Bool { session == nil }

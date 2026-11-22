@@ -58,6 +58,24 @@ private func sample(_ timestamp: String, tabs: Int? = nil) -> PulseSnapshot {
     #expect(throws: Failure.self) { try appendPulse(sample("2026-03-01T00:00:00Z"), directory: directory) }
 }
 
+@Test func idleReviewReusesObservationsAndReadsPreviousLogs() throws {
+    let old = sample("2026-01-01T00:00:00Z", tabs: 4)
+    let legacy = try JSONDecoder().decode(PulseSnapshot.self, from: JSONEncoder().encode(old))
+    #expect(legacy.idleReview == nil)
+    #expect(idleReview(after: 599, browsers: old.browsers, apps: old.apps) == nil)
+    #expect(idleReview(after: .infinity, browsers: old.browsers, apps: old.apps) == nil)
+    var idle = sample("2026-01-01T01:00:00Z", tabs: 4)
+    idle.idleReview = idleReview(after: 600, browsers: idle.browsers, apps: idle.apps)
+    #expect(idle.idleReview?.count == 2)
+    #expect(idleReview(after: 600, browsers: [PulseBrowser(name: "Safari", status: "unavailable")], apps: []) == [])
+    let later = sample("2026-01-01T02:00:00Z")
+    let report = pulseSummary([later, idle, old], hours: 24)
+    let json = try #require(report.json as? [String: Any])
+    let review = try #require(json["latestIdleReview"] as? [String: Any])
+    #expect(review["timestamp"] as? String == idle.timestamp)
+    #expect(review["suggestions"] as? [String] == idle.idleReview)
+}
+
 @Test func timedOutChildIsReaped() {
     let child = PulseChild("/bin/sleep", ["5"])
     PulseChild.finish([child], deadline: ProcessInfo.processInfo.systemUptime + 0.02)

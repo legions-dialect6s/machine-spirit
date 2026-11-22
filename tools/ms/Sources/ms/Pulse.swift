@@ -101,6 +101,21 @@ struct PulseSnapshot: Codable {
     let browsers: [PulseBrowser]
     let tmuxSessions: Int?
     let notes: [String]
+    var idleReview: [String]? = nil
+}
+
+func idleReview(after seconds: TimeInterval, browsers: [PulseBrowser], apps: [PulseApp]) -> [String]? {
+    guard seconds.isFinite, seconds >= 600 else { return nil }
+    var suggestions: [String] = []
+    for browser in browsers where browser.status == "ok" {
+        if let duplicates = browser.duplicateTabs, duplicates > 0 {
+            suggestions.append("\(browser.name) has \(duplicates) extra tab\(duplicates == 1 ? "" : "s") with an identical URL. Review before closing.")
+        }
+    }
+    if let finder = apps.first(where: { $0.bundleId == "com.apple.finder" }), finder.standardWindowsEstimate > 1 {
+        suggestions.append("Finder has about \(finder.standardWindowsEstimate) windows. Hold Caps after F I and repeat I to gather them as tabs.")
+    }
+    return suggestions
 }
 
 func pulseBrowser(_ name: String, urls: [String]) -> PulseBrowser {
@@ -245,12 +260,16 @@ func collectPulse() throws -> PulseSnapshot {
     @unknown default: thermal = "unknown"
     }
     let date = Date(timeIntervalSince1970: floor(Date().timeIntervalSince1970 / 60) * 60)
+    // CoreGraphics defines kCGAnyInputEventType as UINT32_MAX in C.
+    let anyInput = CGEventType(rawValue: UInt32.max)!
+    let idleSeconds = CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: anyInput)
     return PulseSnapshot(timestamp: date.ISO8601Format(), uptimeSeconds: ProcessInfo.processInfo.systemUptime,
                          loadAverages: load, memoryPressure: pressure, swapUsedBytes: swapOK ? swap.xsu_used : nil,
                          freeDiskBytes: diskOK ? UInt64(disk.f_bavail) * UInt64(disk.f_bsize) : nil,
                          batteryPercent: battery, batteryCycles: cycles, batteryHealth: health, thermalState: thermal,
                          frontmostApp: NSWorkspace.shared.frontmostApplication?.localizedName, regularAppCount: regular.count,
-                         apps: appRows, browsers: browsers, tmuxSessions: sessions, notes: notes)
+                         apps: appRows, browsers: browsers, tmuxSessions: sessions, notes: notes,
+                         idleReview: idleReview(after: idleSeconds, browsers: browsers, apps: appRows))
 }
 
 func appendPulse(_ snapshot: PulseSnapshot, directory: URL) throws -> URL {
@@ -323,6 +342,12 @@ func pulseSummary(_ snapshots: [PulseSnapshot], hours: Int, skipped: Int = 0) ->
     lines.append("Battery %: \(display(metric(rows.compactMap(\.batteryPercent))))")
     lines.append("Minimum free disk: " + (minimumDisk.map { String(format: "%.2f GiB", Double($0) / 1_073_741_824) } ?? "n/a"))
     lines.append("Window pile-up (peak): " + pile.sorted { $0.value == $1.value ? $0.key < $1.key : $0.value > $1.value }.prefix(10).map { "\($0.key) \($0.value)" }.joined(separator: ", "))
+    var latestReview: [String: Any]?
+    if let row = rows.last(where: { $0.idleReview != nil }), let suggestions = row.idleReview {
+        latestReview = ["timestamp": row.timestamp, "suggestions": suggestions]
+        lines.append("Idle review at \(row.timestamp)")
+        lines += suggestions.isEmpty ? ["No suggestions in that sample."] : suggestions
+    }
     lines += notes.map { "Note: \($0)" }
     return Output(json: ["hours": hours, "samples": rows.count, "load1m": load, "load5m": load5, "load15m": load15, "swapUsedBytes": swap, "regularApps": appCount,
                          "standardWindowsEstimate": windowCount, "batteryPercent": metric(rows.compactMap(\.batteryPercent)),
@@ -330,7 +355,7 @@ func pulseSummary(_ snapshots: [PulseSnapshot], hours: Int, skipped: Int = 0) ->
                          "minimumFreeDiskBytes": minimumDisk as Any? ?? NSNull(), "swapGrowthBytes": growth as Any? ?? NSNull(),
                          "frontmostApps": frontRows.map { ["name": $0.key, "samples": $0.value] as [String: Any] },
                          "windowPeaksByApp": pile, "memoryPressureSamples": pressure, "thermalSamples": thermal,
-                         "browsers": browserRows, "notes": notes], text: lines.joined(separator: "\n"))
+                         "browsers": browserRows, "latestIdleReview": latestReview as Any? ?? NSNull(), "notes": notes], text: lines.joined(separator: "\n"))
 }
 
 func readPulse(directory: URL, hours: Int, now: Date = Date()) throws -> Output {
