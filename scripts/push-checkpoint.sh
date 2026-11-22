@@ -11,6 +11,7 @@ base=$(git rev-parse FETCH_HEAD)
 git merge-base --is-ancestor "$base" "$head" || { echo "Origin has changes. Integrate them before retrying." >&2; exit 1; }
 git diff --check "$base" "$head"
 gitleaks git --redact --no-banner --log-opts="$base..$head" .
+python3 scripts/check-docs-drift.py --range "$base..$head" --gate
 swift test --package-path kit/MachineSpiritKit
 swift test --package-path tools/ms
 if ! git diff --quiet "$base" "$head" -- forks/LeaderKey; then

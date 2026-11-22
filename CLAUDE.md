@@ -1,9 +1,11 @@
 # machine-spirit — agent handoff
 
+> **Multi-agent contract:** This repository is co-authored by its human owner alongside **Claude**, **Codex**, and **Gemini**. See [`AGENTS.md`](AGENTS.md) for the shared multi-agent contract, the **Docs & Visuals Drift Gate** (`scripts/check-docs-drift.py`), and the `Checkpoint: ready` automated push ritual.
+
 This repo is the owner's **entire macOS environment as code**: launcher,
 keybinds, window/menu-bar behavior, terminal, and the hotkey-window splash.
-If you are an agent session working on any part of the Mac UI, this file is
-your contract. Read it before touching anything.
+If you are an agent session working on any part of the Mac UI, this file and
+[`AGENTS.md`](AGENTS.md) are your contract. Read them before touching anything.
 
 > **Forward-looking design cache:** [`HANDOFF-NOTES.md`](HANDOFF-NOTES.md) holds
 > the roadmap/design intent for the future machine-spirit *app* (node-graph tool)
