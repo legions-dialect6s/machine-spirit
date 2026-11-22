@@ -85,6 +85,10 @@ struct GeneralPane: View {
         }
       }
 
+      Settings.Section(title: "Release text focus") {
+        KeyboardShortcuts.Recorder(for: .msReleaseTextFocus)
+      }
+
       Settings.Section(title: "Clipboard history") {
         KeyboardShortcuts.Recorder(for: .msClipboardHistory)
       }
