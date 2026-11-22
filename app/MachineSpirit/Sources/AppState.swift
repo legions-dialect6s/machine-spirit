@@ -21,6 +21,7 @@ final class AppState {
   let stats: StatsStore
 
   init(stats: StatsStore = StatsStore()) { self.stats = stats }
+  var appsSelected = false
   var boardOpen = false
   var boardHasAppeared = false
   var boardMinimumContentHeight: CGFloat = 288
@@ -171,7 +172,7 @@ final class AppState {
   func installKeyMonitor() {
     guard keyMonitor == nil else { return }
     keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-      guard let self, self.boardOpen,
+      guard let self, self.boardOpen, !self.appsSelected,
         (event.window ?? NSApp.keyWindow) === self.boardWindow else { return event }
       let modifiers = event.modifierFlags.intersection([.command, .option, .control, .shift])
 
@@ -304,7 +305,7 @@ final class AppState {
     guard scrollMonitor == nil else { return }
     scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) {
       [weak self] event in
-      guard let self, self.boardOpen, let window = event.window, window === self.boardWindow,
+      guard let self, self.boardOpen, !self.appsSelected, let window = event.window, window === self.boardWindow,
         let contentHeight = window.contentView?.bounds.height
       else { return event }
       // Window coords are bottom-left; SwiftUI global frames are top-left.

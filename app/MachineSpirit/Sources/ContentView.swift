@@ -23,15 +23,26 @@ struct ContentView: View {
   }
 
   var body: some View {
-    VStack(spacing: 0) {
+    @Bindable var state = state
+    return VStack(spacing: 0) {
       GeometryReader { geometry in header(compact: geometry.size.width < 640) }
         .frame(height: 44)
       Divider().overlay(Theme.phosphorDim.opacity(0.4))
-      main
-      Divider().overlay(Theme.phosphorDim.opacity(0.4))
-      GraphicsSettings()
-      statsSection
-      footer
+      Picker("Board view", selection: $state.appsSelected) {
+        Text("Board").tag(false)
+        Text("Apps").tag(true)
+      }
+      .pickerStyle(.segmented).labelsHidden()
+      .frame(width: 170).padding(.vertical, 6)
+      if state.appsSelected {
+        AppsPane()
+      } else {
+        main
+        Divider().overlay(Theme.phosphorDim.opacity(0.4))
+        GraphicsSettings()
+        statsSection
+        footer
+      }
     }
     .background(Theme.ground)
     .frame(minWidth: 420)

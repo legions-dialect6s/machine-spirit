@@ -980,6 +980,18 @@
     {
       "actions" : [
         {
+          "actions" : [
+            {
+              "key" : "r",
+              "label" : "Tor Browser",
+              "type" : "command",
+              "value" : "~/bin/run-quiet.sh ~/bin/tor-session.py"
+            }
+          ],
+          "key" : "o",
+          "type" : "group"
+        },
+        {
           "key" : "t",
           "type" : "command",
           "value" : "~/bin/run-quiet.sh ~/bin/tmux-launch.sh"

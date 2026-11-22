@@ -84,6 +84,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   func application(_ application: NSApplication, open urls: [URL]) {
     for url in urls where url.scheme?.lowercased() == "machinespirit" {
       switch url.host?.lowercased() {
+      case "apps":
+        state.appsSelected = true
+        openBoard()
       case "board":
         let transient = URLComponents(url: url, resolvingAgainstBaseURL: false)?
           .queryItems?.first(where: { $0.name == "transient" })?.value == "1"

@@ -30,6 +30,7 @@
 		E0E3D8FE2EF7DA38AFF1B4C0 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 32D65BB0E4B6A0D0BB110E46 /* Assets.xcassets */; };
 		EE9DC96225DDD378E7F5B9E5 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03C338F8057743822B0E18EA /* AppDelegate.swift */; };
 		EFBAA750BEEE2D52CB8BC739 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D03F1A0DE367DED4735C5E1 /* AppState.swift */; };
+		F004E81DC8E491122324C6AF /* AppsPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = C38F78A355F7CE6897256783 /* AppsPane.swift */; };
 		F38442DA220CA4A379FAFC8B /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE260BAD489CB9D25CE5394B /* Theme.swift */; };
 		F95997E4C61B4B39EEF4ABE3 /* OverlayFX.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D41AF5985D266C2D8932BAA /* OverlayFX.swift */; };
 		FF7001114F0F6CE852FA0578 /* SheolService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C61D57EF5E1027553CA1962 /* SheolService.swift */; };
@@ -55,6 +56,7 @@
 		AE260BAD489CB9D25CE5394B /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		B1F0834B774E421E8A0CFB21 /* LedgerPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LedgerPane.swift; sourceTree = "<group>"; };
 		BF2D5534392BEBDC5965DDCB /* SkullMark.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkullMark.swift; sourceTree = "<group>"; };
+		C38F78A355F7CE6897256783 /* AppsPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppsPane.swift; sourceTree = "<group>"; };
 		C8FE015A691BDC6F292D49AE /* ConfigWatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigWatcher.swift; sourceTree = "<group>"; };
 		D78116A2645238BBF41D3FF7 /* MachineSpiritApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MachineSpiritApp.swift; sourceTree = "<group>"; };
 		D84D34F9CD342ECBD163572B /* OverlayScene.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverlayScene.swift; sourceTree = "<group>"; };
@@ -106,6 +108,7 @@
 			isa = PBXGroup;
 			children = (
 				03C338F8057743822B0E18EA /* AppDelegate.swift */,
+				C38F78A355F7CE6897256783 /* AppsPane.swift */,
 				5D03F1A0DE367DED4735C5E1 /* AppState.swift */,
 				86C95A04F08E4A400E7DE67E /* CapsFollower.swift */,
 				C8FE015A691BDC6F292D49AE /* ConfigWatcher.swift */,
@@ -254,6 +257,7 @@
 			files = (
 				EE9DC96225DDD378E7F5B9E5 /* AppDelegate.swift in Sources */,
 				EFBAA750BEEE2D52CB8BC739 /* AppState.swift in Sources */,
+				F004E81DC8E491122324C6AF /* AppsPane.swift in Sources */,
 				795D82A7A4CBF3845D956911 /* CapsFollower.swift in Sources */,
 				DE1E4416918E309ED3644824 /* ConfigWatcher.swift in Sources */,
 				BAFAFC9DCF47C32765544359 /* ContentView.swift in Sources */,
