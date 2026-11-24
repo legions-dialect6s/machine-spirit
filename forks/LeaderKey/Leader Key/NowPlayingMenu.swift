@@ -109,13 +109,44 @@ enum NowPlayingBrowserFocus {
     let url: String
   }
 
+  struct CandidateTab: Equatable {
+    let windowIndex: Int
+    let tabIndex: Int
+    let rawTitle: String
+    let hasDirectAudioSignal: Bool
+  }
+
   private enum ScriptFlavor {
     case safari
     case chromium
   }
 
   private static let deniedLock = NSLock()
-  private static var automationDenied = Set<String>()
+  private static var automationDeniedUntil: [String: TimeInterval] = [:]
+  static var automationDenialCooldown: TimeInterval = 30
+
+  static func isAutomationDenied(_ bundleIdentifier: String, now: TimeInterval = ProcessInfo.processInfo.systemUptime) -> Bool {
+    deniedLock.lock()
+    defer { deniedLock.unlock() }
+    guard let until = automationDeniedUntil[bundleIdentifier] else { return false }
+    if now >= until {
+      automationDeniedUntil.removeValue(forKey: bundleIdentifier)
+      return false
+    }
+    return true
+  }
+
+  static func recordAutomationDenial(_ bundleIdentifier: String, now: TimeInterval = ProcessInfo.processInfo.systemUptime) {
+    deniedLock.lock()
+    automationDeniedUntil[bundleIdentifier] = now + automationDenialCooldown
+    deniedLock.unlock()
+  }
+
+  static func resetAutomationDenials() {
+    deniedLock.lock()
+    automationDeniedUntil.removeAll()
+    deniedLock.unlock()
+  }
 
   /// Ask Launch Services on click so a newly installed browser needs no app update.
   /// Being a web handler only qualifies the app for a bounded tab-strip inspection.
@@ -169,35 +200,47 @@ enum NowPlayingBrowserFocus {
     return title.trimmingCharacters(in: .whitespacesAndNewlines)
   }
 
+  /// Reject ambiguous matches when duplicate tab titles cannot be independently paired by window tab strip.
   static func matchScriptTab(
-    axTitle: String, windowIndex: Int, tabIndex: Int, scriptTabs: [ScriptTab]
+    axTitle: String, windowIndex: Int, tabIndex: Int, scriptTabs: [ScriptTab],
+    axWindowTabTitles: [String]? = nil
   ) -> ScriptTab? {
     let cleaned = cleanTabTitle(axTitle)
-    func titleMatches(_ candidate: String) -> Bool {
-      candidate == axTitle || candidate == cleaned
-        || axTitle.hasPrefix(candidate + " - ")
-        || cleaned.hasPrefix(candidate + " - ")
+
+    func disambiguate(_ matches: [ScriptTab]) -> ScriptTab? {
+      if matches.count == 1 { return matches[0] }
+      guard !matches.isEmpty, let axWindowTabTitles, !axWindowTabTitles.isEmpty else { return nil }
+      let normalizedAX = axWindowTabTitles.map(cleanTabTitle)
+      let byWindow = Dictionary(grouping: scriptTabs, by: \.windowIndex)
+      let matchingWindows = byWindow.compactMap { (winIdx, tabs) -> Int? in
+        let ordered = tabs.sorted { $0.tabIndex < $1.tabIndex }.map { cleanTabTitle($0.title) }
+        return ordered == normalizedAX ? winIdx : nil
+      }
+      guard matchingWindows.count == 1, let verifiedWindow = matchingWindows.first else {
+        return nil
+      }
+      let exactPos = matches.filter {
+        $0.windowIndex == verifiedWindow && $0.tabIndex == tabIndex + 1
+      }
+      return exactPos.count == 1 ? exactPos[0] : nil
     }
-    if let direct = scriptTabs.first(where: {
-      $0.windowIndex == windowIndex + 1 && $0.tabIndex == tabIndex + 1 && titleMatches($0.title)
-    }) {
-      return direct
-    }
+
     let exact = scriptTabs.filter { $0.title == axTitle || $0.title == cleaned }
-    if let sameTab = exact.first(where: { $0.tabIndex == tabIndex + 1 }) { return sameTab }
-    if let first = exact.first { return first }
+    if !exact.isEmpty {
+      return disambiguate(exact)
+    }
+
     let prefixed = scriptTabs.filter {
       !$0.title.isEmpty && (axTitle.hasPrefix($0.title + " - ") || cleaned.hasPrefix($0.title + " - "))
     }
-    return prefixed.max(by: { $0.title.count < $1.title.count })
+    guard let longestLength = prefixed.map(\.title.count).max() else { return nil }
+    let longest = prefixed.filter { $0.title.count == longestLength }
+    return disambiguate(longest)
   }
 
   static func scriptTabs(for bundleIdentifier: String) -> [ScriptTab]? {
     guard let flavor = scriptFlavor(for: bundleIdentifier) else { return nil }
-    deniedLock.lock()
-    let denied = automationDenied.contains(bundleIdentifier)
-    deniedLock.unlock()
-    if denied { return nil }
+    if isAutomationDenied(bundleIdentifier) { return nil }
 
     let titleProp = flavor == .safari ? "name" : "title"
     let escapedBundle = bundleIdentifier.replacingOccurrences(of: "\"", with: "\\\"")
@@ -211,10 +254,10 @@ enum NowPlayingBrowserFocus {
     var error: NSDictionary?
     let result = script.executeAndReturnError(&error)
     if let error {
-      if let number = error[NSAppleScript.errorNumber] as? Int, number == -1743 {
-        deniedLock.lock()
-        automationDenied.insert(bundleIdentifier)
-        deniedLock.unlock()
+      let number = (error[NSAppleScript.errorNumber] as? Int) ?? 0
+      NSLog("Now Playing AppleScript tab lookup failed (%d) for %@", number, bundleIdentifier)
+      if number == -1743 {
+        recordAutomationDenial(bundleIdentifier)
       }
       return nil
     }
@@ -240,22 +283,26 @@ enum NowPlayingBrowserFocus {
     return tabs
   }
 
-  private struct RawAXTab {
+  struct RawAXTab {
     let tab: AXUIElement
     let window: AXUIElement
     let windowIndex: Int
     let tabIndex: Int
     let rawTitle: String
-    let hasMuteControl: Bool
-    let hasTitleAudioHint: Bool
+    let hasDirectAudioSignal: Bool
+  }
+
+  struct AXScanResult {
+    let audible: [RawAXTab]
+    let windowTabTitles: [Int: [String]]
   }
 
   // Safari removes the speaker from narrow tabs. Its toolbar sound menu still
   // lists each audible page. Read this once before our own menu begins tracking.
-  static func safariSoundTitles() -> Set<String> {
+  static func safariSoundTitleCounts() -> [String: Int] {
     guard AXIsProcessTrusted(),
       let app = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.Safari").first
-    else { return [] }
+    else { return [:] }
     let root = AXUIElementCreateApplication(app.processIdentifier)
     AXUIElementSetMessagingTimeout(root, 0.1)
     let deadline = ProcessInfo.processInfo.systemUptime + 0.25
@@ -278,57 +325,167 @@ enum NowPlayingBrowserFocus {
       let children = (try? attribute(window, kAXChildrenAttribute) as [AXUIElement]?) ?? []
       for toolbar in children where (try? attribute(toolbar, kAXRoleAttribute) as String?) == kAXToolbarRole {
         guard let button = soundButton(toolbar) else { continue }
-        return titlesInSoundMenu(button, root: root, pid: app.processIdentifier)
-      }
-    }
-    return []
-  }
-
-  private static func titlesInSoundMenu(_ button: AXUIElement, root: AXUIElement, pid: pid_t) -> Set<String> {
-    func popup() -> CGRect? {
-      let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], 0)
-        as? [[String: Any]] ?? []
-      for window in windows where window[kCGWindowOwnerPID as String] as? Int32 == pid &&
-        window[kCGWindowLayer as String] as? Int == Int(CGWindowLevelForKey(.popUpMenuWindow)) {
-        if let rect = window[kCGWindowBounds as String] as? [String: Any] {
-          return CGRect(dictionaryRepresentation: rect as CFDictionary)
+        if let counts = titlesInSoundMenu(button, root: root, pid: app.processIdentifier) {
+          return counts
         }
       }
-      return nil
     }
-    guard popup() == nil, AXUIElementPerformAction(button, kAXShowMenuAction as CFString) == .success
-    else { return [] }
-    for _ in 0..<8 {
-      if let rect = popup() {
+    return [:]
+  }
+
+  static func safariSoundTitles() -> Set<String> {
+    Set(safariSoundTitleCounts().keys)
+  }
+
+  private static func elementFrame(_ element: AXUIElement) -> CGRect? {
+    var posRef: CFTypeRef?
+    var sizeRef: CFTypeRef?
+    guard AXUIElementCopyAttributeValue(element, kAXPositionAttribute as CFString, &posRef) == .success,
+      AXUIElementCopyAttributeValue(element, kAXSizeAttribute as CFString, &sizeRef) == .success,
+      let posRef, let sizeRef
+    else { return nil }
+    var point = CGPoint.zero
+    var size = CGSize.zero
+    guard AXValueGetValue(posRef as! AXValue, .cgPoint, &point),
+      AXValueGetValue(sizeRef as! AXValue, .cgSize, &size)
+    else { return nil }
+    return CGRect(origin: point, size: size)
+  }
+
+  private static func titlesInSoundMenu(_ button: AXUIElement, root: AXUIElement, pid: pid_t) -> [String: Int]? {
+    struct PopupWindow {
+      let number: Int
+      let rect: CGRect
+    }
+    func popups() -> [PopupWindow] {
+      let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], 0)
+        as? [[String: Any]] ?? []
+      let targetLayer = Int(CGWindowLevelForKey(.popUpMenuWindow))
+      return windows.compactMap { window in
+        guard window[kCGWindowOwnerPID as String] as? Int32 == pid,
+          window[kCGWindowLayer as String] as? Int == targetLayer,
+          let number = window[kCGWindowNumber as String] as? Int,
+          let rectDict = window[kCGWindowBounds as String] as? [String: Any],
+          let rect = CGRect(dictionaryRepresentation: rectDict as CFDictionary)
+        else { return nil }
+        return PopupWindow(number: number, rect: rect)
+      }
+    }
+    func nearButton(_ rect: CGRect, buttonFrame: CGRect?) -> Bool {
+      guard let buttonFrame else { return true }
+      let expanded = buttonFrame.insetBy(dx: -160, dy: -80)
+      return expanded.intersects(rect) || abs(rect.minY - buttonFrame.maxY) <= 80
+    }
+    func cancelMenu(_ menu: AXUIElement, windowNumber: Int) {
+      if AXUIElementPerformAction(menu, kAXCancelAction as CFString) != .success {
+        Thread.sleep(forTimeInterval: 0.01)
+        _ = AXUIElementPerformAction(menu, kAXCancelAction as CFString)
+      }
+      if popups().contains(where: { $0.number == windowNumber }) {
+        _ = AXUIElementPerformAction(menu, kAXCancelAction as CFString)
+      }
+    }
+
+    let existing = Set(popups().map(\.number))
+    guard existing.isEmpty else { return nil }
+    let buttonFrame = elementFrame(button)
+    guard AXUIElementPerformAction(button, kAXShowMenuAction as CFString) == .success else { return nil }
+
+    var openedMenu: (menu: AXUIElement, windowNumber: Int)?
+    for _ in 0..<10 {
+      let fresh = popups().filter { !existing.contains($0.number) && nearButton($0.rect, buttonFrame: buttonFrame) }
+      for candidate in fresh {
         var hit: AXUIElement?
-        AXUIElementCopyElementAtPosition(root, Float(rect.minX + 12), Float(rect.minY + 12), &hit)
+        AXUIElementCopyElementAtPosition(root, Float(candidate.rect.minX + 12), Float(candidate.rect.minY + 12), &hit)
+        guard let hit else { continue }
+        let role: String? = try? attribute(hit, kAXRoleAttribute)
+        let menu: AXUIElement? = role == kAXMenuRole ? hit : try? attribute(hit, kAXParentAttribute)
+        if let menu, (try? attribute(menu, kAXRoleAttribute) as String?) == kAXMenuRole {
+          openedMenu = (menu, candidate.number)
+          break
+        }
+      }
+      if openedMenu != nil { break }
+      Thread.sleep(forTimeInterval: 0.01)
+    }
+
+    guard let openedMenu else {
+      // Best-effort cleanup if the popup materialized right after the polling window.
+      let late = popups().filter { !existing.contains($0.number) && nearButton($0.rect, buttonFrame: buttonFrame) }
+      for candidate in late {
+        var hit: AXUIElement?
+        AXUIElementCopyElementAtPosition(root, Float(candidate.rect.minX + 12), Float(candidate.rect.minY + 12), &hit)
         if let hit {
           let role: String? = try? attribute(hit, kAXRoleAttribute)
           let menu: AXUIElement? = role == kAXMenuRole ? hit : try? attribute(hit, kAXParentAttribute)
           if let menu, (try? attribute(menu, kAXRoleAttribute) as String?) == kAXMenuRole {
-            defer { AXUIElementPerformAction(menu, kAXCancelAction as CFString) }
-            let entries = (try? attribute(menu, kAXChildrenAttribute) as [AXUIElement]?) ?? []
-            let names = entries.map { (try? attribute($0, kAXTitleAttribute) as String?) ?? "" }
-            return soundTitles(from: names)
+            cancelMenu(menu, windowNumber: candidate.number)
           }
         }
       }
-      Thread.sleep(forTimeInterval: 0.01)
+      return nil
     }
-    return []
+    defer { cancelMenu(openedMenu.menu, windowNumber: openedMenu.windowNumber) }
+    guard let entries = try? attribute(openedMenu.menu, kAXChildrenAttribute) as [AXUIElement]?,
+      !entries.isEmpty
+    else { return nil }
+    let names = entries.map { (try? attribute($0, kAXTitleAttribute) as String?) ?? "" }
+    let counts = soundTitleCounts(from: names)
+    return counts.isEmpty ? nil : counts
+  }
+
+  static func soundTitleCounts(from entries: [String]) -> [String: Int] {
+    guard let header = entries.firstIndex(where: { $0 == "Tab With Sound" || $0 == "Tabs With Sound" })
+    else { return [:] }
+    var counts: [String: Int] = [:]
+    for title in entries.dropFirst(header + 1).prefix(while: { !$0.isEmpty }) {
+      counts[title, default: 0] += 1
+    }
+    return counts
   }
 
   static func soundTitles(from entries: [String]) -> Set<String> {
-    guard let header = entries.firstIndex(where: { $0 == "Tab With Sound" || $0 == "Tabs With Sound" })
-    else { return [] }
-    return Set(entries.dropFirst(header + 1).prefix(while: { !$0.isEmpty }))
+    Set(soundTitleCounts(from: entries).keys)
   }
 
-  private static func scanAXTabs(in root: AXUIElement, soundTitles: Set<String> = []) -> [RawAXTab] {
+  /// Combine explicit per-tab AX audio signals with Safari's toolbar sound counts.
+  /// Normalizes AX audio suffixes before subtracting direct matches, and only
+  /// promotes fallback candidates when the remaining count matches the pool unambiguously.
+  static func selectAudibleCandidates(
+    allTabs: [CandidateTab],
+    soundTitleCounts: [String: Int]
+  ) -> [CandidateTab] {
+    let direct = allTabs.filter(\.hasDirectAudioSignal)
+    var selected = direct
+    guard !soundTitleCounts.isEmpty else { return selected }
+
+    var normalizedPopupCounts: [String: Int] = [:]
+    for (title, count) in soundTitleCounts {
+      normalizedPopupCounts[cleanTabTitle(title), default: 0] += count
+    }
+    var directCounts: [String: Int] = [:]
+    for tab in direct {
+      directCounts[cleanTabTitle(tab.rawTitle), default: 0] += 1
+    }
+    let nonDirect = allTabs.filter { !$0.hasDirectAudioSignal }
+    for (title, popupCount) in normalizedPopupCounts {
+      let remainingNeeded = popupCount - (directCounts[title] ?? 0)
+      guard remainingNeeded > 0 else { continue }
+      let pool = nonDirect.filter { cleanTabTitle($0.rawTitle) == title }
+      if pool.count == remainingNeeded {
+        selected.append(contentsOf: pool)
+      }
+    }
+    return selected.sorted {
+      $0.windowIndex != $1.windowIndex ? $0.windowIndex < $1.windowIndex : $0.tabIndex < $1.tabIndex
+    }
+  }
+
+  static func scanAXTabs(in root: AXUIElement, soundTitleCounts: [String: Int] = [:]) -> AXScanResult {
     let deadline = ProcessInfo.processInfo.systemUptime + 0.5
     var remaining = 4096
-    var found: [RawAXTab] = []
-    var candidates: [RawAXTab] = []
+    var allRaw: [RawAXTab] = []
+    var scanComplete = true
     do {
       func prepare(_ element: AXUIElement) throws {
         let secondsLeft = deadline - ProcessInfo.processInfo.systemUptime
@@ -389,14 +546,10 @@ enum NowPlayingBrowserFocus {
           let muteControl = try hasAudioControl(element)
           let titleAudioHint =
             title.contains(" - Audio playing") || desc.contains(" - Audio playing")
-          let candidate = RawAXTab(
-            tab: element, window: window, windowIndex: windowIndex, tabIndex: tabIndex,
-            rawTitle: rawTitle, hasMuteControl: muteControl, hasTitleAudioHint: titleAudioHint)
-          if muteControl || titleAudioHint {
-            found.append(candidate)
-          } else if soundTitles.contains(rawTitle) {
-            candidates.append(candidate)
-          }
+          allRaw.append(
+            RawAXTab(
+              tab: element, window: window, windowIndex: windowIndex, tabIndex: tabIndex,
+              rawTitle: rawTitle, hasDirectAudioSignal: muteControl || titleAudioHint))
         default:
           break
         }
@@ -411,29 +564,47 @@ enum NowPlayingBrowserFocus {
           window, window: window, windowIndex: windowIndex, inTabStrip: false,
           tabCounter: &tabCounter)
         if tabCounter == 0, let title: String = try attribute(window, kAXTitleAttribute),
-          soundTitles.contains(title) {
-          candidates.append(RawAXTab(tab: window, window: window, windowIndex: windowIndex, tabIndex: 0,
-            rawTitle: title, hasMuteControl: false, hasTitleAudioHint: false))
+          !title.isEmpty
+        {
+          allRaw.append(
+            RawAXTab(
+              tab: window, window: window, windowIndex: windowIndex, tabIndex: 0,
+              rawTitle: title, hasDirectAudioSignal: false))
         }
       }
-      found += candidates.filter { candidate in candidates.lazy.filter { $0.rawTitle == candidate.rawTitle }.count == 1 }
     } catch {
-      // Return whatever audible tabs were discovered before timeout/incomplete error.
+      // On partial traversal, keep only direct per-tab AX audio signals so a
+      // truncated candidate pool cannot falsely appear unambiguous.
+      scanComplete = false
     }
-    return found
+
+    let candidates = allRaw.map {
+      CandidateTab(
+        windowIndex: $0.windowIndex, tabIndex: $0.tabIndex, rawTitle: $0.rawTitle,
+        hasDirectAudioSignal: $0.hasDirectAudioSignal)
+    }
+    let effectiveSoundCounts = scanComplete ? soundTitleCounts : [:]
+    let selectedKeys = Set(
+      selectAudibleCandidates(allTabs: candidates, soundTitleCounts: effectiveSoundCounts).map {
+        "\($0.windowIndex):\($0.tabIndex)"
+      })
+    let audible = allRaw.filter { selectedKeys.contains("\($0.windowIndex):\($0.tabIndex)") }
+    let windowTabTitles: [Int: [String]] =
+      scanComplete
+      ? Dictionary(grouping: allRaw, by: \.windowIndex).mapValues { tabs in
+        tabs.sorted { $0.tabIndex < $1.tabIndex }.map(\.rawTitle)
+      } : [:]
+    return AXScanResult(audible: audible, windowTabTitles: windowTabTitles)
   }
 
-  static func audibleTabs(in app: NSRunningApplication, includeURLs: Bool = true, soundTitles: Set<String> = []) -> [AudibleTab] {
-    guard !app.isTerminated, AXIsProcessTrusted() else { return [] }
+  static func buildAudibleTabs(
+    from scan: AXScanResult, app: NSRunningApplication, scriptTabs: [ScriptTab]
+  ) -> [AudibleTab] {
     let pid = app.processIdentifier
-    let rawTabs = scanAXTabs(in: AXUIElementCreateApplication(pid), soundTitles: soundTitles)
-    guard !rawTabs.isEmpty else { return [] }
-    let scriptList: [ScriptTab] =
-      includeURLs ? (app.bundleIdentifier.flatMap { scriptTabs(for: $0) } ?? []) : []
-    return rawTabs.map { raw in
+    return scan.audible.map { raw in
       let matched = matchScriptTab(
         axTitle: raw.rawTitle, windowIndex: raw.windowIndex, tabIndex: raw.tabIndex,
-        scriptTabs: scriptList)
+        scriptTabs: scriptTabs, axWindowTabTitles: scan.windowTabTitles[raw.windowIndex])
       let cleanTitle =
         (matched?.title.isEmpty == false ? matched!.title : cleanTabTitle(raw.rawTitle))
       let displayTitle = cleanTitle.isEmpty ? (app.localizedName ?? "Browser tab") : cleanTitle
@@ -444,6 +615,18 @@ enum NowPlayingBrowserFocus {
         windowIndex: raw.windowIndex, tabIndex: raw.tabIndex,
         scriptWindowIndex: matched?.windowIndex, scriptTabIndex: matched?.tabIndex)
     }
+  }
+
+  static func audibleTabs(
+    in app: NSRunningApplication, includeURLs: Bool = true, soundTitleCounts: [String: Int] = [:]
+  ) -> [AudibleTab] {
+    guard !app.isTerminated, AXIsProcessTrusted() else { return [] }
+    let scan = scanAXTabs(
+      in: AXUIElementCreateApplication(app.processIdentifier), soundTitleCounts: soundTitleCounts)
+    guard !scan.audible.isEmpty else { return [] }
+    let scriptList: [ScriptTab] =
+      includeURLs ? (app.bundleIdentifier.flatMap { scriptTabs(for: $0) } ?? []) : []
+    return buildAudibleTabs(from: scan, app: app, scriptTabs: scriptList)
   }
 
   /// Focus the exact audible browser tab and raise its window in a single click.
@@ -457,7 +640,9 @@ enum NowPlayingBrowserFocus {
     AXUIElementSetMessagingTimeout(targetTab, 0.2)
     AXUIElementSetMessagingTimeout(targetWindow, 0.2)
     if (try? attribute(targetTab, kAXRoleAttribute) as String?) == nil {
-      let fresh = scanAXTabs(in: AXUIElementCreateApplication(tab.pid), soundTitles: [tab.rawTitle])
+      let fresh = scanAXTabs(
+        in: AXUIElementCreateApplication(tab.pid), soundTitleCounts: [tab.rawTitle: 1]
+      ).audible
       if let replacement = fresh.first(where: { $0.rawTitle == tab.rawTitle })
         ?? fresh.first(where: { cleanTabTitle($0.rawTitle) == tab.title })
       {
@@ -520,10 +705,7 @@ enum NowPlayingBrowserFocus {
     bundleIdentifier: String, windowIndex: Int?, tabIndex: Int?, title: String, url: String?
   ) -> Bool {
     guard let flavor = scriptFlavor(for: bundleIdentifier) else { return false }
-    deniedLock.lock()
-    let denied = automationDenied.contains(bundleIdentifier)
-    deniedLock.unlock()
-    if denied { return false }
+    if isAutomationDenied(bundleIdentifier) { return false }
 
     func escape(_ s: String) -> String {
       s.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
@@ -552,16 +734,17 @@ enum NowPlayingBrowserFocus {
             end if
           end if
           if targetTab is missing value then
+            set matchCount to 0
             repeat with w in windows
               repeat with t in tabs of w
-                if ("\(escapedURL)" is not "" and URL of t is "\(escapedURL)") or ("\(escapedTitle)" is not "" and name of t is "\(escapedTitle)") then
+                if ("\(escapedURL)" is not "" and URL of t is "\(escapedURL)") or ("\(escapedURL)" is "" and "\(escapedTitle)" is not "" and name of t is "\(escapedTitle)") then
+                  set matchCount to matchCount + 1
                   set targetWin to w
                   set targetTab to t
-                  exit repeat
                 end if
               end repeat
-              if targetTab is not missing value then exit repeat
             end repeat
+            if matchCount is not 1 then set targetTab to missing value
           end if
           if targetTab is missing value then return false
           set current tab of targetWin to targetTab
@@ -586,18 +769,19 @@ enum NowPlayingBrowserFocus {
             end if
           end if
           if targetIdx is 0 then
+            set matchCount to 0
             repeat with w in windows
               set idx to 0
               repeat with t in tabs of w
                 set idx to idx + 1
-                if ("\(escapedURL)" is not "" and URL of t is "\(escapedURL)") or ("\(escapedTitle)" is not "" and title of t is "\(escapedTitle)") then
+                if ("\(escapedURL)" is not "" and URL of t is "\(escapedURL)") or ("\(escapedURL)" is "" and "\(escapedTitle)" is not "" and title of t is "\(escapedTitle)") then
+                  set matchCount to matchCount + 1
                   set targetWin to w
                   set targetIdx to idx
-                  exit repeat
                 end if
               end repeat
-              if targetIdx > 0 then exit repeat
             end repeat
+            if matchCount is not 1 then set targetIdx to 0
           end if
           if targetIdx is 0 then return false
           set active tab index of targetWin to targetIdx
@@ -611,10 +795,10 @@ enum NowPlayingBrowserFocus {
     var error: NSDictionary?
     let result = script.executeAndReturnError(&error)
     if let error {
-      if let number = error[NSAppleScript.errorNumber] as? Int, number == -1743 {
-        deniedLock.lock()
-        automationDenied.insert(bundleIdentifier)
-        deniedLock.unlock()
+      let number = (error[NSAppleScript.errorNumber] as? Int) ?? 0
+      NSLog("Now Playing AppleScript focus failed (%d) for %@", number, bundleIdentifier)
+      if number == -1743 {
+        recordAutomationDenial(bundleIdentifier)
       }
       return false
     }
@@ -624,7 +808,7 @@ enum NowPlayingBrowserFocus {
   /// Safari and Chromium expose a native "Mute tab" button under audible tabs.
   /// Inspect only browser chrome and leave the current selection on ambiguity.
   static func focusAudibleTab(in root: AXUIElement, shouldFocus: () -> Bool) -> Bool {
-    let tabs = scanAXTabs(in: root)
+    let tabs = scanAXTabs(in: root).audible
     guard tabs.count == 1, let match = tabs.first else { return false }
     guard shouldFocus() else { return false }
     if (try? attribute(match.window, kAXMinimizedAttribute) as NSNumber?)?.boolValue == true {
@@ -673,6 +857,10 @@ final class NowPlayingMenuSection: NSObject {
     var tooltip: String? = nil
     var isFavicon: Bool = false
 
+    var host: String? {
+      url.flatMap { NowPlayingFaviconCache.hostKey(for: $0) }
+    }
+
     var key: String {
       if let tab {
         return "\(pid):tab:\(tab.windowIndex):\(tab.tabIndex):\(name):\(!levels.isEmpty)"
@@ -695,8 +883,8 @@ final class NowPlayingMenuSection: NSObject {
   private var lastSnapshot: NowPlayingAudioSession.Snapshot?
   private var browserTabs: [pid_t: [NowPlayingBrowserFocus.AudibleTab]] = [:]
   private var browserScanInFlight = Set<pid_t>()
-  private var safariTitles = Set<String>()
-  private var knownTabURLs: [String: String] = [:]
+  private(set) var safariSoundCounts: [String: Int] = [:]
+  private var safariCaptureArmed = false
   private(set) var rows: [AppRow] = []
   private(set) var isOpen = false
   private(set) var sampleCount = 0
@@ -719,8 +907,9 @@ final class NowPlayingMenuSection: NSObject {
     items = [item]
   }
 
-  func prepareForMenu() {
-    safariTitles = NowPlayingBrowserFocus.safariSoundTitles()
+  func prepareForMenu(soundCounts: [String: Int]? = nil) {
+    safariSoundCounts = soundCounts ?? NowPlayingBrowserFocus.safariSoundTitleCounts()
+    safariCaptureArmed = true
   }
 
   func open() {
@@ -730,6 +919,10 @@ final class NowPlayingMenuSection: NSObject {
       items.first?.title = "Requires macOS 14.4"
       return
     }
+    if !safariCaptureArmed {
+      safariSoundCounts.removeAll()
+    }
+    safariCaptureArmed = false
     isOpen = true
     generation += 1
     browserTabs.removeAll()
@@ -764,38 +957,29 @@ final class NowPlayingMenuSection: NSObject {
     let pid = app.processIdentifier
     guard !browserScanInFlight.contains(pid), AXIsProcessTrusted() else { return }
     browserScanInFlight.insert(pid)
-    let cachedURLs = knownTabURLs
-    let titles = app.bundleIdentifier == "com.apple.Safari" ? safariTitles : []
+    let soundCounts = app.bundleIdentifier == "com.apple.Safari" ? safariSoundCounts : [:]
     browserFocusQueue.async { [weak self] in
-      // Fast stage: AX scan (~20ms) gives tab titles immediately so the row never lingers as "Safari".
-      let fastTabs = NowPlayingBrowserFocus.audibleTabs(in: app, includeURLs: false, soundTitles: titles)
-      let fastEnriched = fastTabs.map { tab -> NowPlayingBrowserFocus.AudibleTab in
-        guard tab.url == nil, let hint = cachedURLs["\(pid):\(tab.rawTitle)"] else { return tab }
-        return NowPlayingBrowserFocus.AudibleTab(
-          app: tab.app, pid: tab.pid, title: tab.title, rawTitle: tab.rawTitle, url: hint,
-          tabElement: tab.tabElement, windowElement: tab.windowElement,
-          windowIndex: tab.windowIndex, tabIndex: tab.tabIndex,
-          scriptWindowIndex: tab.scriptWindowIndex, scriptTabIndex: tab.scriptTabIndex)
-      }
+      // Single AX snapshot shared by fast and full stages so tab identities never drift.
+      let scan = NowPlayingBrowserFocus.scanAXTabs(
+        in: AXUIElementCreateApplication(pid), soundTitleCounts: soundCounts)
+      let fastTabs = NowPlayingBrowserFocus.buildAudibleTabs(from: scan, app: app, scriptTabs: [])
       RunLoop.main.perform(inModes: [.common]) { [weak self] in
         guard let self, self.isOpen, self.generation == current else { return }
-        if !fastEnriched.isEmpty {
-          self.browserTabs[pid] = fastEnriched
+        if !fastTabs.isEmpty, self.browserTabs[pid] == nil {
+          self.browserTabs[pid] = fastTabs
           if let snapshot = self.lastSnapshot { self.rebuildRows(from: snapshot) }
         }
       }
       CFRunLoopWakeUp(CFRunLoopGetMain())
 
-      // Full stage: resolve exact tab URLs + AppleScript indices for website favicons and 1-click focus.
+      let scriptList: [NowPlayingBrowserFocus.ScriptTab] =
+        scan.audible.isEmpty ? [] : (app.bundleIdentifier.flatMap { NowPlayingBrowserFocus.scriptTabs(for: $0) } ?? [])
       let fullTabs =
-        fastTabs.isEmpty ? [] : NowPlayingBrowserFocus.audibleTabs(in: app, includeURLs: true, soundTitles: titles)
+        scan.audible.isEmpty ? [] : NowPlayingBrowserFocus.buildAudibleTabs(from: scan, app: app, scriptTabs: scriptList)
       RunLoop.main.perform(inModes: [.common]) { [weak self] in
         guard let self, self.isOpen, self.generation == current else { return }
         self.browserScanInFlight.remove(pid)
-        self.browserTabs[pid] = fullTabs.isEmpty ? fastEnriched : fullTabs
-        for tab in fullTabs {
-          if let url = tab.url { self.knownTabURLs["\(pid):\(tab.rawTitle)"] = url }
-        }
+        self.browserTabs[pid] = fullTabs
         if let snapshot = self.lastSnapshot { self.rebuildRows(from: snapshot) }
       }
       CFRunLoopWakeUp(CFRunLoopGetMain())
@@ -806,14 +990,19 @@ final class NowPlayingMenuSection: NSObject {
     lastSnapshot = snapshot
     let regular = NSWorkspace.shared.runningApplications.filter { $0.activationPolicy == .regular }
     var activeBrowserPIDs = Set<pid_t>()
+    var safariActive = false
     for process in snapshot.processes {
       if let app = nowPlayingOwner(
         NSRunningApplication(processIdentifier: process.pid), regular: regular),
         NowPlayingBrowserFocus.isWebHandler(app)
       {
         activeBrowserPIDs.insert(app.processIdentifier)
+        if app.bundleIdentifier == "com.apple.Safari" { safariActive = true }
         refreshBrowserTabs(for: app, generation: generation)
       }
+    }
+    if !safariActive {
+      safariSoundCounts.removeAll()
     }
     browserTabs = browserTabs.filter { activeBrowserPIDs.contains($0.key) }
     rebuildRows(from: snapshot)
@@ -886,17 +1075,25 @@ final class NowPlayingMenuSection: NSObject {
     }
   }
 
+  static func shouldApplyFavicon(
+    rowKey: String, expectedHost: String, currentRow: AppRow
+  ) -> Bool {
+    currentRow.key == rowKey && currentRow.host == expectedHost
+  }
+
   private func fetchMissingFavicons() {
     let current = generation
     for (index, row) in rows.enumerated() {
-      guard !row.isFavicon, let url = row.url else { continue }
+      guard !row.isFavicon, let url = row.url,
+        let expectedHost = NowPlayingFaviconCache.hostKey(for: url)
+      else { continue }
       let rowKey = row.key
       NowPlayingFaviconCache.shared.fetchIcon(for: url) { [weak self] image in
         guard let image else { return }
         RunLoop.main.perform(inModes: [.common]) { [weak self] in
           guard let self, self.isOpen, self.generation == current,
             index < self.rows.count, index < self.rowViews.count,
-            self.rows[index].key == rowKey
+            Self.shouldApplyFavicon(rowKey: rowKey, expectedHost: expectedHost, currentRow: self.rows[index])
           else { return }
           self.rows[index].icon = image
           self.rows[index].isFavicon = true
@@ -976,9 +1173,11 @@ final class NowPlayingMenuSection: NSObject {
       return
     }
     if AXIsProcessTrusted(), NowPlayingBrowserFocus.isWebHandler(app) {
-      let titles = app.bundleIdentifier == "com.apple.Safari" ? safariTitles : []
+      let soundCounts = app.bundleIdentifier == "com.apple.Safari" ? safariSoundCounts : [:]
       browserFocusQueue.async {
-        if let tab = NowPlayingBrowserFocus.audibleTabs(in: app, includeURLs: true, soundTitles: titles).first {
+        if let tab = NowPlayingBrowserFocus.audibleTabs(
+          in: app, includeURLs: true, soundTitleCounts: soundCounts
+        ).first {
           NowPlayingBrowserFocus.focus(tab: tab)
         } else {
           DispatchQueue.main.async {
@@ -1009,6 +1208,8 @@ final class NowPlayingMenuSection: NSObject {
     lastSnapshot = nil
     browserTabs.removeAll()
     browserScanInFlight.removeAll()
+    safariSoundCounts.removeAll()
+    safariCaptureArmed = false
     rows.removeAll()
     for view in rowViews { view.levels.removeAll() }
     if let old { old.close(completion) } else { completion?() }

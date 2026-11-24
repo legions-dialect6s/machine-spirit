@@ -500,7 +500,66 @@ extension KeepAwakeAndBarTests {
   func testSafariSoundMenuListsOnlyPages() {
     XCTAssertEqual(NowPlayingBrowserFocus.soundTitles(from: ["Mute This Tab", "", "Tab With Sound", "A", ""]), ["A"])
     XCTAssertEqual(NowPlayingBrowserFocus.soundTitles(from: ["Tabs With Sound", "A", "B", "", "Other"]), ["A", "B"])
+    XCTAssertEqual(NowPlayingBrowserFocus.soundTitleCounts(from: ["Tabs With Sound", "YouTube", "YouTube", ""]), ["YouTube": 2])
     XCTAssertTrue(NowPlayingBrowserFocus.soundTitles(from: ["Mute All Tabs"]).isEmpty)
+  }
+
+  func testDuplicateAndStaleSafariSoundCandidateSelection() {
+    let tabA = NowPlayingBrowserFocus.CandidateTab(windowIndex: 0, tabIndex: 0, rawTitle: "YouTube - Audio playing", hasDirectAudioSignal: true)
+    let silentTwin = NowPlayingBrowserFocus.CandidateTab(windowIndex: 1, tabIndex: 0, rawTitle: "YouTube", hasDirectAudioSignal: false)
+    // Direct AX match (even with AX audio suffix) satisfies count=1; silent twin must NOT be promoted.
+    XCTAssertEqual(
+      NowPlayingBrowserFocus.selectAudibleCandidates(allTabs: [tabA, silentTwin], soundTitleCounts: ["YouTube": 1]),
+      [tabA])
+
+    // Both narrow twins audible (count=2, pool=2) -> both promoted.
+    let narrowA = NowPlayingBrowserFocus.CandidateTab(windowIndex: 0, tabIndex: 0, rawTitle: "YouTube", hasDirectAudioSignal: false)
+    let narrowB = NowPlayingBrowserFocus.CandidateTab(windowIndex: 1, tabIndex: 2, rawTitle: "YouTube", hasDirectAudioSignal: false)
+    XCTAssertEqual(
+      NowPlayingBrowserFocus.selectAudibleCandidates(allTabs: [narrowA, narrowB], soundTitleCounts: ["YouTube": 2]),
+      [narrowA, narrowB])
+
+    // Ambiguous (count=1, pool=2) -> neither guessed.
+    XCTAssertEqual(
+      NowPlayingBrowserFocus.selectAudibleCandidates(allTabs: [narrowA, narrowB], soundTitleCounts: ["YouTube": 1]),
+      [])
+  }
+
+  @MainActor
+  func testSafariSoundCountsClearOnCloseAndDirectOpenWithoutPrepare() {
+    guard #available(macOS 14.4, *) else { return }
+    let section = NowPlayingMenuSection()
+    section.enumerate = { [] }
+    section.prepareForMenu(soundCounts: ["Dopethrone": 1])
+    XCTAssertEqual(section.safariSoundCounts, ["Dopethrone": 1])
+    section.open()
+    XCTAssertEqual(section.safariSoundCounts, ["Dopethrone": 1])
+    section.close()
+    XCTAssertTrue(section.safariSoundCounts.isEmpty)
+
+    // Opening directly without prepareForMenu never retains previous sound counts.
+    section.open()
+    XCTAssertTrue(section.safariSoundCounts.isEmpty)
+    section.close()
+  }
+
+  func testFaviconHostGuardAndAutomationDenialCooldown() {
+    let row = NowPlayingMenuSection.AppRow(
+      app: nil, pid: 42, name: "Home", levels: [], url: "https://new.example.com/watch")
+    XCTAssertTrue(
+      NowPlayingMenuSection.shouldApplyFavicon(
+        rowKey: row.key, expectedHost: "new.example.com", currentRow: row))
+    XCTAssertFalse(
+      NowPlayingMenuSection.shouldApplyFavicon(
+        rowKey: row.key, expectedHost: "old.example.com", currentRow: row))
+
+    NowPlayingBrowserFocus.resetAutomationDenials()
+    NowPlayingBrowserFocus.recordAutomationDenial("com.apple.Safari", now: 100)
+    XCTAssertTrue(NowPlayingBrowserFocus.isAutomationDenied("com.apple.Safari", now: 110))
+    XCTAssertFalse(
+      NowPlayingBrowserFocus.isAutomationDenied(
+        "com.apple.Safari", now: 100 + NowPlayingBrowserFocus.automationDenialCooldown))
+    NowPlayingBrowserFocus.resetAutomationDenials()
   }
 
   func testNowPlayingFaviconRequestsAndBrowserTabMatching() {
@@ -530,5 +589,28 @@ extension KeepAwakeAndBarTests {
     XCTAssertEqual(matched?.windowIndex, 2)
     XCTAssertEqual(matched?.tabIndex, 1)
     XCTAssertEqual(matched?.url, "https://www.youtube.com/watch?v=eaMbKZPBruU")
+
+    // Duplicate titles in equal-count windows with identical tab strips must return nil rather than cross tabs.
+    let identicalDupTabs = [
+      NowPlayingBrowserFocus.ScriptTab(windowIndex: 1, tabIndex: 1, title: "YouTube", url: "https://a.example/"),
+      NowPlayingBrowserFocus.ScriptTab(windowIndex: 2, tabIndex: 1, title: "YouTube", url: "https://b.example/"),
+    ]
+    XCTAssertNil(
+      NowPlayingBrowserFocus.matchScriptTab(
+        axTitle: "YouTube", windowIndex: 0, tabIndex: 0, scriptTabs: identicalDupTabs,
+        axWindowTabTitles: ["YouTube"]))
+
+    // Distinct window tab strips independently verify window pairing even when AX/AppleScript window orders differ.
+    let distinctWindowTabs = [
+      NowPlayingBrowserFocus.ScriptTab(windowIndex: 1, tabIndex: 1, title: "Docs", url: "https://docs.example/"),
+      NowPlayingBrowserFocus.ScriptTab(windowIndex: 1, tabIndex: 2, title: "YouTube", url: "https://a.example/"),
+      NowPlayingBrowserFocus.ScriptTab(windowIndex: 2, tabIndex: 1, title: "Mail", url: "https://mail.example/"),
+      NowPlayingBrowserFocus.ScriptTab(windowIndex: 2, tabIndex: 2, title: "YouTube", url: "https://b.example/"),
+    ]
+    XCTAssertEqual(
+      NowPlayingBrowserFocus.matchScriptTab(
+        axTitle: "YouTube", windowIndex: 0, tabIndex: 1, scriptTabs: distinctWindowTabs,
+        axWindowTabTitles: ["Mail", "YouTube"])?.url,
+      "https://b.example/")
   }
 }
