@@ -2,18 +2,27 @@ import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
+private struct RunningTorSession: Decodable {
+  let mode: String
+  let phase: String
+}
+
 private struct TorStatus: Decodable {
   let mode: String
   let hasWireguard: Bool
   let endpoint: String?
   let applianceReady: Bool
+  let setupRequired: Bool
+  let session: RunningTorSession?
 }
 
 struct AppsPane: View {
   private let helper = FileManager.default.homeDirectoryForCurrentUser
     .appendingPathComponent("bin/tor-session.py")
 
-  @State private var mode = "tor-only"
+  @State private var mode = "wireguard"
+  @State private var setupRequired = true
+  @State private var session: RunningTorSession?
   @State private var hasWireguard = false
   @State private var endpoint: String? = nil
   @State private var applianceReady = false
@@ -39,30 +48,50 @@ struct AppsPane: View {
             .foregroundStyle(Theme.phosphor)
         }
 
-        Text("Runs directly in a read-only, RAM-only ARM64 Linux kiosk VM. No desktop chrome, no host files, no clipboard bridge. Closing the window wipes the entire session.")
+        if setupRequired {
+          Text("Set up your connection").font(.headline)
+          Text("Choose a connection before opening Tor Browser.")
+        }
+        if let session {
+          Label(sessionLabel(session), systemImage: session.phase == "connected" ? "checkmark.shield" : "network")
+            .foregroundStyle(session.phase == "connected" ? Theme.phosphor : .secondary)
+        }
+        Text("Closing the window discards the guest session.")
           .font(.callout)
           .foregroundStyle(.secondary)
 
         Picker(
-          "In-VM Network",
+          "Connection",
           selection: Binding(
             get: { mode },
             set: { newMode in setMode(newMode) }
           )
         ) {
-          Text("Tor Only (DNS/IPv6 firewall inside VM)").tag("tor-only")
-          Text("WireGuard VPN + Killswitch (inside VM)").tag("wireguard")
+          Text("Tor only").tag("tor-only")
+          Text("VPN + Tor").tag("wireguard")
         }
         .pickerStyle(.radioGroup)
+        if mode == "wireguard" {
+          Label("Kill switch always on", systemImage: "lock.shield")
+            .font(.callout).foregroundStyle(Theme.phosphor)
+          Text("The browser opens after a VPN handshake. Traffic stays blocked when the tunnel is unavailable.")
+            .font(.caption).foregroundStyle(.secondary)
+        } else {
+          Label("VPN off. Your internet provider may see Tor use.", systemImage: "exclamationmark.triangle")
+            .font(.callout).foregroundStyle(.orange)
+          Link("Tor Project guidance on VPNs", destination: URL(string: "https://support.torproject.org/tor-browser/general/vpn-with-tor/")!)
+            .font(.caption)
+        }
+        Text("Network changes apply to the next session.").font(.caption).foregroundStyle(.secondary)
 
         VStack(alignment: .leading, spacing: 8) {
           HStack(spacing: 8) {
             if hasWireguard, let ep = endpoint {
-              Label("WireGuard config ready (\(ep))", systemImage: "checkmark.shield.fill")
+              Label("VPN configuration ready (\(ep))", systemImage: "checkmark.shield.fill")
                 .font(.caption)
                 .foregroundStyle(Theme.phosphor)
             } else {
-              Label("No WireGuard .conf imported yet", systemImage: "shield.slash")
+              Label("Import a VPN configuration to connect", systemImage: "shield.slash")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             }
@@ -80,7 +109,7 @@ struct AppsPane: View {
             }
           }
 
-          Text("Proton Free gives standard Linux WireGuard .conf files on their website — no Proton Mac app or ads needed. Your Mac's own Wi-Fi and VPN settings are never touched.")
+          Text("Download a Linux WireGuard configuration from your Proton account, then import it here. The VPN runs inside this session.")
             .font(.caption)
             .foregroundStyle(.secondary)
         }
@@ -94,7 +123,7 @@ struct AppsPane: View {
             .disabled(mode == "wireguard" && !hasWireguard)
 
           if !applianceReady {
-            Text("First launch builds the ~450 MB Linux appliance once.")
+            Text("First launch builds the Linux appliance. This can take several minutes.")
               .font(.caption)
               .foregroundStyle(.secondary)
           }
@@ -112,6 +141,9 @@ struct AppsPane: View {
     }
     .frame(maxHeight: .infinity)
     .onAppear { refresh() }
+    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+      if activeTask?.isRunning != true { refresh() }
+    }
     .onDisappear {
       requestID += 1
       if let proc = activeTask, proc.isRunning { proc.terminate() }
@@ -207,6 +239,8 @@ struct AppsPane: View {
     hasWireguard = status.hasWireguard
     endpoint = status.endpoint
     applianceReady = status.applianceReady
+    setupRequired = status.setupRequired
+    session = status.session
   }
 
   private func refresh() {
@@ -216,15 +250,10 @@ struct AppsPane: View {
   }
 
   private func setMode(_ newMode: String) {
-    if newMode == "wireguard" && !hasWireguard {
-      mode = "wireguard"
-      isError = false
-      message = "Import a WireGuard .conf file below to enable the in-VM VPN killswitch."
-      return
-    }
     runHelper(["--set-mode", newMode]) { data in
       applyStatusData(data)
-      message = ""
+      message = newMode == "wireguard" && !hasWireguard
+        ? "Import a WireGuard .conf file to use VPN mode." : ""
     }
   }
 
@@ -236,7 +265,7 @@ struct AppsPane: View {
     panel.allowedContentTypes = [UTType(filenameExtension: "conf") ?? .plainText, .plainText]
     if panel.runModal() == .OK, let url = panel.url {
       runHelper(["--import-wg", url.path]) { _ in
-        message = "WireGuard .conf imported (stored 0600, used only inside the VM)."
+        message = "WireGuard .conf imported (stored privately on this Mac and used inside the VM)."
         refresh()
       }
     }
@@ -249,7 +278,30 @@ struct AppsPane: View {
     }
   }
 
+  private func sessionLabel(_ session: RunningTorSession) -> String {
+    switch session.phase {
+    case "connected": return "VPN connected · Kill switch on"
+    case "blocked": return "VPN unavailable · Traffic blocked"
+    case "tor-only": return "Running without a VPN"
+    case "connecting": return "VPN connecting…"
+    case "error": return "Session stopped"
+    case "unknown": return "Session status unavailable"
+    default: return "Session starting…"
+    }
+  }
+
   private func launch() {
+    if setupRequired {
+      runHelper(["--set-mode", mode]) { data in
+        applyStatusData(data)
+        startSession()
+      }
+    } else {
+      startSession()
+    }
+  }
+
+  private func startSession() {
     message = "Opening Tor Browser…"
     isError = false
     let task = Process()

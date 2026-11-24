@@ -3,13 +3,15 @@
 
 Networking and killswitch live entirely INSIDE the isolated Linux VM:
 - tor-only mode: nftables blocks IPv6, incoming traffic, clearnet DNS (port 53),
-  and non-Tor processes; Tor Browser connects directly over Tor.
+  and outbound traffic from users other than the browser account.
 - wireguard mode: streams the user's WireGuard .conf (e.g. Proton VPN Free)
   into guest RAM over a private virtio serial pipe, locks nftables to ONLY the
   WireGuard endpoint on eth0, verifies handshake, and routes Tor over wg0.
 
-The Mac host's network settings are NEVER modified.
+Networking is configured inside the Linux guest.
 """
+import base64
+import tempfile
 import ipaddress
 import json
 import os
@@ -21,6 +23,8 @@ from urllib.parse import urlencode
 
 SUPPORT_DIR = Path.home() / "Library/Application Support/MachineSpirit"
 MODE_PREF = SUPPORT_DIR / "tor-mode"
+SETUP_PREF = SUPPORT_DIR / "tor-setup-version"
+SESSION_STATUS = SUPPORT_DIR / "tor-session.json"
 WG_CONF = SUPPORT_DIR / "tor-wireguard.conf"
 DESK = Path.home() / "projects/machine-spirit-lab/desk"
 APPLIANCE_MANIFEST = Path.home() / "projects/machine-spirit-lab/.local/tor-appliance/manifest.json"
@@ -35,7 +39,10 @@ def parse_wireguard_endpoint(text: str) -> str:
         if not line:
             continue
         if line.startswith("[") and line.endswith("]"):
-            section = line[1:-1].strip().lower()
+            name = line[1:-1].strip().lower()
+            if name not in ("interface", "peer") or (name == "interface" and iface) or (name == "peer" and peer):
+                raise ValueError("Import one WireGuard interface with one peer.")
+            section = name
             continue
         if "=" not in line:
             continue
@@ -48,9 +55,16 @@ def parse_wireguard_endpoint(text: str) -> str:
         raise ValueError("Invalid WireGuard .conf: missing [Interface] PrivateKey or Address.")
     if "publickey" not in peer or "endpoint" not in peer:
         raise ValueError("Invalid WireGuard .conf: missing [Peer] PublicKey or Endpoint.")
+    for key in (iface["privatekey"], peer["publickey"], peer.get("presharedkey")):
+        if key is not None and len(base64.b64decode(key, validate=True)) != 32:
+            raise ValueError("WireGuard keys must be 32 bytes.")
     ep = peer["endpoint"]
     if ":" not in ep or ep.startswith("["):
         raise ValueError("Invalid WireGuard .conf: expected IPv4 host:port Endpoint.")
+    host, port = ep.rsplit(":", 1)
+    ipaddress.IPv4Address(host)
+    if not port.isdigit() or not 1 <= int(port) <= 65535:
+        raise ValueError("Invalid WireGuard endpoint port.")
     # Verify at least one IPv4 interface address exists
     has_v4 = False
     for entry in iface["address"].split(","):
@@ -68,18 +82,55 @@ def parse_wireguard_endpoint(text: str) -> str:
 def current_mode() -> str:
     try:
         val = MODE_PREF.read_text().strip()
-        if val in ("tor-only", "wireguard"):
-            return val
+        if val not in ("tor-only", "wireguard"):
+            raise ValueError("Saved Tor network mode is invalid. Select a mode in Apps.")
+        return val
     except FileNotFoundError:
         pass
-    return "wireguard" if WG_CONF.is_file() else "tor-only"
+    return "wireguard"
 
 
 def save_mode(mode: str):
     if mode not in ("tor-only", "wireguard"):
         raise ValueError("Mode must be 'tor-only' or 'wireguard'.")
     SUPPORT_DIR.mkdir(parents=True, exist_ok=True)
-    MODE_PREF.write_text(mode + "\n")
+    fd, name = tempfile.mkstemp(prefix=".tor-mode-", dir=SUPPORT_DIR)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(mode + "\n")
+        os.replace(name, MODE_PREF)
+        SETUP_PREF.write_text("1\n")
+    finally:
+        Path(name).unlink(missing_ok=True)
+
+
+def is_session_executable(command):
+    return command.strip() in {
+        str(DESK.parent / ".build/tor-room"),
+        str(DESK.parent / ".build/TorRoom.app/Contents/MacOS/tor-room"),
+    }
+
+
+def running_session():
+    try:
+        state = json.loads(SESSION_STATUS.read_text())
+        pid = int(state["pid"])
+        if pid <= 0:
+            return None
+        command = subprocess.run(
+            ["/bin/ps", "-p", str(pid), "-o", "comm="], capture_output=True, text=True,
+        )
+        if is_session_executable(command.stdout):
+            return state
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
+    # Older running builds may predate the status file. Treat their mode as unknown.
+    matches = subprocess.run(["/usr/bin/pgrep", "-x", "tor-room"], capture_output=True, text=True)
+    for pid in matches.stdout.split():
+        command = subprocess.run(["/bin/ps", "-p", pid, "-o", "comm="], capture_output=True, text=True)
+        if is_session_executable(command.stdout):
+            return {"pid": int(pid), "mode": "unknown", "phase": "unknown"}
+    return None
 
 
 def status_dict() -> dict:
@@ -92,25 +143,30 @@ def status_dict() -> dict:
         except (OSError, ValueError):
             has_wg = False
     mode = current_mode()
-    if mode == "wireguard" and not has_wg:
-        mode = "tor-only"
     return {
         "mode": mode,
         "hasWireguard": has_wg,
         "endpoint": endpoint,
         "applianceReady": APPLIANCE_MANIFEST.is_file(),
+        "setupRequired": not SETUP_PREF.is_file() and not has_wg,
+        "session": running_session(),
     }
 
 
 def import_wireguard(src_path: str):
-    text = Path(src_path).read_text(encoding="utf-8")
+    with Path(src_path).open("r", encoding="utf-8") as source:
+        text = source.read(65537)
+    if len(text) > 65536:
+        raise ValueError("WireGuard configuration exceeds 64 KiB.")
     endpoint = parse_wireguard_endpoint(text)
     SUPPORT_DIR.mkdir(parents=True, exist_ok=True)
-    tmp = WG_CONF.with_suffix(".tmp")
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w", encoding="utf-8") as fh:
-        fh.write(text)
-    os.replace(tmp, WG_CONF)
+    fd, name = tempfile.mkstemp(prefix=".wireguard-", dir=SUPPORT_DIR)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(text)
+        os.replace(name, WG_CONF)
+    finally:
+        Path(name).unlink(missing_ok=True)
     save_mode("wireguard")
     print(json.dumps({"ok": True, "endpoint": endpoint}))
 
@@ -131,10 +187,9 @@ def feedback(message: str):
 
 def focus_existing() -> bool:
     matches = subprocess.run(["/usr/bin/pgrep", "-x", "tor-room"], capture_output=True, text=True)
-    expected = str(DESK.parent / ".build/tor-room")
     for pid in matches.stdout.split():
         command = subprocess.run(["/bin/ps", "-p", pid, "-o", "comm="], capture_output=True, text=True)
-        if command.stdout.strip() != expected:
+        if not is_session_executable(command.stdout):
             continue
         subprocess.run(
             [
@@ -162,16 +217,50 @@ end run""",
     return False
 
 
+def open_setup():
+    subprocess.run(["/usr/bin/open", "machinespirit://apps"], check=True)
+
+
+def confirm_tor_only():
+    result = subprocess.run([
+        "/usr/bin/osascript", "-e", """
+activate
+set choice to button returned of (display dialog "Tor Browser supports use without a VPN. Your internet provider may see that you use Tor. Adding a VPN changes who you trust and requires its own configuration." with title "Open Tor without a VPN?" buttons {"Configure VPN", "Cancel", "Open without VPN"} default button "Configure VPN" cancel button "Cancel" with icon caution)
+return choice
+""",
+    ], capture_output=True, text=True)
+    if result.returncode != 0:
+        # Cancel and dialog failures both leave the session unopened.
+        return False
+    if result.stdout.strip() == "Configure VPN":
+        open_setup()
+        return False
+    return result.stdout.strip() == "Open without VPN"
+
+
 def launch():
     if not os.access(DESK, os.X_OK):
         raise ValueError("Install Machine Spirit Lab in ~/projects/machine-spirit-lab first.")
-    if focus_existing():
-        return
     st = status_dict()
+    if st["setupRequired"]:
+        open_setup()
+        return
+    active = st["session"]
+    if active:
+        if active.get("mode") != "wireguard" and not confirm_tor_only():
+            return
+        if focus_existing():
+            return
+    if st["mode"] == "tor-only" and not confirm_tor_only():
+        return
     cmd = [str(DESK), "tor"]
     if st["mode"] == "wireguard":
+        if WG_CONF.is_file() and WG_CONF.stat().st_mode & 0o077:
+            raise ValueError("The saved WireGuard key must have owner-only file permissions.")
         if not st["hasWireguard"]:
-            raise ValueError("WireGuard mode is selected, but no .conf is imported. Import one in Machine Spirit → Apps.")
+            open_setup()
+            feedback("Import a VPN configuration to continue.")
+            return
         feedback("Starting isolated Tor Browser + WireGuard killswitch…")
         cmd.extend(["--wireguard", str(WG_CONF)])
     else:

@@ -61,7 +61,7 @@ Keep holding **Caps Lock** after any bind fires and you stay in **Hold Mode**: s
 
 Open `⇪ m a c h i n e s p i r i t` to inspect or reshape the whole tree on a native SwiftUI Canvas (**MachineSpirit.app**). Walk routes by typing, drag nodes freely between computed `radial` and saved `hand` layouts, watch live keystrokes pulse along the traces, or add/remove binds with **+ / −** through a lossless round-trip write gate that hot-reloads the launcher in 300 ms.
 
-A segmented **Board | Apps** switcher (`machinespirit://apps`) also hosts a launcher for an optional RAM-only ARM64 Linux **Tor Browser** kiosk VM (`⇪ t o r`, via [`bin/tor-session.py`](bin/tor-session.py)), supporting either in-VM `nftables` Tor-only isolation or an in-VM WireGuard killswitch without touching macOS host networking.
+The **Board | Apps** switcher (`machinespirit://apps`) hosts an optional disposable Linux **Tor Browser** session (`⇪ t o r`, via [`bin/tor-session.py`](bin/tor-session.py)). First launch opens connection setup. VPN mode requires a WireGuard profile and keeps the guest kill switch on. Tor-only mode asks for confirmation. A native Mac connection bar shows the session’s VPN state.
 
 <p align="center">
   <img src="docs/img/board.png" alt="Close-up of the MachineSpirit node-graph board with radial green traces" width="760" />
