@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 import IOKit.hidsystem
 
@@ -21,13 +22,22 @@ func capslock(_ args: [String]) throws -> Output {
     let opened = IOServiceOpen(service, mach_task_self_, UInt32(kIOHIDParamConnectType), &connection)
     guard opened == KERN_SUCCESS else { throw Failure("cannot open IOHIDSystem (\(opened))") }
     defer { IOServiceClose(connection) }
-    var state = false
-    guard IOHIDGetModifierLockState(connection, Int32(kIOHIDCapsLockState), &state) == KERN_SUCCESS else {
+    var locked = false
+    guard IOHIDGetModifierLockState(connection, Int32(kIOHIDCapsLockState), &locked) == KERN_SUCCESS else {
         throw Failure("cannot read Caps Lock state")
     }
+    // What apps type with is the event system's Caps Lock flag. The IOHIDSystem lock
+    // state can go stale (seen 2026-11-28: lock "on", flag and keyboards off), and then
+    // setting the value it already reports is a no-op, so every toggle failed silently.
+    var state = CGEventSource.flagsState(.hidSystemState).contains(.maskAlphaShift)
     if action != "status" {
         let requested = action == "toggle" ? !state : action == "on"
-        guard IOHIDSetModifierLockState(connection, Int32(kIOHIDCapsLockState), requested) == KERN_SUCCESS,
+        func set(_ value: Bool) -> Bool {
+            IOHIDSetModifierLockState(connection, Int32(kIOHIDCapsLockState), value) == KERN_SUCCESS
+        }
+        // Flip through the opposite value when the stale lock already reads `requested`.
+        if locked == requested { _ = set(!requested) }
+        guard set(requested),
               IOHIDGetModifierLockState(connection, Int32(kIOHIDCapsLockState), &state) == KERN_SUCCESS,
               state == requested else { throw Failure("cannot set or verify Caps Lock state") }
         showHUD([URLQueryItem(name: "style", value: "caps"), URLQueryItem(name: "state", value: state ? "on" : "off")])
