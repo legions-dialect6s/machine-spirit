@@ -215,7 +215,11 @@ var pulseDirectory: URL {
 }
 
 @MainActor
-func collectPulse() throws -> PulseSnapshot {
+func collectPulse() throws -> PulseSnapshot { try collectPulseAndDisk().snapshot }
+
+/// The snapshot plus the disk reading it was built from, so `--alert` judges the numbers it stores.
+@MainActor
+func collectPulseAndDisk() throws -> (snapshot: PulseSnapshot, disk: PulseDiskReview) {
     let started = ProcessInfo.processInfo.systemUptime
     let running = NSWorkspace.shared.runningApplications
     let browserTargets = pulseBrowserTargets(running: running)
@@ -316,13 +320,14 @@ func collectPulse() throws -> PulseSnapshot {
     let disk = PulseDiskReview.read(checkQueue: review != nil)
     review?.append(contentsOf: disk.suggestions)
     if let error = disk.volumeReadError { notes.append(error) }
-    return PulseSnapshot(timestamp: date.ISO8601Format(), uptimeSeconds: ProcessInfo.processInfo.systemUptime,
+    let snapshot = PulseSnapshot(timestamp: date.ISO8601Format(), uptimeSeconds: ProcessInfo.processInfo.systemUptime,
                          loadAverages: load, memoryPressure: pressure, swapUsedBytes: swapOK ? swap.xsu_used : nil,
                          freeDiskBytes: disk.freeBytes,
                          batteryPercent: battery, batteryCycles: cycles, batteryHealth: health, thermalState: thermal,
                          frontmostApp: NSWorkspace.shared.frontmostApplication?.localizedName, regularAppCount: regular.count,
                          apps: appRows, browsers: browsers, tmuxSessions: sessions, notes: notes,
                          idleReview: review, externalVolumes: disk.externalVolumes.isEmpty ? nil : disk.externalVolumes)
+    return (snapshot, disk)
 }
 
 func appendPulse(_ snapshot: PulseSnapshot, directory: URL) throws -> URL {
@@ -456,13 +461,17 @@ func readPulse(directory: URL, hours: Int, now: Date = Date()) throws -> Output 
     return pulseSummary(rows, hours: hours, skipped: skipped)
 }
 
+private let pulseUsage = "usage: ms pulse [collect [--alert]|disk [--crash-preview|--explain]|report [--hours N]]"
+
 private func pulseArguments(_ args: [String]) throws -> Arguments {
-    let parsed = try Arguments(args, values: ["--hours"], switches: ["--crash-preview", "--explain"])
+    let parsed = try Arguments(args, values: ["--hours"], switches: ["--crash-preview", "--explain", "--alert"])
     let verb = parsed.positionals.first ?? "report"
-    guard parsed.positionals.count <= 1, ["collect", "disk", "report"].contains(verb) else { throw Failure("usage: ms pulse [collect|disk [--crash-preview|--explain]|report [--hours N]]") }
+    guard parsed.positionals.count <= 1, ["collect", "disk", "report"].contains(verb) else { throw Failure(pulseUsage) }
     guard verb == "report" || parsed.options.isEmpty else { throw Failure("--hours is only supported by pulse report") }
-    guard verb == "disk" || parsed.flags.isEmpty else { throw Failure("preview and explanation flags require pulse disk") }
-    guard parsed.flags.count <= 1 else { throw Failure("choose either --crash-preview or --explain") }
+    guard verb == "collect" || !parsed.flags.contains("--alert") else { throw Failure("--alert is only supported by pulse collect") }
+    let diskFlags = parsed.flags.subtracting(["--alert"])
+    guard verb == "disk" || diskFlags.isEmpty else { throw Failure("preview and explanation flags require pulse disk") }
+    guard diskFlags.count <= 1 else { throw Failure("choose either --crash-preview or --explain") }
     return parsed
 }
 
@@ -490,10 +499,14 @@ private func pulse(_ parsed: Arguments) throws -> Output {
         return PulseProjectReading().output
     }
     if verb == "collect" {
-        let row = try collectPulse()
-        _ = try appendPulse(row, directory: pulseDirectory)
-        let data = try JSONEncoder().encode(row)
-        let json = try JSONSerialization.jsonObject(with: data)
+        let collected = try collectPulseAndDisk()
+        _ = try appendPulse(collected.snapshot, directory: pulseDirectory)
+        let data = try JSONEncoder().encode(collected.snapshot)
+        var json = try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
+        // Opt-in: a plain collect stays a silent append. The stored row never carries this key.
+        if parsed.flags.contains("--alert") {
+            json["diskAlert"] = PulseDiskAlert.run(collected.disk, directory: pulseDirectory)
+        }
         return Output(json: json, text: try jsonString(json))
     }
     guard let hours = Int(parsed.options["--hours"] ?? "24"), (1...8760).contains(hours) else { throw Failure("--hours must be an integer between 1 and 8760") }

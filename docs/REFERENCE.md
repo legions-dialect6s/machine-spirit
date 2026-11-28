@@ -242,12 +242,13 @@ Zero-dependency Swift 6 package under [`tools/ms/`](../tools/ms/) (macOS 14+). B
 ./bin/ms capslock status
 ./bin/ms audio list
 ./bin/ms pulse report --hours 24
+./bin/ms pulse collect --alert
 ./bin/ms pulse disk --crash-preview
 ./bin/ms pulse disk --explain
 ```
 
 - **MCP server:** `ms mcp` speaks stdio JSON-RPC for AI agents, exposing screens, windows, focus, binds, configured action execution (`run`), `tmux` list/revive/detach (never kill/save/restore), `stats`, `audio_list`, `pulse_report`, `pulse_disk`, and scoped screenshots. Clipboard history reads are disabled unless `MS_ALLOW_CLIPBOARD=1`.
-- **Pulse telemetry:** Hourly LaunchAgent (`MS_INSTALL_PULSE=1` on fresh install; unload with `launchctl bootout "gui/$(id -u)/com.machinespirit.pulse"`) appends private monthly JSONL snapshots under `~/Library/Application Support/MachineSpirit/pulse/` (app/window counts, resources, duplicate-tab counts, up to 10 hostnames/browser, optional external-drive tracking, and idle reviews after 10 min inactivity). Nothing leaves the Mac. See [`tools/ms/README.md`](../tools/ms/README.md) for full schemas and flags.
+- **Pulse telemetry:** Hourly LaunchAgent (`MS_INSTALL_PULSE=1` on fresh install; unload with `launchctl bootout "gui/$(id -u)/com.machinespirit.pulse"`) appends private monthly JSONL snapshots under `~/Library/Application Support/MachineSpirit/pulse/` (app/window counts, resources, duplicate-tab counts, up to 10 hostnames/browser, optional external-drive tracking, and idle reviews after 10 min inactivity). The agent runs `ms pulse collect --alert`, which posts a macOS notification when the startup disk is under its reserve (10% of capacity, capped at 30 GiB) or a tracked drive is under its floor (5% of capacity capped at 50 GiB, or the drive's own `alertFloorGiB`): once on the way down, daily while it stays low or sooner if free space halves, and once on recovery; an unmounted drive is never reported as recovered. Nothing leaves the Mac. See [`tools/ms/README.md`](../tools/ms/README.md) for full schemas and flags.
 - **Blur focused editor (`⌘ Esc`):** Moves focus out of editable fields via Accessibility (configurable in General settings); [`bin/messages-find.sh`](../bin/messages-find.sh) handles Messages search focus.
 
 ---

@@ -67,7 +67,8 @@ struct PulseDiskReview {
                      "Codex pending crash queue entries: \(count)"]
         for volume in externalVolumes {
             if let free = volume.freeBytes, let threshold = volume.reviewThresholdBytes {
-                lines.append("\(volume.name): \(Self.gib(free)) free (10% review threshold: \(Self.gib(threshold)))")
+                let floor = volume.alertFloorBytes.map { $0 > 0 ? "; alert floor: \(Self.gib($0))" : "; alerts off" } ?? ""
+                lines.append("\(volume.name): \(Self.gib(free)) free (10% review threshold: \(Self.gib(threshold))\(floor))")
             } else {
                 lines.append("\(volume.name): \(volume.status.rawValue)")
             }

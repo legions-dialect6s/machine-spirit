@@ -49,6 +49,7 @@ wiring being done at dev-time is the spec for what the app will later do itself.
 | 12 | iPhone Mirroring → Ask Every Time | ✋ | user-choice / guide |
 | 13 | Lock Screen password-after-display-off delay | ✋ | user-choice / guide |
 | 14 | Per-monitor display color matching | ✋ | guide (hardware OSD) |
+| 15 | Pulse: Removable Volumes consent for `ms`; Script Editor notifications | ✋ | detect-and-guide |
 
 ---
 
@@ -137,6 +138,11 @@ the user to the exact pane (`x-apple.systempreferences:…`), never to auto-gran
 - **Why:** the menu-bar-item allow is a macOS 26 consent gate; the module toggles are Stats prefs (avoid noisy/irrelevant readouts).
 - **Strategy:** module toggles are `defaults-write` to Stats' domain; the menu-bar allow is `detect-and-guide`.
 
+### 15. Pulse — external-drive consent and low-disk notifications
+- **Click-path:** when macOS asks **“ms” would like to access files on a removable volume**, choose **Allow** (later: System Settings → **Privacy & Security → Files and Folders → ms → Removable Volumes**). Low-disk banners arrive under **Script Editor** in System Settings → **Notifications**; keep them allowed.
+- **Why:** the hourly Pulse agent (`ms pulse collect --alert`) reads free space on the drives listed in `volumes.json`. Until the prompt is answered that run waits on it and no samples or alerts are recorded; with **Don't Allow**, tracked drives read as `unavailable` and only the startup disk is watched. The prompt can return after `ms` is rebuilt, so check for it after a rebuild.
+- **Strategy:** `detect-and-guide`; a stalled `com.machinespirit.pulse` job (`launchctl print gui/$UID/com.machinespirit.pulse` shows `state = running` for more than a minute) is the probe.
+
 ---
 
 ## Optional / user-choice
@@ -164,5 +170,5 @@ Personal-preference or hardware steps — the app should **offer**, never impose
 
 - **Already scripted (`install.sh`):** Homebrew + `brew bundle`, `~/bin` scripts, Leader Key config restore (with `__HOME__` re-expansion), Karabiner config restore, `shield-fx` compile, optional `macos-defaults.sh`.
 - **Already scripted (this repo):** Leader Key reload (`reload-leaderkey.sh`, step 6); the shield's own kill switch (`shield-on/off.sh`).
-- **Still manual:** everything in the summary table with ✋ or ⚠️ — every consent gate (steps 1, 7–11) and every iTerm plist-resident setting (steps 3–4), which are the two hardest classes and the app's top automation targets.
+- **Still manual:** everything in the summary table with ✋ or ⚠️ — every consent gate (steps 1, 7–11, 15) and every iTerm plist-resident setting (steps 3–4), which are the two hardest classes and the app's top automation targets.
 - **Doc drift fixed alongside this:** `install.sh`'s printed manual checklist carried the wrong shield invocation (`\(id)`); corrected to `pane_shield(session_id: id)` to match step 3.

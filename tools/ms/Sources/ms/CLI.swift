@@ -19,7 +19,7 @@ ms — structured access to this Mac (append --json for machine-readable output)
   capslock [on|off|toggle|status]
   audio [list|tile]
   translate-area [--to LANG]
-  pulse [collect|disk [--crash-preview|--explain]|report [--hours N]]
+  pulse [collect [--alert]|disk [--crash-preview|--explain]|report [--hours N]]
   screenshot [--screen ID | --window ID | --rect x,y,w,h] [--out PATH]
   clipboard [list [-n 20] | get INDEX]  (requires MS_ALLOW_CLIPBOARD=1)
   mcp  (newline-delimited JSON-RPC on stdio; --json has no effect)

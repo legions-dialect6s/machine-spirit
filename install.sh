@@ -110,8 +110,9 @@ if [[ -f "$TMUX_CONF_SRC" ]]; then
   echo "    installed tmux.conf + resurrect/continuum + launchd auto-save (every 15m)"
 fi
 
-# Pulse — an hourly, local-only usage snapshot (`ms pulse collect`, ~0.1s CPU
-# per run, background QoS) feeding `ms pulse report`. New installs opt in with
+# Pulse — an hourly, local-only usage snapshot (`ms pulse collect --alert`, ~0.1s
+# CPU per run, background QoS) feeding `ms pulse report`; --alert posts a
+# rate-limited notification when a disk is under its floor. New installs opt in with
 # MS_INSTALL_PULSE=1; existing installations keep their choice. Skip setup with
 # MS_NO_PULSE=1 before install, or `launchctl bootout gui/$UID/com.machinespirit.pulse`.
 PULSE_SRC="$REPO_ROOT/config/pulse/com.machinespirit.pulse.plist"
@@ -121,7 +122,7 @@ if [[ -f "$PULSE_SRC" && -z "${MS_NO_PULSE:-}" && ( "${MS_INSTALL_PULSE:-}" == 1
   sed "s|__HOME__|$HOME|g" "$PULSE_SRC" > "$PULSE_DEST"
   launchctl bootout "gui/$(id -u)/com.machinespirit.pulse" 2>/dev/null || true
   launchctl bootstrap "gui/$(id -u)" "$PULSE_DEST" 2>/dev/null || true
-  echo "    installed hourly pulse (local only; ms pulse report)"
+  echo "    installed hourly pulse + low-disk alert (local only; ms pulse report)"
 fi
 
 # MachineSpirit Leader Key fork — the daily-driver launcher. Built from source

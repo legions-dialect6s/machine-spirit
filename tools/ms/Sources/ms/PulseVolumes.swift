@@ -5,6 +5,8 @@ struct PulseVolumeTarget: Codable {
     let name: String
     let volumeUUID: UUID
     var projectProvider: String? = nil
+    /// Low-space notification floor in GiB for `pulse collect --alert`. Nil uses the default; 0 disables.
+    var alertFloorGiB: Double? = nil
 
     static func configured(at file: URL) throws -> [Self] {
         let fd = open(file.path, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)
@@ -23,9 +25,10 @@ struct PulseVolumeTarget: Codable {
         guard targets.allSatisfy({ !$0.name.isEmpty && !$0.name.contains("/") && !$0.name.contains("\0") && ![".", ".."].contains($0.name) }),
               Set(targets.map(\.name)).count == targets.count,
               Set(targets.map(\.volumeUUID)).count == targets.count,
+              targets.compactMap(\.alertFloorGiB).allSatisfy({ $0.isFinite && (0...1_048_576).contains($0) }),
               targets.compactMap(\.projectProvider).count <= 1,
               targets.compactMap(\.projectProvider).allSatisfy(ProjectDiskPreview.validProvider) else {
-            throw Failure("Pulse volumes.json requires distinct mount names, volume UUIDs and at most one valid project preview provider")
+            throw Failure("Pulse volumes.json requires distinct mount names, volume UUIDs, alert floors from 0 to 1048576 GiB and at most one valid project preview provider")
         }
         return targets
     }
@@ -38,12 +41,18 @@ struct PulseVolumeReading: Codable {
     var status: Status
     var freeBytes: UInt64?
     var capacityBytes: UInt64?
+    /// The owner's `alertFloorGiB`, when set. Stored with the sample so a report shows the floor in force.
+    var configuredAlertFloorBytes: UInt64? = nil
     var reviewThresholdBytes: UInt64? { capacityBytes.map { $0 / 10 } }
+    var alertFloorBytes: UInt64? {
+        configuredAlertFloorBytes ?? capacityBytes.map(PulseDiskAlert.defaultFloor(capacityBytes:))
+    }
 
     var json: [String: Any] {
         ["name": name, "volumeUUID": volumeUUID.uuidString, "status": status.rawValue,
          "freeBytes": freeBytes as Any? ?? NSNull(), "capacityBytes": capacityBytes as Any? ?? NSNull(),
-         "reviewThresholdBytes": reviewThresholdBytes as Any? ?? NSNull()]
+         "reviewThresholdBytes": reviewThresholdBytes as Any? ?? NSNull(),
+         "alertFloorBytes": alertFloorBytes as Any? ?? NSNull()]
     }
 
     static func read(_ targets: [PulseVolumeTarget], refresh: Bool) -> [Self] {
@@ -61,6 +70,7 @@ struct PulseVolumeReading: Codable {
         return targets.map { target in
             let path = "/Volumes/" + target.name
             var result = Self(name: target.name, volumeUUID: target.volumeUUID, status: .unavailable)
+            result.configuredAlertFloorBytes = target.alertFloorGiB.map { UInt64($0 * Double(PulseDiskReview.gibibyte)) }
             guard count > 0 else { return result }
             guard var fs = mounted[path] else {
                 result.status = .absent

@@ -45,7 +45,7 @@ arguments, e.g. `ms run --dry-run -- -/-`. `ms --help` lists syntax.
 | `capslock [on\|off\|toggle\|status]` | Real IOKit Caps Lock state; defaults to status. Changes verify the state and request the caps HUD. |
 | `audio [list\|tile]` | CoreAudio active output apps/processes (14.4+); tile their standard windows on the mouse screen. |
 | `translate-area [--to LANG]` | Interactive area capture, accurate Vision OCR, installed on-device translation, copy and text HUD. |
-| `pulse [collect\|disk [--crash-preview\|--explain]\|report [--hours N]]` | Collect an hourly sample, review disk space and the enrolled project's preview, explain the reading locally, or preview old Codex diagnostics. |
+| `pulse [collect [--alert]\|disk [--crash-preview\|--explain]\|report [--hours N]]` | Collect an hourly sample (with `--alert`, also post a low-disk notification), review disk space and the enrolled project's preview, explain the reading locally, or preview old Codex diagnostics. |
 | `stats` | CPU busy % over 250ms, memory-pressure estimate %, kernel pressure level, swap used/total bytes, battery % or null, uptime seconds. |
 | `screenshot [--screen ID\|--window ID\|--rect x,y,w,h] [--out PATH]` | Silent PNG; defaults to the main screen and a temporary file. Text prints its path; JSON adds pixel dimensions. |
 | `clipboard [list [-n 20]\|get INDEX]` | Read-only history. Disabled unless `MS_ALLOW_CLIPBOARD=1`. Indices are zero-based, in persisted archive order. |
@@ -232,6 +232,32 @@ queue, the review calls out the backlog. The count includes sidecar metadata.
 A filesystem directory attribute supplies the count without listing reports or
 reading their contents. A missing directory or unavailable attribute yields null.
 
+**Low-disk notifications.** `pulse collect --alert` also judges the sample it
+just stored and posts a macOS notification when a disk is under its floor. A
+plain `collect` never notifies. The startup disk's floor is the review reserve
+above (10% of capacity, capped at 30 GiB). Each drive in `volumes.json` defaults
+to 5% of its capacity, capped at 50 GiB; add `"alertFloorGiB": 150` to its entry
+to choose another floor, or `0` to switch alerts off for that drive. The cap
+keeps a large, nearly full drive from alerting permanently: raise the floor
+once the drive has room again.
+
+One notification marks the first sample under the floor. While the disk stays
+low the next one waits 24 hours, unless free space has halved since the last
+notice. A disk counts as recovered, with one notification, only when it is
+measured at 10% above its floor. An unmounted, replaced or unreadable drive has
+no measurement: it is never reported as recovered, and it keeps its last state
+until it can be measured again. The state lives in `disk-alerts.json` (mode 0600)
+in the Pulse directory; delete that file to reset it. A notification that could
+not be delivered is not recorded, so the next sample tries again. With
+`--alert`, the printed JSON adds a `diskAlert` object (`posted`, `failed`,
+`low`); the stored row is unchanged. Notifications are posted through
+`osascript` with literal arguments, appear under Script Editor in System
+Settings → Notifications, and follow Focus modes. The helper has a 15-second
+deadline: under a background LaunchAgent on a busy Mac it was measured at 5.2
+seconds. Reading a drive from the LaunchAgent needs the one-time **Removable
+Volumes** consent for `ms`; until that prompt is answered the run waits on it
+([manual wiring, step 15](../../MANUAL-WIRING.md)).
+
 `pulse disk` checks both measurements immediately without appending a snapshot.
 `pulse report` includes the latest measured free space with its timestamp and
 the signed change between the earliest and latest measured samples. Changes
@@ -247,6 +273,7 @@ list is empty. Keep local drive names and identifiers out of the public repo.
 drive and, when mounted and verified, fresh `freeBytes` and `capacityBytes`.
 Each external drive's `reviewThresholdBytes` is 10% of its capacity.
 Falling below that amount adds a disk-space suggestion to the idle review.
+`alertFloorBytes` is the lower notification floor described above.
 Hourly samples read cached space counters from the kernel mount table since
 fresh queries can wake a drive or take seconds. Each read requires an exact
 local mount and a matching filesystem UUID. Missing, substituted and
@@ -317,7 +344,7 @@ The first separate-process implementation consumed 140 ms CPU and was replaced
 with the shared interpreter. Re-measure after deployment, especially under a
 LaunchAgent's Automation identity.
 
-On a fresh Mac, run `MS_INSTALL_PULSE=1 ./install.sh` from the repository root to enable hourly collection. The installer prebuilds the CLI and installs the LaunchAgent with StartInterval 3600, Background, Nice 10 and LowPriorityIO. Reinstalling preserves an existing Pulse installation. Keep the local logs outside the repository. See the [privacy and uninstall details](../../README.md#what-data-gets-recorded).
+On a fresh Mac, run `MS_INSTALL_PULSE=1 ./install.sh` from the repository root to enable hourly collection. The installer prebuilds the CLI and installs the LaunchAgent (`ms pulse collect --alert`) with StartInterval 3600, Background, Nice 10 and LowPriorityIO. Reinstalling preserves an existing Pulse installation. Keep the local logs outside the repository. See the [privacy and uninstall details](../../README.md#what-data-gets-recorded).
 
 | MCP tool | Arguments | Behavior |
 | --- | --- | --- |
@@ -325,7 +352,7 @@ On a fresh Mac, run `MS_INSTALL_PULSE=1 ./install.sh` from the repository root t
 | `pulse_disk` | none | Current read-only disk review and cleanup suggestions. |
 | `pulse_report` | optional integer `hours` (1–8760, default 24) | Read-only summary from the selected pulse directory. |
 
-Collect, Caps Lock, translation and audio tiling are not exposed through MCP.
+Collect (and its notifications), Caps Lock, translation and audio tiling are not exposed through MCP.
 
 ## Messages conversation search helper
 

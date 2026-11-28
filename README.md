@@ -155,6 +155,7 @@ Summoning the iTerm2 hotkey window runs [`shell/splash/splash.zsh`](shell/splash
 ./bin/ms audio tile                         # Tile every app currently playing audio
 ./bin/ms translate-area                     # Drag area -> Vision OCR + on-device Translation
 ./bin/ms pulse disk --explain               # Local disk delta review (Apple Foundation Models / deterministic)
+./bin/ms pulse collect --alert              # Hourly sample + rate-limited low-disk notification
 ./bin/ms mcp                                # Stdio MCP server for Claude, Codex, Gemini & other clients
 ```
 
