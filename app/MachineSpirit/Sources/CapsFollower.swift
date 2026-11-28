@@ -1,4 +1,5 @@
 import AppKit
+import OSLog
 import QuartzCore
 
 /// The flags listeners are dormant between events. Only ON owns mouse monitors
@@ -28,12 +29,12 @@ final class CapsFollower {
 
   func start() {
     guard preferencesObserver == nil else { return }
-    globalFlags = NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged) { [weak self] _ in
-      MainActor.assumeIsolated { self?.flagsChanged() }
+    globalFlags = NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
+      MainActor.assumeIsolated { self?.flagsChanged(event) }
     }
     // Global monitors exclude our own app (for example, when the board is key).
     localFlags = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
-      MainActor.assumeIsolated { self?.flagsChanged() }
+      MainActor.assumeIsolated { self?.flagsChanged(event) }
       return event
     }
     preferencesObserver = NotificationCenter.default.addObserver(
@@ -58,12 +59,23 @@ final class CapsFollower {
     reconcile()
   }
 
-  private func flagsChanged() {
+  private static let log = Logger(subsystem: "com.machinespirit.app", category: "caps")
+
+  private func flagsChanged(_ event: NSEvent? = nil) {
     // Read current HID state at event delivery, rather than trusting modifier
     // bits in a queued or synthetic event. This is event-driven, never polling.
     let on = readFlags().contains(.maskAlphaShift)
     guard capsOn != on else { return }
     capsOn = on
+    // Diagnostic for a badge that lights with Caps Lock off: name the event's sender
+    // (0 = hardware). Read with `log show --predicate 'category == "caps"'`.
+    if let cg = event?.cgEvent {
+      let pid = cg.getIntegerValueField(.eventSourceUnixProcessID)
+      let sender = pid == 0 ? "hardware"
+        : NSRunningApplication(processIdentifier: pid_t(pid))?.localizedName ?? "pid \(pid)"
+      Self.log.notice(
+        "badge \(on ? "on" : "off", privacy: .public): key=\(cg.getIntegerValueField(.keyboardEventKeycode)) event-flags=0x\(String(cg.flags.rawValue, radix: 16), privacy: .public) sender=\(sender, privacy: .public)")
+    }
     reconcile()
   }
 
