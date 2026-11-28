@@ -34,8 +34,13 @@ class StatusItem: NSObject, NSMenuDelegate {
   var handleRevealConfig: (() -> Void)?
 
   // Karabiner-Elements ships an official signed CLI; we drive it, never rebuild.
-  private let karabinerCLI =
-    "/Library/Application Support/org.pqrs/Karabiner-Elements/bin/karabiner_cli"
+  // Karabiner 17 moved the CLI into the app bundle; keep the pre-17 path as fallback.
+  private let karabinerCLI: String =
+    [
+      "/Applications/Karabiner-Elements.app/Contents/Helpers/karabiner_cli",
+      "/Library/Application Support/org.pqrs/Karabiner-Elements/bin/karabiner_cli",
+    ].first { FileManager.default.isExecutableFile(atPath: $0) }
+    ?? "/Applications/Karabiner-Elements.app/Contents/Helpers/karabiner_cli"
 
   // Live items rebuilt each time the menu opens.
   private var karabinerStatusItem: NSMenuItem?

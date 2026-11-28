@@ -12,7 +12,17 @@
 # (Longer term, the machine-spirit node-graph app owns Leader Key and reloads
 #  automatically on every edit, so this manual step disappears.)
 
-# Ask it to quit cleanly; fall back to a hard kill if it ignores us.
+# Preferred: the MachineSpirit launchd agent owns Leader Key (KeepAlive), so
+# kickstart -k restarts it in place. Quitting + `open -a` would race launchd's
+# respawn and briefly start a second instance.
+label="gui/$(id -u)/com.machinespirit.leader-key"
+if launchctl print "$label" >/dev/null 2>&1; then
+	launchctl kickstart -k "$label"
+	echo "Leader Key reloaded — config is now live."
+	exit 0
+fi
+
+# Fallback (no agent loaded): quit cleanly, hard-kill if it ignores us.
 osascript -e 'tell application "Leader Key" to quit' >/dev/null 2>&1
 i=0
 while pgrep -x "Leader Key" >/dev/null 2>&1 && [ "$i" -lt 20 ]; do
