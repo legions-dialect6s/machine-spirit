@@ -1,5 +1,4 @@
 import Cocoa
-import IOKit.hidsystem
 import Defaults
 import KeyboardShortcuts
 import Settings
@@ -154,7 +153,6 @@ class AppDelegate: NSObject, NSApplicationDelegate,
     // Hold mode: ⇪ is already down; a repeat/second F19 press must not
     // hide or reset the session mid-hold.
     if controller.holdAction != nil { return }
-    CapsLockGuard.clearIfStuck()
 
     if window.isKeyWindow {
       switch Defaults[.reactivateBehavior] {
@@ -521,25 +519,4 @@ private func releaseTextFocus(pid: pid_t) -> Bool {
     branch = parent
   }
   return false
-}
-
-/// Caps Lock is remapped to F19 by Karabiner, so the physical key can never turn
-/// the lock off again. If it gets latched on (e.g. while Karabiner restarts and
-/// the raw key slips through), clear it whenever Leader Key is summoned.
-enum CapsLockGuard {
-  static func clearIfStuck() {
-    guard NSEvent.modifierFlags.contains(.capsLock) else { return }
-    let service = IOServiceGetMatchingService(
-      kIOMainPortDefault, IOServiceMatching(kIOHIDSystemClass))
-    guard service != 0 else { return }
-    defer { IOObjectRelease(service) }
-    var connect: io_connect_t = 0
-    guard
-      IOServiceOpen(service, mach_task_self_, UInt32(kIOHIDParamConnectType), &connect)
-        == KERN_SUCCESS
-    else { return }
-    defer { IOServiceClose(connect) }
-    let status = IOHIDSetModifierLockState(connect, Int32(kIOHIDCapsLockState), false)
-    os_log("Caps Lock was stuck on; cleared (status=%d)", status)
-  }
 }
