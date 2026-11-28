@@ -4,7 +4,7 @@ Forward-looking design decisions for the machine-spirit **app** (the node-graph
 tool that will eventually replace the current Leader Key + Rectangle config
 layer). This is a *cache of intent*, not yet-built work — it exists so an
 upcoming full handoff starts from the accumulated thinking instead of a blank
-page. For how the repo works *today*, see [`CLAUDE.md`](CLAUDE.md) and
+page. For how the repo works *today*, see [`AGENTS.md`](AGENTS.md) and
 [`README.md`](README.md). A detailed narrative of the
 tmux/sheol working session (decisions, reversals, bugs, the reptyr verdict) is in
 [`SESSION-LOG.md`](SESSION-LOG.md).

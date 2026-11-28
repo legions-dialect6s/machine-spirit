@@ -299,7 +299,7 @@ git config machinespirit.pushCheckpoints true
 machine-spirit/
 ├── README.md                    # Flagship overview & showcase
 ├── VISION.md                    # Design thesis & principles
-├── AGENTS.md / CLAUDE.md        # Multi-agent engineering contracts
+├── AGENTS.md / CLAUDE.md        # Multi-agent contract / one-line import of it
 ├── CHECKPOINTS.md               # Restore doctrine & checkpoint ledger
 ├── MANUAL-WIRING.md             # Consent gates & manual setup steps
 ├── Brewfile                     # Declarative runtime dependencies

@@ -73,7 +73,7 @@ shell running*. Full story in `HANDOFF-NOTES.md`.
   Lives in the iTerm plist (`plist-while-quit` / `iterm-api` to automate later).
 
 ### 4. Profiles, APS, semantic history, dimming, hotkey window, colors, greeting
-The bulk of iTerm setup. All of it lives in the plist (not captured by sync — see CLAUDE.md), so it's **manual in the Settings UI today**.
+The bulk of iTerm setup. All of it lives in the plist (not captured by sync — see AGENTS.md), so it's **manual in the Settings UI today**.
 - **Profiles:** create **Hacker / Regular / Baking / CC / Hotkey Window** (Settings → Profiles → `+`), each with its color/behavior.
 - **Automatic Profile Switching (APS):** per-profile → Advanced → *Automatic Profile Switching* rules — e.g. **`&claude*`** and **`&caffeinate*`** (job-name globs) to swap profile when those foreground jobs run.
 - **Semantic History:** per profile → Profiles → Advanced → *Semantic History* = **“Open with default app.”**
@@ -98,7 +98,7 @@ The bulk of iTerm setup. All of it lives in the plist (not captured by sync — 
 ### 6. Reload Leader Key after a config edit — ✅ already automated
 - **How:** run [`bin/reload-leaderkey.sh`](bin/reload-leaderkey.sh) (Leader Key does **not** hot-reload; an edited bind stays stale until restart).
 - **Why it was a trap:** silent staleness — you change a bind, nothing happens, no error.
-- **Strategy:** done. Any tool/automation that edits the config must call this after; the node-graph app makes it implicit (see [`CLAUDE.md`](CLAUDE.md) → *Editing a keybind / config*).
+- **Strategy:** done. Any tool/automation that edits the config must call this after; the node-graph app makes it implicit (see [`AGENTS.md`](AGENTS.md) → *Editing a keybind or config*).
 
 ---
 

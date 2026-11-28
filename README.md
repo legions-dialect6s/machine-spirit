@@ -220,7 +220,7 @@ Checkpoint: ready"                                     # pre-commit gitleaks + p
 **machine-spirit** is directed, architected, and daily-driven by its human author in continuous collaboration with multiple AI engineering agents—**Claude**, **Codex**, and **Gemini**—working across SwiftUI, AppKit, Core Animation, IOKit/CoreAudio, AppleScript, zsh, and verification tooling.
 
 - **[Complete Reference Manual](docs/REFERENCE.md)** — every keybind, Hold Mode chord, menu-bar detail, CLI flag, and layout map
-- **[Multi-Agent Contract (`AGENTS.md`)](AGENTS.md)** & **[`CLAUDE.md`](CLAUDE.md)** — repo invariants, drift gate, and checkpoint rules
+- **[Multi-Agent Contract (`AGENTS.md`)](AGENTS.md)** — repo invariants, drift gate, and push rules ([`CLAUDE.md`](CLAUDE.md) imports it)
 - **[Design Vision](VISION.md)** · **[Change History](docs/CHANGE-HISTORY.md)** · **[Visual & Privacy Audit](docs/VISUAL-AUDIT.md)** · **[Fork Notes](forks/FORK-NOTES.md)** · **[Checkpoints](CHECKPOINTS.md)**
 
 ---
