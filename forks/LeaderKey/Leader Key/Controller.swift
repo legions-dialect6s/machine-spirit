@@ -398,6 +398,12 @@ class Controller {
       !printable.isEmpty,
       printable.unicodeScalars.first?.isASCII ?? false
     {
+      // Caps Lock is mapped to F19, so a lit Caps Lock is always a stuck,
+      // accidental state. Only Shift decides case; otherwise binds like
+      // `s s c` arrive as `S S C` and silently miss.
+      if event.modifierFlags.contains(.capsLock) && !event.modifierFlags.contains(.shift) {
+        return printable.lowercased()
+      }
       return printable  // already contains correct case
     }
 

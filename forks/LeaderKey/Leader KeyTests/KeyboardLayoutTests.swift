@@ -109,6 +109,22 @@ class KeyboardLayoutTests: XCTestCase {
     XCTAssertNotEqual(lowerResult, upperResult, "Lowercase and uppercase should be different")
   }
 
+  func testStuckCapsLockDoesNotUppercaseBinds() {
+    Defaults[.forceEnglishKeyboardLayout] = false
+
+    // Caps Lock latched on (it is remapped to F19, so it can only be stuck):
+    // letters must still match lowercase binds.
+    let capsS = fakeEvent(
+      keyCode: 0x01, characters: "S", charactersIgnoringModifiers: "S", modifierFlags: .capsLock)
+    XCTAssertEqual(controller.charForEvent(capsS), "s", "Stuck Caps Lock must not uppercase binds")
+
+    // Shift still selects uppercase binds, with or without Caps Lock.
+    let shiftCapsS = fakeEvent(
+      keyCode: 0x01, characters: "S", charactersIgnoringModifiers: "S",
+      modifierFlags: [.capsLock, .shift])
+    XCTAssertEqual(controller.charForEvent(shiftCapsS), "S", "Shift keeps uppercase binds")
+  }
+
   func testCaseSensitivityWithForceEnglish() {
     Defaults[.forceEnglishKeyboardLayout] = true
 
